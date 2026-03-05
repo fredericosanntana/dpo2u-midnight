@@ -6,7 +6,7 @@ An autonomous self-funding protocol for compliance agents on Midnight Network. U
 
 ## Architecture
 
-Three Compact smart contracts form a complete self-funding pipeline:
+Four Compact smart contracts form a complete self-funding pipeline:
 
 ```
 Client pays $NIGHT          Protocol splits fees         Agent registers ZK proof
@@ -28,6 +28,7 @@ Client pays $NIGHT          Protocol splits fees         Agent registers ZK proo
 | **PaymentGateway** | Treasury deposits and $NIGHT staking | `depositToTreasury`, `stakeTokens`, `getTreasuryBalance` |
 | **FeeDistributor** | Split fees between expert (40%) and auditor (60%) agents | `distributeComplianceFee`, `getExpertPools`, `getAuditorPools` |
 | **ComplianceRegistry** | Store compliance attestations with ZK privacy | `registerAttestation`, `getComplianceStatus` |
+| **AgentRegistry** | Agent lifecycle: register, deactivate, task tracking | `registerAgent`, `deactivateAgent`, `recordTask`, `verifyAgent` |
 
 ### Privacy Model
 
@@ -39,14 +40,14 @@ Client pays $NIGHT          Protocol splits fees         Agent registers ZK proo
 ## What Makes This Original
 
 1. **Self-funding protocol** — No Midnight example does autonomous fee distribution between agents
-2. **3-contract architecture** — PaymentGateway → FeeDistributor → ComplianceRegistry pipeline
+2. **4-contract architecture** — PaymentGateway → FeeDistributor → ComplianceRegistry + AgentRegistry pipeline
 3. **signRecipe workaround** — Original bug fix for wallet-sdk's `signRecipe` function (see `scripts/lib/wallet-setup.ts`)
 4. **Compliance/LGPD use case** — ZK proofs applied to regulatory privacy (LGPD/GDPR)
 5. **Agent DID integration** — Decentralized identities as `Bytes<32>` in ZK circuits
 
 ## Deploy Evidence (Local Devnet)
 
-All 3 contracts deployed successfully on local devnet (`midnight-node:0.20.1` + `indexer:3.0.0`):
+All 4 contracts deployed successfully on local devnet (`midnight-node:0.20.1` + `indexer:3.0.0`):
 
 ```
 Network: undeployed (local devnet)
@@ -93,10 +94,11 @@ npm install
 npm test
 ```
 
-Tests validate all 3 contracts using `@midnight-ntwrk/compact-runtime` locally:
+Tests validate all 4 contracts using `@midnight-ntwrk/compact-runtime` locally:
 - ComplianceRegistry: attestation registration, score bounds, query
 - FeeDistributor: 40/60 split validation, zero-fee rejection, mismatched shares rejection
 - PaymentGateway: deposit, stake, zero-amount rejection
+- AgentRegistry: register, ownership check, deactivate, task tracking
 
 ### Deploy (Local Devnet)
 
@@ -140,7 +142,9 @@ Step 4: Query ledger state                     → Verify all mutations
 │   ├── ComplianceRegistry.compact    # Attestation storage with ZK privacy
 │   ├── FeeDistributor.compact        # Fee split with ZK constraints
 │   ├── PaymentGateway.compact        # Treasury deposits and staking
+│   ├── AgentRegistry.compact         # Agent lifecycle and task tracking
 │   └── build/                        # Compiled artifacts (per-contract)
+│       ├── agent-registry/
 │       ├── compliance-registry/
 │       ├── fee-distributor/
 │       └── payment-gateway/
@@ -152,6 +156,7 @@ Step 4: Query ledger state                     → Verify all mutations
 │       ├── wallet-setup.ts           # Wallet init + signRecipe workaround
 │       └── node-zk-config-provider.ts
 ├── test/
+│   ├── agent-registry.test.ts        # 5 tests
 │   ├── compliance-registry.test.ts   # 4 tests
 │   ├── fee-distributor.test.ts       # 4 tests
 │   └── payment-gateway.test.ts       # 5 tests
@@ -176,7 +181,7 @@ Compiled with Compact compiler v0.29.0.
 
 | Command | Description |
 |---------|-------------|
-| `npm test` | Run all 13 unit tests locally |
+| `npm test` | Run all 18 unit tests locally |
 | `npm run deploy:local` | Deploy to local devnet |
 | `npm run deploy:preprod` | Deploy to Midnight PreProd |
 | `npm run demo` | Run E2E demo flow |

@@ -14,6 +14,7 @@ const CONTRACT_BUILDS: Record<string, string> = {
   ComplianceRegistry: 'compliance-registry',
   PaymentGateway: 'payment-gateway',
   FeeDistributor: 'fee-distributor',
+  AgentRegistry: 'agent-registry',
 };
 
 // Determine network from CLI args
@@ -70,16 +71,17 @@ async function main() {
   console.log('[2/3] Deploying contracts sequentially...');
   const addresses: DeployedAddresses = {};
 
-  // Deploy order: ComplianceRegistry → PaymentGateway → FeeDistributor
+  // Deploy order: ComplianceRegistry → PaymentGateway → FeeDistributor → AgentRegistry
   addresses.ComplianceRegistry = await deployOne('ComplianceRegistry', ctx);
   addresses.PaymentGateway = await deployOne('PaymentGateway', ctx);
   addresses.FeeDistributor = await deployOne('FeeDistributor', ctx);
+  addresses.AgentRegistry = await deployOne('AgentRegistry', ctx);
 
   console.log('\n[3/3] Saving addresses...');
   fs.writeFileSync(ADDRESS_FILE, JSON.stringify(addresses, null, 2), 'utf-8');
   console.log(`  Addresses saved to ${ADDRESS_FILE}`);
 
-  console.log('\n=== All 3 contracts deployed successfully ===');
+  console.log('\n=== All 4 contracts deployed successfully ===');
   console.log(JSON.stringify(addresses, null, 2));
 
   await ctx.wallet.stop();

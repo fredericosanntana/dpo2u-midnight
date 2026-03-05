@@ -2,6 +2,7 @@ export interface DeployedAddresses {
   ComplianceRegistry?: string;
   PaymentGateway?: string;
   FeeDistributor?: string;
+  AgentRegistry?: string;
 }
 
 export function padTo32Bytes(str: string): Uint8Array {
