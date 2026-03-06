@@ -5,7 +5,7 @@ import { Contract, ledger } from '../compact/build/payment-gateway/contract/inde
 
 function setup() {
   const contract = new Contract({});
-  const coinPublicKey = '0'.repeat(64);
+  const coinPublicKey = '0'.repeat(64) as unknown as string;
   const { currentContractState, currentPrivateState } = contract.initialState({
     initialZswapLocalState: { coinPublicKey },
     initialPrivateState: new Map(),

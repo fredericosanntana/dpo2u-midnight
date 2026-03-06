@@ -29,7 +29,7 @@ export circuit deactivateAgent(secret_key: Bytes<32>): [] {
 export circuit recordTask(secret_key: Bytes<32>): [] {
   assert(secret_key == agent_owner, "Only owner can record tasks");
   assert(agent_active == 1, "Agent must be active");
-  task_count = disclose(task_count + 1);
+  task_count = (task_count + 1) as Uint<64>;
 }
 
 export circuit verifyAgent(): Uint<64> {
