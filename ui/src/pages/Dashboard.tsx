@@ -9,26 +9,27 @@ const chartData = data.contracts.map((c) => ({
 }));
 
 const COLORS = [
-  "oklch(0.82 0.18 195)", // cyan
-  "oklch(0.68 0.28 330)", // magenta
-  "oklch(0.72 0.2 145)",  // green
+  "#38bdf8", // sky-400
+  "#818cf8", // indigo-400
+  "#c084fc", // purple-400
 ];
 
 export default function Dashboard() {
   return (
-    <div className="min-h-screen hex-bg">
+    <div className="min-h-screen bg-[#09090b]">
       <section className="pt-24 pb-16">
         <div className="container">
           {/* Header */}
-          <div className="mb-8">
-            <p className="error-code mb-2">[NETWORK_DASHBOARD]</p>
-            <h1 className="font-display text-3xl font-black uppercase tracking-widest text-neon-cyan mb-2">
-              Dashboard
+          <div className="mb-10">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#18181b] border border-[#27272a] mb-4">
+              <span className="text-[12px] font-medium text-[#a1a1aa] tracking-widest uppercase">System Analytics</span>
+            </div>
+            <h1 className="font-display text-4xl font-bold tracking-tight text-[#f4f4f5] mb-2">
+              Network Dashboard
             </h1>
-            <p className="font-mono text-sm text-[oklch(0.5_0_0)] tracking-wide">
-              Deployment analytics // {data.network} // {data.deployedAt}
+            <p className="font-sans text-[15px] text-[#a1a1aa]">
+              Deployment analytics for {data.network} // Last updated: {data.deployedAt}
             </p>
-            <div className="loading-bar mt-4 w-24" />
           </div>
 
           {/* Stats Grid */}
@@ -42,39 +43,44 @@ export default function Dashboard() {
           {/* Charts */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
             {/* Fees Chart */}
-            <div className="card-cyber p-5">
-              <p className="error-code mb-1">[FEE_DISTRIBUTION]</p>
-              <h3 className="font-display text-sm font-black tracking-widest text-white mb-4">
-                Deployment Fees
-              </h3>
+            <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-6 shadow-sm">
+              <div className="mb-6">
+                <h3 className="font-display text-[16px] font-bold text-[#f4f4f5]">
+                  Protocol Fees Tracked
+                </h3>
+                <p className="font-sans text-[13px] text-[#71717a]">Measured in $NIGHT tokens</p>
+              </div>
+
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData}>
                     <XAxis
                       dataKey="name"
-                      tick={{ fill: "oklch(0.5 0 0)", fontFamily: "Share Tech Mono", fontSize: 10 }}
-                      axisLine={{ stroke: "oklch(0.2 0.05 195)" }}
+                      tick={{ fill: "#a1a1aa", fontFamily: "Inter", fontSize: 11 }}
+                      axisLine={{ stroke: "#3f3f46" }}
                       tickLine={false}
                     />
                     <YAxis
-                      tick={{ fill: "oklch(0.5 0 0)", fontFamily: "Share Tech Mono", fontSize: 10 }}
-                      axisLine={{ stroke: "oklch(0.2 0.05 195)" }}
+                      tick={{ fill: "#a1a1aa", fontFamily: "Inter", fontSize: 11 }}
+                      axisLine={{ stroke: "#3f3f46" }}
                       tickLine={false}
                     />
                     <Tooltip
                       contentStyle={{
-                        background: "oklch(0.07 0.01 195)",
-                        border: "1px solid oklch(0.82 0.18 195 / 0.3)",
-                        borderRadius: 0,
-                        fontFamily: "Share Tech Mono",
-                        fontSize: 12,
-                        color: "oklch(0.82 0.18 195)",
+                        background: "#09090b",
+                        border: "1px solid #3f3f46",
+                        borderRadius: "8px",
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        color: "#f4f4f5",
+                        boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)"
                       }}
+                      itemStyle={{ color: "#38bdf8", fontWeight: "bold" }}
                       formatter={(value: number) => [`${value.toLocaleString()}M`, "Fees"]}
                     />
-                    <Bar dataKey="fees" radius={[2, 2, 0, 0]}>
+                    <Bar dataKey="fees" radius={[4, 4, 0, 0]}>
                       {chartData.map((_, index) => (
-                        <Cell key={index} fill={COLORS[index % COLORS.length]} fillOpacity={0.7} />
+                        <Cell key={index} fill={COLORS[index % COLORS.length]} fillOpacity={0.9} />
                       ))}
                     </Bar>
                   </BarChart>
@@ -83,98 +89,50 @@ export default function Dashboard() {
             </div>
 
             {/* Circuits Chart */}
-            <div className="card-cyber p-5">
-              <p className="error-code mb-1">[CIRCUIT_ANALYSIS]</p>
-              <h3 className="font-display text-sm font-black tracking-widest text-white mb-4">
-                Circuits per Contract
-              </h3>
+            <div className="bg-[#18181b] border border-[#27272a] rounded-xl p-6 shadow-sm">
+              <div className="mb-6">
+                <h3 className="font-display text-[16px] font-bold text-[#f4f4f5]">
+                  Zero-Knowledge Circuits
+                </h3>
+                <p className="font-sans text-[13px] text-[#71717a]">Compiled logic components per contract</p>
+              </div>
+
               <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData}>
                     <XAxis
                       dataKey="name"
-                      tick={{ fill: "oklch(0.5 0 0)", fontFamily: "Share Tech Mono", fontSize: 10 }}
-                      axisLine={{ stroke: "oklch(0.2 0.05 195)" }}
+                      tick={{ fill: "#a1a1aa", fontFamily: "Inter", fontSize: 11 }}
+                      axisLine={{ stroke: "#3f3f46" }}
                       tickLine={false}
                     />
                     <YAxis
-                      tick={{ fill: "oklch(0.5 0 0)", fontFamily: "Share Tech Mono", fontSize: 10 }}
-                      axisLine={{ stroke: "oklch(0.2 0.05 195)" }}
+                      tick={{ fill: "#a1a1aa", fontFamily: "Inter", fontSize: 11 }}
+                      axisLine={{ stroke: "#3f3f46" }}
                       tickLine={false}
                       allowDecimals={false}
                     />
                     <Tooltip
                       contentStyle={{
-                        background: "oklch(0.07 0.01 195)",
-                        border: "1px solid oklch(0.82 0.18 195 / 0.3)",
-                        borderRadius: 0,
-                        fontFamily: "Share Tech Mono",
-                        fontSize: 12,
-                        color: "oklch(0.68 0.28 330)",
+                        background: "#09090b",
+                        border: "1px solid #3f3f46",
+                        borderRadius: "8px",
+                        fontFamily: "Inter",
+                        fontSize: "13px",
+                        color: "#f4f4f5",
+                        boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)"
                       }}
+                      itemStyle={{ color: "#c084fc", fontWeight: "bold" }}
                       formatter={(value: number) => [value, "Circuits"]}
                     />
-                    <Bar dataKey="circuits" radius={[2, 2, 0, 0]}>
+                    <Bar dataKey="circuits" radius={[4, 4, 0, 0]}>
                       {chartData.map((_, index) => (
-                        <Cell key={index} fill={COLORS[index % COLORS.length]} fillOpacity={0.5} />
+                        <Cell key={index} fill={COLORS[(index + 1) % COLORS.length]} fillOpacity={0.9} />
                       ))}
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            </div>
-          </div>
-
-          {/* Deploy Table */}
-          <div className="card-cyber mt-8">
-            <div className="p-5 border-b border-[oklch(0.82_0.18_195/0.1)]">
-              <p className="error-code mb-1">[DEPLOY_REGISTRY]</p>
-              <h3 className="font-display text-sm font-black tracking-widest text-white">
-                Deployment Log
-              </h3>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-[oklch(0.82_0.18_195/0.1)]">
-                    {["Contract", "Address", "Block", "Circuits", "Fees", "Status"].map((h) => (
-                      <th key={h} className="mono-label text-left px-5 py-3">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.contracts.map((c) => (
-                    <tr
-                      key={c.name}
-                      className="border-b border-[oklch(0.82_0.18_195/0.05)] hover:bg-[oklch(0.82_0.18_195/0.03)] transition-colors"
-                    >
-                      <td className="px-5 py-3 font-mono text-xs text-white">{c.name}</td>
-                      <td className="px-5 py-3 hash-display">
-                        {c.address.slice(0, 10)}...{c.address.slice(-8)}
-                      </td>
-                      <td className="px-5 py-3 font-mono text-xs text-[oklch(0.82_0.18_195)]">
-                        #{c.blockHeight}
-                      </td>
-                      <td className="px-5 py-3 font-mono text-xs text-[oklch(0.68_0.28_330)]">
-                        {c.circuits.length}
-                      </td>
-                      <td className="px-5 py-3 font-mono text-xs text-[oklch(0.85_0.2_80)]">
-                        {Number(BigInt(c.fees) / 1_000_000n).toLocaleString()}M
-                      </td>
-                      <td className="px-5 py-3">
-                        <span className="flex items-center gap-1.5">
-                          <span className="status-online" />
-                          <span className="font-mono text-xs tracking-widest text-[oklch(0.72_0.2_145)]">
-                            {c.status.toUpperCase()}
-                          </span>
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
           </div>
         </div>

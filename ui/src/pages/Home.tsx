@@ -5,31 +5,27 @@ import data from "../data/deployed.json";
 const features = [
   {
     icon: Lock,
-    title: "ZERO-KNOWLEDGE PROOFS",
+    title: "Zero-Knowledge Proofs",
     desc: "Generate and verify ZK proofs on-chain using Compact circuits. Prove compliance without exposing sensitive data.",
-    code: "ERR_0x001",
-    color: "text-[oklch(0.82_0.18_195)]",
+    color: "text-sky-400 bg-sky-400/10 border-sky-400/20",
   },
   {
     icon: Code2,
-    title: "COMPACT SMART CONTRACTS",
+    title: "Compact Smart Contracts",
     desc: "Deploy DPO2U Privacy Protocol contracts on Midnight for autonomous self-funding with $NIGHT tokens.",
-    code: "ERR_0x002",
-    color: "text-[oklch(0.68_0.28_330)]",
+    color: "text-purple-400 bg-purple-400/10 border-purple-400/20",
   },
   {
     icon: Shield,
-    title: "LGPD/GDPR COMPLIANCE",
+    title: "LGPD/GDPR Compliance",
     desc: "On-chain compliance verification for Brazilian LGPD and European GDPR regulations with cryptographic proof.",
-    code: "ERR_0x003",
-    color: "text-[oklch(0.72_0.2_145)]",
+    color: "text-green-400 bg-green-400/10 border-green-400/20",
   },
   {
     icon: Zap,
-    title: "SELF-FUNDING PROTOCOL",
+    title: "Self-Funding Protocol",
     desc: "Autonomous fee distribution: 40/60 split between compliance experts and auditors, enforced by ZK constraints.",
-    code: "ERR_0x004",
-    color: "text-[oklch(0.85_0.2_80)]",
+    color: "text-amber-400 bg-amber-400/10 border-amber-400/20",
   },
 ];
 
@@ -46,107 +42,67 @@ const specs = [
 
 export default function Home() {
   return (
-    <div className="min-h-screen hex-bg">
+    <div className="min-h-screen bg-[#09090b]">
       {/* Hero */}
-      <section className="relative pt-32 pb-24 overflow-hidden">
-        {/* Background grid lines */}
+      <section className="relative pt-32 pb-24 overflow-hidden border-b border-[#27272a]">
+        {/* Subtle grid background */}
         <div
-          className="absolute inset-0 opacity-5"
+          className="absolute inset-0 opacity-[0.03]"
           style={{
-            backgroundImage:
-              "linear-gradient(oklch(0.82 0.18 195) 1px, transparent 1px), linear-gradient(90deg, oklch(0.82 0.18 195) 1px, transparent 1px)",
-            backgroundSize: "60px 60px",
+            backgroundImage: "linear-gradient(#f4f4f5 1px, transparent 1px), linear-gradient(90deg, #f4f4f5 1px, transparent 1px)",
+            backgroundSize: "40px 40px"
           }}
         />
 
-        <div className="container relative z-10">
-          <div className="max-w-4xl">
-            <p className="error-code mb-6">
-              [SYSTEM_BOOT] :: DPO2U_SELF_FUNDING_v1.0.0 :: MIDNIGHT_DEVNET
-            </p>
+        <div className="container relative z-10 text-center sm:text-left">
+          <div className="max-w-4xl mx-auto sm:mx-0">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#18181b] border border-[#27272a] mb-8">
+              <span className="w-2 h-2 rounded-full bg-[#38bdf8] animate-pulse"></span>
+              <span className="text-[12px] font-medium text-[#a1a1aa] tracking-widest uppercase">System Operational v1.0.0</span>
+            </div>
 
             <div className="mb-6">
-              <h1 className="font-display text-5xl md:text-7xl font-black uppercase leading-none mb-2">
-                <span
-                  className="glitch-text glitch-animate text-white block mb-2 text-3xl md:text-5xl"
-                  data-text="DPO2U"
-                >
-                  DPO2U
-                </span>
-                <span className="block text-2xl md:text-4xl gradient-text-cyber mt-2">
-                  SELF-FUNDING PROTOCOL
-                </span>
+              <h1 className="font-display text-4xl sm:text-5xl md:text-7xl font-bold leading-tight mb-4 tracking-tight text-[#f4f4f5]">
+                DPO2U
+                <span className="block text-[#38bdf8]">Self-Funding Protocol</span>
               </h1>
             </div>
 
-            <p className="font-mono text-sm md:text-base text-[oklch(0.55_0_0)] max-w-2xl mb-8 leading-relaxed tracking-wide">
-              Autonomous on-chain DPO combining{" "}
-              <span className="text-neon-cyan">LGPD/GDPR compliance</span> with{" "}
-              <span className="text-neon-magenta">zero-knowledge proofs</span> and{" "}
-              <span className="text-white">self-funding fee distribution</span> on the Midnight Network.
+            <p className="font-sans text-base sm:text-lg text-[#a1a1aa] max-w-2xl mb-10 leading-relaxed mx-auto sm:mx-0">
+              Autonomous on-chain DPO combining <strong className="text-[#f4f4f5] font-semibold">LGPD/GDPR compliance</strong> with <strong className="text-[#f4f4f5] font-semibold">zero-knowledge proofs</strong> and self-funding fee distribution on the Midnight Network.
             </p>
 
-            {/* Architecture diagram */}
-            <div className="tech-frame p-4 mb-8 max-w-lg bg-[oklch(0.05_0.01_195)]">
-              <p className="error-code mb-3">[ARCHITECTURE]</p>
-              <pre className="font-mono text-xs text-[oklch(0.55_0_0)] leading-loose">
-{`  PaymentGateway
-       |
-       v
-  FeeDistributor ── 40% Expert
-       |              60% Auditor
-       v
-  ComplianceRegistry ── ZK Attestations`}
-              </pre>
-            </div>
-
-            <div className="flex flex-wrap gap-4">
+            <div className="flex flex-wrap items-center justify-center sm:justify-start gap-4">
               <Link href="/contracts" className="no-underline">
-                <button className="btn-cyber flex items-center gap-2">
-                  <Code2 className="w-3 h-3" />
-                  EXPLORE CONTRACTS
+                <button className="bg-[#f4f4f5] text-[#09090b] hover:bg-[#e4e4e7] border border-transparent font-sans text-[14px] font-semibold px-6 py-3 rounded-lg transition-all flex items-center gap-2 shadow-sm">
+                  <Code2 className="w-4 h-4" />
+                  Explore Contracts
                 </button>
               </Link>
               <Link href="/dashboard" className="no-underline">
-                <button className="btn-cyber btn-cyber-magenta flex items-center gap-2">
-                  <Activity className="w-3 h-3" />
-                  VIEW DASHBOARD
+                <button className="bg-[#18181b] text-[#f4f4f5] hover:bg-[#27272a] border border-[#3f3f46] font-sans text-[14px] font-semibold px-6 py-3 rounded-lg transition-all flex items-center gap-2 shadow-sm">
+                  <Activity className="w-4 h-4" />
+                  View Dashboard
                 </button>
               </Link>
             </div>
-          </div>
-        </div>
-
-        {/* Decorative right panel */}
-        <div className="absolute right-0 top-1/2 -translate-y-1/2 hidden xl:block w-80 opacity-30">
-          <div className="border-l border-[oklch(0.82_0.18_195/0.3)] pl-8 space-y-3">
-            {["ZERO_KNOWLEDGE", "COMPLIANCE_PROOF", "SELF_FUNDING", "ON_CHAIN_DPO", "MIDNIGHT_NETWORK"].map(
-              (item, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <span className="font-mono text-xs text-[oklch(0.82_0.18_195/0.5)]">
-                    {String(i).padStart(2, "0")}
-                  </span>
-                  <span className="font-mono text-xs text-[oklch(0.4_0_0)] tracking-widest">{item}</span>
-                </div>
-              )
-            )}
           </div>
         </div>
       </section>
 
       {/* Stats bar */}
-      <section className="border-y border-[oklch(0.82_0.18_195/0.15)] bg-[oklch(0.06_0.01_195/0.5)]">
-        <div className="container py-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+      <section className="bg-[#18181b] border-b border-[#27272a]">
+        <div className="container py-8">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-8 divide-x divide-[#27272a]/0 md:divide-[#27272a]">
             {[
-              { label: "CONTRACTS", value: data.contracts.length },
-              { label: "ZK CIRCUITS", value: data.totalCircuits },
-              { label: "COMPILER", value: `v${data.compilerVersion}` },
-              { label: "STATUS", value: "DEPLOYED" },
-            ].map((stat) => (
-              <div key={stat.label} className="text-center">
-                <p className="font-display text-2xl font-black text-neon-cyan">{stat.value}</p>
-                <p className="mono-label mt-1">{stat.label}</p>
+              { label: "Active Contracts", value: data.contracts.length },
+              { label: "ZK Circuits", value: data.totalCircuits },
+              { label: "Platform Version", value: `v${data.compilerVersion}` },
+              { label: "System Status", value: "Operational", color: "text-[#4ade80]" },
+            ].map((stat, i) => (
+              <div key={stat.label} className={`text-center ${i !== 0 ? 'md:pl-8' : ''}`}>
+                <p className={`font-display text-3xl font-bold mb-1 ${stat.color || 'text-[#f4f4f5]'}`}>{stat.value}</p>
+                <p className="font-sans text-[13px] font-medium text-[#71717a] uppercase tracking-wider">{stat.label}</p>
               </div>
             ))}
           </div>
@@ -154,82 +110,73 @@ export default function Home() {
       </section>
 
       {/* Features */}
-      <section className="py-20">
+      <section className="py-24 bg-[#09090b]">
         <div className="container">
-          <div className="divider-cyber mb-12">CORE FEATURES</div>
+          <div className="mb-16 text-center max-w-2xl mx-auto">
+            <h2 className="font-display text-3xl font-bold text-[#f4f4f5] mb-4">Core Infrastructure</h2>
+            <p className="text-[#a1a1aa] leading-relaxed">Enterprise-grade compliance mechanisms powered by zero-knowledge proofs and decentralized registries.</p>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {features.map((feat) => (
-              <div key={feat.title} className="tech-frame card-cyber p-6 scan-line">
-                <div className="absolute -top-3 left-4 bg-[oklch(0.04_0_0)] px-2">
-                  <span className="mono-label text-[oklch(0.82_0.18_195)]">{feat.title}</span>
+              <div key={feat.title} className="bg-[#18181b] border border-[#27272a] rounded-xl p-8 hover:border-[#3f3f46] transition-colors group">
+                <div className={`w-12 h-12 rounded-lg border flex items-center justify-center mb-6 transition-transform group-hover:scale-110 ${feat.color}`}>
+                  <feat.icon className="w-6 h-6" />
                 </div>
-                <div className="absolute -bottom-2.5 right-4 bg-[oklch(0.04_0_0)] px-2">
-                  <span className="error-code">{feat.code}</span>
-                </div>
-                <div className="flex items-start gap-4 mt-4">
-                  <div className={`p-2 border border-current ${feat.color} opacity-60`}>
-                    <feat.icon className="w-5 h-5" />
-                  </div>
-                  <p className="font-mono text-sm text-[oklch(0.55_0_0)] leading-relaxed">{feat.desc}</p>
-                </div>
+                <h3 className="font-display text-[18px] font-bold text-[#f4f4f5] mb-3">{feat.title}</h3>
+                <p className="text-[15px] text-[#a1a1aa] leading-relaxed">{feat.desc}</p>
               </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* Tech Specs */}
-      <section className="py-16 border-t border-[oklch(0.82_0.18_195/0.1)]">
-        <div className="container">
-          <div className="divider-cyber mb-10">DEPENDENCY MATRIX</div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {specs.map((spec) => (
-              <div key={spec.label} className="card-cyber p-4 border border-[oklch(0.82_0.18_195/0.15)]">
-                <p className="mono-label mb-1">{spec.label}</p>
-                <p className="font-mono text-sm text-neon-cyan font-bold">{spec.value}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* Attribution */}
-      <section className="py-12 border-t border-[oklch(0.82_0.18_195/0.1)]">
-        <div className="container">
-          <div className="tech-frame max-w-2xl mx-auto text-center p-8 border-[oklch(0.82_0.18_195/0.4)] shadow-[0_0_12px_oklch(0.82_0.18_195/0.15)]">
-            <p className="error-code mb-3">[ATTRIBUTION_BLOCK]</p>
-            <p className="font-mono text-sm text-[oklch(0.82_0.18_195)] tracking-wide">
-              Built on the Midnight Network. Compact smart contracts with ZK proofs.
-            </p>
-            <div className="flex justify-center gap-3 mt-4">
-              <span className="badge-night">midnightntwrk</span>
-              <span className="badge-night">compact v0.29.0</span>
-            </div>
+      {/* Architecture Diagram */}
+      <section className="py-24 bg-[#18181b] border-y border-[#27272a]">
+        <div className="container text-center">
+          <h2 className="font-display text-3xl font-bold text-[#f4f4f5] mb-12">Protocol Architecture</h2>
+          <div className="bg-[#09090b] border border-[#27272a] rounded-xl p-8 max-w-3xl mx-auto font-mono text-sm text-[#a1a1aa] overflow-x-auto shadow-inner text-left flex justify-center">
+            <pre className="inline-block leading-loose text-[#d4d4d8]">
+              {`  [ User Organization ]
+           │
+           ▼ (Pays Fiat/Crypto)
+   [ Payment Gateway ]
+           │
+           ▼ (Mint $NIGHT)
+   [ Fee Distributor ] ─── 40% ──► [ Compliance Expert ]
+           │
+           ▼ 60%
+     [ DPO Auditor ]
+           │
+           ▼ (Attest ZK Proof)
+[ LgpdKitRegistry Contract ] 
+      (Midnight Chain) `}
+            </pre>
           </div>
         </div>
       </section>
 
       {/* Bottom nav links */}
-      <section className="py-10 border-t border-[oklch(0.82_0.18_195/0.1)]">
+      <section className="py-16 bg-[#09090b]">
         <div className="container">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             {[
-              { href: "/", label: "HOME", desc: "Protocol overview" },
-              { href: "/contracts", label: "CONTRACTS", desc: "Explore deployed contracts" },
-              { href: "/dashboard", label: "DASHBOARD", desc: "Stats & analytics" },
+              { href: "/", label: "Overview", desc: "Protocol architecture & design" },
+              { href: "/contracts", label: "Smart Contracts", desc: "Explore deployed ledgers" },
+              { href: "/dashboard", label: "Analytics", desc: "System utilization and stats" },
             ].map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className="card-cyber p-4 flex items-center justify-between no-underline"
+                className="bg-[#18181b] border border-[#27272a] rounded-lg p-6 flex flex-col justify-between hover:border-[#38bdf8]/50 hover:bg-[#27272a] transition-all no-underline group"
               >
                 <div>
-                  <p className="font-mono text-xs text-neon-cyan tracking-widest uppercase">
-                    {item.label}
-                  </p>
-                  <p className="font-mono text-xs text-[oklch(0.4_0_0)] mt-1">{item.desc}</p>
+                  <h4 className="font-sans text-[15px] font-bold text-[#f4f4f5] mb-2">{item.label}</h4>
+                  <p className="font-sans text-[14px] text-[#71717a] leading-relaxed">{item.desc}</p>
                 </div>
-                <ChevronRight className="w-4 h-4 text-[oklch(0.82_0.18_195/0.4)]" />
+                <div className="mt-6 flex justify-end">
+                  <ChevronRight className="w-5 h-5 text-[#52525b] group-hover:text-[#38bdf8] transition-colors transform group-hover:translate-x-1" />
+                </div>
               </Link>
             ))}
           </div>

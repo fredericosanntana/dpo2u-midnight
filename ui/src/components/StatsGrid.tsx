@@ -14,43 +14,43 @@ function formatFees(fees: string): string {
   return `${billions.toLocaleString()}M`;
 }
 
-const iconClass = "w-5 h-5";
-
 export default function StatsGrid({ totalContracts, totalCircuits, totalFees, network }: StatsGridProps) {
   const stats = [
     {
-      label: "CONTRACTS",
+      label: "Active Contracts",
       value: totalContracts.toString(),
-      icon: <FileCode2 className={`${iconClass} text-[oklch(0.82_0.18_195)]`} />,
-      color: "text-[oklch(0.82_0.18_195)]",
+      icon: <FileCode2 className="w-5 h-5 text-[#38bdf8]" />,
+      color: "text-[#f4f4f5]",
     },
     {
-      label: "CIRCUITS",
+      label: "ZK Circuits",
       value: totalCircuits.toString(),
-      icon: <Cpu className={`${iconClass} text-[oklch(0.68_0.28_330)]`} />,
-      color: "text-[oklch(0.68_0.28_330)]",
+      icon: <Cpu className="w-5 h-5 text-[#c084fc]" />,
+      color: "text-[#f4f4f5]",
     },
     {
-      label: "TOTAL FEES",
+      label: "Total Fees Tracked",
       value: formatFees(totalFees),
-      icon: <Coins className={`${iconClass} text-[oklch(0.85_0.2_80)]`} />,
-      color: "text-[oklch(0.85_0.2_80)]",
+      icon: <Coins className="w-5 h-5 text-[#fcd34d]" />,
+      color: "text-[#fcd34d]",
     },
     {
-      label: "NETWORK",
+      label: "Network Environment",
       value: network.toUpperCase(),
-      icon: <Blocks className={`${iconClass} text-[oklch(0.72_0.2_145)]`} />,
-      color: "text-[oklch(0.72_0.2_145)]",
+      icon: <Blocks className="w-5 h-5 text-[#4ade80]" />,
+      color: "text-[#4ade80]",
     },
   ];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-6">
       {stats.map((stat) => (
-        <div key={stat.label} className="card-cyber p-4 text-center">
-          <div className="flex justify-center mb-2">{stat.icon}</div>
-          <p className={`font-display text-2xl font-black ${stat.color}`}>{stat.value}</p>
-          <p className="mono-label mt-1">{stat.label}</p>
+        <div key={stat.label} className="bg-[#18181b] border border-[#27272a] rounded-xl p-6 flex flex-col items-center text-center shadow-sm">
+          <div className="w-12 h-12 rounded-full bg-[#09090b] border border-[#3f3f46] flex justify-center items-center mb-4">
+            {stat.icon}
+          </div>
+          <p className={`font-display text-3xl font-bold mb-1 ${stat.color}`}>{stat.value}</p>
+          <p className="font-sans text-[12px] font-semibold text-[#71717a] uppercase tracking-wider mt-1">{stat.label}</p>
         </div>
       ))}
     </div>

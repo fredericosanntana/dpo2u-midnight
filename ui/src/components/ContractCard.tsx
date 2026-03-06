@@ -34,61 +34,61 @@ export default function ContractCard({ contract }: { contract: ContractData }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="card-cyber scan-line">
+    <div className="bg-[#18181b] border border-[#3f3f46] rounded-xl overflow-hidden hover:border-[#38bdf8]/50 transition-colors shadow-sm mb-4">
       {/* Header */}
       <div
-        className="p-5 cursor-pointer flex items-center justify-between"
+        className="p-5 cursor-pointer flex items-center justify-between bg-[#18181b] hover:bg-[#27272a] transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
         <div className="flex items-center gap-4">
-          <div className="w-10 h-10 border border-[oklch(0.82_0.18_195/0.4)] flex items-center justify-center">
-            <FileCode2 className="w-5 h-5 text-[oklch(0.82_0.18_195)]" />
+          <div className="w-10 h-10 border border-[#3f3f46] rounded-md flex items-center justify-center bg-[#09090b]">
+            <FileCode2 className="w-5 h-5 text-[#38bdf8]" />
           </div>
           <div>
-            <h3 className="font-display text-sm font-black tracking-widest text-white">
+            <h3 className="font-sans text-[15px] font-bold text-white mb-0.5">
               {contract.name}
             </h3>
-            <span className="hash-display">{truncateHash(contract.address)}</span>
+            <span className="font-mono text-[12px] text-[#38bdf8]">{truncateHash(contract.address)}</span>
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-6">
           {/* Status */}
-          <div className="flex items-center gap-1.5">
-            <span className="status-online" />
-            <span className="font-mono text-xs tracking-widest text-[oklch(0.72_0.2_145)]">
+          <div className="hidden sm:flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-[#4ade80]" />
+            <span className="font-sans text-[12px] font-semibold tracking-wider text-[#4ade80] uppercase">
               DEPLOYED
             </span>
           </div>
           {/* Circuits count */}
-          <span className="font-mono text-xs text-[oklch(0.5_0_0)]">
+          <span className="font-sans text-[13px] text-[#a1a1aa] font-medium bg-[#27272a] px-3 py-1 rounded-full">
             {contract.circuits.length} circuits
           </span>
           {expanded ? (
-            <ChevronUp className="w-4 h-4 text-[oklch(0.5_0_0)]" />
+            <ChevronUp className="w-5 h-5 text-[#a1a1aa]" />
           ) : (
-            <ChevronDown className="w-4 h-4 text-[oklch(0.5_0_0)]" />
+            <ChevronDown className="w-5 h-5 text-[#a1a1aa]" />
           )}
         </div>
       </div>
 
       {/* Meta bar */}
-      <div className="px-5 pb-4 flex flex-wrap gap-x-6 gap-y-1">
-        <div>
-          <span className="mono-label">Block</span>
-          <span className="font-mono text-xs text-[oklch(0.82_0.18_195)] ml-2">
+      <div className="px-5 pb-5 pt-2 flex flex-wrap gap-x-8 gap-y-2 bg-[#18181b]">
+        <div className="flex items-center gap-2">
+          <span className="font-sans text-[12px] font-semibold text-[#71717a] uppercase tracking-wider">Block</span>
+          <span className="font-mono text-[13px] text-[#f4f4f5]">
             #{contract.blockHeight}
           </span>
         </div>
-        <div>
-          <span className="mono-label">Fees</span>
-          <span className="font-mono text-xs text-[oklch(0.85_0.2_80)] ml-2">
+        <div className="flex items-center gap-2">
+          <span className="font-sans text-[12px] font-semibold text-[#71717a] uppercase tracking-wider">Fees</span>
+          <span className="font-mono text-[13px] text-[#f4f4f5]">
             {formatFees(contract.fees)}
           </span>
         </div>
-        <div>
-          <span className="mono-label">Compiler</span>
-          <span className="font-mono text-xs text-[oklch(0.5_0_0)] ml-2">
+        <div className="flex items-center gap-2">
+          <span className="font-sans text-[12px] font-semibold text-[#71717a] uppercase tracking-wider">Compiler</span>
+          <span className="font-mono text-[13px] text-[#f4f4f5]">
             v{contract.compilerVersion}
           </span>
         </div>
@@ -96,40 +96,40 @@ export default function ContractCard({ contract }: { contract: ContractData }) {
 
       {/* Expanded content */}
       {expanded && (
-        <div className="border-t border-[oklch(0.82_0.18_195/0.1)]">
+        <div className="border-t border-[#3f3f46] bg-[#09090b]">
           {/* Circuits */}
-          <div className="p-5">
-            <p className="error-code mb-3">[CIRCUIT_REGISTRY]</p>
+          <div className="p-6">
+            <h4 className="font-sans text-[13px] font-bold text-[#d4d4d8] uppercase tracking-wider mb-4">Circuits Registry</h4>
             <div className="space-y-3">
               {contract.circuits.map((circuit) => (
                 <div
                   key={circuit.name}
-                  className="border border-[oklch(0.82_0.18_195/0.15)] bg-[oklch(0.05_0.01_195)] p-3"
+                  className="border border-[#27272a] bg-[#18181b] rounded-lg p-4"
                 >
-                  <div className="flex items-center gap-2 mb-2">
-                    <Cpu className="w-3.5 h-3.5 text-[oklch(0.68_0.28_330)]" />
-                    <span className="font-mono text-sm text-[oklch(0.82_0.18_195)] font-bold">
+                  <div className="flex items-center gap-3 mb-3">
+                    <Cpu className="w-4 h-4 text-[#c084fc]" />
+                    <span className="font-sans text-[14px] text-[#f4f4f5] font-bold">
                       {circuit.name}
                     </span>
                     {circuit.proof && (
-                      <span className="font-mono text-xs text-[oklch(0.68_0.28_330)] border border-[oklch(0.68_0.28_330/0.3)] px-1.5 py-0.5">
+                      <span className="font-sans text-[11px] font-bold text-[#c084fc] bg-[#3b0764]/50 border border-[#9333ea]/50 rounded-full px-2 py-0.5">
                         ZK-PROOF
                       </span>
                     )}
                   </div>
-                  <div className="font-mono text-xs text-[oklch(0.45_0_0)] space-y-0.5">
+                  <div className="font-mono text-[13px] text-[#a1a1aa] space-y-1 bg-[#09090b] p-3 rounded border border-[#27272a]">
                     {circuit.args.length > 0 ? (
                       circuit.args.map((arg, i) => (
-                        <div key={i} className="pl-4">
-                          <span className="text-[oklch(0.55_0_0)]">{arg}</span>
+                        <div key={i} className="pl-2">
+                          <span className="text-[#d4d4d8]">{arg}</span>
                         </div>
                       ))
                     ) : (
-                      <div className="pl-4 text-[oklch(0.35_0_0)]">// no arguments</div>
+                      <div className="pl-2 text-[#71717a]">// no arguments</div>
                     )}
-                    <div className="pl-4 mt-1">
-                      <span className="text-[oklch(0.35_0_0)]">returns </span>
-                      <span className="text-[oklch(0.72_0.2_145)]">{circuit.returns}</span>
+                    <div className="pl-2 mt-2 pt-2 border-t border-[#27272a]">
+                      <span className="text-[#71717a]">returns </span>
+                      <span className="text-[#38bdf8]">{circuit.returns}</span>
                     </div>
                   </div>
                 </div>
@@ -138,17 +138,19 @@ export default function ContractCard({ contract }: { contract: ContractData }) {
           </div>
 
           {/* Source */}
-          <div className="p-5 border-t border-[oklch(0.82_0.18_195/0.1)]">
-            <p className="error-code mb-3">[COMPACT_SOURCE]</p>
-            <pre className="bg-[oklch(0.03_0_0)] border border-[oklch(0.82_0.18_195/0.1)] p-4 overflow-x-auto text-xs text-[oklch(0.6_0_0)] leading-relaxed">
+          <div className="px-6 pb-6 mt-2">
+            <h4 className="font-sans text-[13px] font-bold text-[#d4d4d8] uppercase tracking-wider mb-3">Compact Source</h4>
+            <pre className="bg-[#18181b] border border-[#27272a] rounded-lg p-5 overflow-x-auto text-[13px] text-[#d4d4d8] leading-relaxed custom-scrollbar shadow-inner">
               {contract.source}
             </pre>
           </div>
 
           {/* TX Hash */}
-          <div className="p-5 border-t border-[oklch(0.82_0.18_195/0.1)]">
-            <span className="mono-label">Full Address</span>
-            <p className="hash-display mt-1 text-xs break-all">{contract.address}</p>
+          <div className="px-6 pb-6 pt-2 border-t border-[#27272a] bg-[#18181b]">
+            <div className="pt-4">
+              <span className="font-sans text-[12px] font-semibold text-[#71717a] uppercase tracking-wider block mb-1">Full Contract Address</span>
+              <p className="font-mono text-[13px] text-[#38bdf8] break-all bg-[#09090b] p-2 rounded border border-[#27272a]">{contract.address}</p>
+            </div>
           </div>
         </div>
       )}
