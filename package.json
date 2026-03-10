@@ -9,6 +9,7 @@
     "deploy:preprod": "tsx scripts/deploy-all.ts --network preprod",
     "demo": "tsx scripts/demo-flow.ts",
     "balance": "tsx scripts/check-balance.ts",
+    "call:registerAttestation": "tsx scripts/call-register-attestation.ts",
     "test": "node --import tsx --test test/*.test.ts",
     "devnet:up": "docker compose up -d",
     "devnet:down": "docker compose down",

@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import * as Rx from 'rxjs';
 import { HDWallet, Roles } from '@midnight-ntwrk/wallet-sdk-hd';
 import * as ledger from '@midnight-ntwrk/ledger-v7';
 import { mnemonicToSeedSync } from '@scure/bip39';
@@ -96,8 +97,28 @@ export async function setupWallet(): Promise<WalletContext> {
     await wallet.start(shieldedSecretKeys, dustSecretKey);
 
     console.log('  Syncing with network...');
-    await wallet.waitForSyncedState();
-    console.log('  Wallet synced.');
+    const syncStart = Date.now();
+
+    // Monitor state changes in background for visibility
+    const sub = wallet.state().subscribe((state: any) => {
+        const elapsed = ((Date.now() - syncStart) / 1000).toFixed(0);
+        console.log(`  [sync] ${elapsed}s | isSynced=${state.isSynced}`);
+    });
+
+    // Heartbeat every 15s
+    const hb = setInterval(() => {
+        const elapsed = ((Date.now() - syncStart) / 1000).toFixed(0);
+        console.log(`  [heartbeat] ${elapsed}s — still waiting...`);
+    }, 15_000);
+
+    try {
+        await wallet.waitForSyncedState();
+    } finally {
+        sub.unsubscribe();
+        clearInterval(hb);
+    }
+    const syncTime = ((Date.now() - syncStart) / 1000).toFixed(1);
+    console.log(`  Wallet synced in ${syncTime}s.`);
 
     return {
         wallet,
