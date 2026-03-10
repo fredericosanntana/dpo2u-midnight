@@ -57,86 +57,95 @@ export class Contract {
     }
     this.witnesses = witnesses_0;
     this.circuits = {
-      registerAttestation: (...args_1) => {
-        if (args_1.length !== 5) {
-          throw new __compactRuntime.CompactError(`registerAttestation: expected 5 arguments (as invoked from Typescript), received ${args_1.length}`);
+      registerLgpdKit: (...args_1) => {
+        if (args_1.length !== 6) {
+          throw new __compactRuntime.CompactError(`registerLgpdKit: expected 6 arguments (as invoked from Typescript), received ${args_1.length}`);
         }
         const contextOrig_0 = args_1[0];
         const company_id_0 = args_1[1];
-        const agent_did_0 = args_1[2];
-        const policy_cid_0 = args_1[3];
+        const dpia_hash_0 = args_1[2];
+        const policy_hash_0 = args_1[3];
         const score_0 = args_1[4];
+        const auditor_did_0 = args_1[5];
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
-          __compactRuntime.typeError('registerAttestation',
+          __compactRuntime.typeError('registerLgpdKit',
                                      'argument 1 (as invoked from Typescript)',
-                                     'ComplianceRegistry.compact line 13 char 1',
+                                     'LgpdKitRegistry.compact line 16 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(company_id_0.buffer instanceof ArrayBuffer && company_id_0.BYTES_PER_ELEMENT === 1 && company_id_0.length === 32)) {
-          __compactRuntime.typeError('registerAttestation',
+          __compactRuntime.typeError('registerLgpdKit',
                                      'argument 1 (argument 2 as invoked from Typescript)',
-                                     'ComplianceRegistry.compact line 13 char 1',
+                                     'LgpdKitRegistry.compact line 16 char 1',
                                      'Bytes<32>',
                                      company_id_0)
         }
-        if (!(agent_did_0.buffer instanceof ArrayBuffer && agent_did_0.BYTES_PER_ELEMENT === 1 && agent_did_0.length === 32)) {
-          __compactRuntime.typeError('registerAttestation',
+        if (!(dpia_hash_0.buffer instanceof ArrayBuffer && dpia_hash_0.BYTES_PER_ELEMENT === 1 && dpia_hash_0.length === 32)) {
+          __compactRuntime.typeError('registerLgpdKit',
                                      'argument 2 (argument 3 as invoked from Typescript)',
-                                     'ComplianceRegistry.compact line 13 char 1',
+                                     'LgpdKitRegistry.compact line 16 char 1',
                                      'Bytes<32>',
-                                     agent_did_0)
+                                     dpia_hash_0)
         }
-        if (!(policy_cid_0.buffer instanceof ArrayBuffer && policy_cid_0.BYTES_PER_ELEMENT === 1 && policy_cid_0.length === 32)) {
-          __compactRuntime.typeError('registerAttestation',
+        if (!(policy_hash_0.buffer instanceof ArrayBuffer && policy_hash_0.BYTES_PER_ELEMENT === 1 && policy_hash_0.length === 32)) {
+          __compactRuntime.typeError('registerLgpdKit',
                                      'argument 3 (argument 4 as invoked from Typescript)',
-                                     'ComplianceRegistry.compact line 13 char 1',
+                                     'LgpdKitRegistry.compact line 16 char 1',
                                      'Bytes<32>',
-                                     policy_cid_0)
+                                     policy_hash_0)
         }
         if (!(typeof(score_0) === 'bigint' && score_0 >= 0n && score_0 <= 18446744073709551615n)) {
-          __compactRuntime.typeError('registerAttestation',
+          __compactRuntime.typeError('registerLgpdKit',
                                      'argument 4 (argument 5 as invoked from Typescript)',
-                                     'ComplianceRegistry.compact line 13 char 1',
+                                     'LgpdKitRegistry.compact line 16 char 1',
                                      'Uint<0..18446744073709551616>',
                                      score_0)
+        }
+        if (!(auditor_did_0.buffer instanceof ArrayBuffer && auditor_did_0.BYTES_PER_ELEMENT === 1 && auditor_did_0.length === 32)) {
+          __compactRuntime.typeError('registerLgpdKit',
+                                     'argument 5 (argument 6 as invoked from Typescript)',
+                                     'LgpdKitRegistry.compact line 16 char 1',
+                                     'Bytes<32>',
+                                     auditor_did_0)
         }
         const context = { ...contextOrig_0, gasCost: __compactRuntime.emptyRunningCost() };
         const partialProofData = {
           input: {
-            value: _descriptor_0.toValue(company_id_0).concat(_descriptor_0.toValue(agent_did_0).concat(_descriptor_0.toValue(policy_cid_0).concat(_descriptor_1.toValue(score_0)))),
-            alignment: _descriptor_0.alignment().concat(_descriptor_0.alignment().concat(_descriptor_0.alignment().concat(_descriptor_1.alignment())))
+            value: _descriptor_0.toValue(company_id_0).concat(_descriptor_0.toValue(dpia_hash_0).concat(_descriptor_0.toValue(policy_hash_0).concat(_descriptor_1.toValue(score_0).concat(_descriptor_0.toValue(auditor_did_0))))),
+            alignment: _descriptor_0.alignment().concat(_descriptor_0.alignment().concat(_descriptor_0.alignment().concat(_descriptor_1.alignment().concat(_descriptor_0.alignment()))))
           },
           output: undefined,
           publicTranscript: [],
           privateTranscriptOutputs: []
         };
-        const result_0 = this._registerAttestation_0(context,
-                                                     partialProofData,
-                                                     company_id_0,
-                                                     agent_did_0,
-                                                     policy_cid_0,
-                                                     score_0);
+        const result_0 = this._registerLgpdKit_0(context,
+                                                 partialProofData,
+                                                 company_id_0,
+                                                 dpia_hash_0,
+                                                 policy_hash_0,
+                                                 score_0,
+                                                 auditor_did_0);
         partialProofData.output = { value: [], alignment: [] };
         return { result: result_0, context: context, proofData: partialProofData, gasCost: context.gasCost };
       },
-      getComplianceStatus: (...args_1) => {
+      getCompanyPrivacyScore: (...args_1) => {
         if (args_1.length !== 2) {
-          throw new __compactRuntime.CompactError(`getComplianceStatus: expected 2 arguments (as invoked from Typescript), received ${args_1.length}`);
+          throw new __compactRuntime.CompactError(`getCompanyPrivacyScore: expected 2 arguments (as invoked from Typescript), received ${args_1.length}`);
         }
         const contextOrig_0 = args_1[0];
         const company_id_0 = args_1[1];
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
-          __compactRuntime.typeError('getComplianceStatus',
+          __compactRuntime.typeError('getCompanyPrivacyScore',
                                      'argument 1 (as invoked from Typescript)',
-                                     'ComplianceRegistry.compact line 27 char 1',
+                                     'LgpdKitRegistry.compact line 33 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(company_id_0.buffer instanceof ArrayBuffer && company_id_0.BYTES_PER_ELEMENT === 1 && company_id_0.length === 32)) {
-          __compactRuntime.typeError('getComplianceStatus',
+          __compactRuntime.typeError('getCompanyPrivacyScore',
                                      'argument 1 (argument 2 as invoked from Typescript)',
-                                     'ComplianceRegistry.compact line 27 char 1',
+                                     'LgpdKitRegistry.compact line 33 char 1',
                                      'Bytes<32>',
                                      company_id_0)
         }
@@ -150,16 +159,16 @@ export class Contract {
           publicTranscript: [],
           privateTranscriptOutputs: []
         };
-        const result_0 = this._getComplianceStatus_0(context,
-                                                     partialProofData,
-                                                     company_id_0);
+        const result_0 = this._getCompanyPrivacyScore_0(context,
+                                                        partialProofData,
+                                                        company_id_0);
         partialProofData.output = { value: _descriptor_1.toValue(result_0), alignment: _descriptor_1.alignment() };
         return { result: result_0, context: context, proofData: partialProofData, gasCost: context.gasCost };
       }
     };
     this.impureCircuits = {
-      registerAttestation: this.circuits.registerAttestation,
-      getComplianceStatus: this.circuits.getComplianceStatus
+      registerLgpdKit: this.circuits.registerLgpdKit,
+      getCompanyPrivacyScore: this.circuits.getCompanyPrivacyScore
     };
   }
   initialState(...args_0) {
@@ -181,9 +190,10 @@ export class Contract {
     stateValue_0 = stateValue_0.arrayPush(__compactRuntime.StateValue.newNull());
     stateValue_0 = stateValue_0.arrayPush(__compactRuntime.StateValue.newNull());
     stateValue_0 = stateValue_0.arrayPush(__compactRuntime.StateValue.newNull());
+    stateValue_0 = stateValue_0.arrayPush(__compactRuntime.StateValue.newNull());
     state_0.data = new __compactRuntime.ChargedState(stateValue_0);
-    state_0.setOperation('registerAttestation', new __compactRuntime.ContractOperation());
-    state_0.setOperation('getComplianceStatus', new __compactRuntime.ContractOperation());
+    state_0.setOperation('registerLgpdKit', new __compactRuntime.ContractOperation());
+    state_0.setOperation('getCompanyPrivacyScore', new __compactRuntime.ContractOperation());
     const context = __compactRuntime.createCircuitContext(__compactRuntime.dummyContractAddress(), constructorContext_0.initialZswapLocalState.coinPublicKey, state_0.data, constructorContext_0.initialPrivateState);
     const partialProofData = {
       input: { value: [], alignment: [] },
@@ -224,6 +234,17 @@ export class Contract {
                                                           new __compactRuntime.StateMap()
                                                         ).encode() } },
                                        { ins: { cached: false, n: 1 } }]);
+    __compactRuntime.queryLedgerState(context,
+                                      partialProofData,
+                                      [
+                                       { push: { storage: false,
+                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_6.toValue(3n),
+                                                                                              alignment: _descriptor_6.alignment() }).encode() } },
+                                       { push: { storage: true,
+                                                 value: __compactRuntime.StateValue.newMap(
+                                                          new __compactRuntime.StateMap()
+                                                        ).encode() } },
+                                       { ins: { cached: false, n: 1 } }]);
     state_0.data = new __compactRuntime.ChargedState(context.currentQueryContext.state.state);
     return {
       currentContractState: state_0,
@@ -231,12 +252,13 @@ export class Contract {
       currentZswapLocalState: context.currentZswapLocalState
     }
   }
-  _registerAttestation_0(context,
-                         partialProofData,
-                         company_id_0,
-                         agent_did_0,
-                         policy_cid_0,
-                         score_0)
+  _registerLgpdKit_0(context,
+                     partialProofData,
+                     company_id_0,
+                     dpia_hash_0,
+                     policy_hash_0,
+                     score_0,
+                     auditor_did_0)
   {
     __compactRuntime.assert(score_0 <= 100n,
                             'Invalid compliance score, must be bounded to 0-100%');
@@ -253,8 +275,8 @@ export class Contract {
                                                  value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(company_id_0),
                                                                                               alignment: _descriptor_0.alignment() }).encode() } },
                                        { push: { storage: true,
-                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_1.toValue(score_0),
-                                                                                              alignment: _descriptor_1.alignment() }).encode() } },
+                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(dpia_hash_0),
+                                                                                              alignment: _descriptor_0.alignment() }).encode() } },
                                        { ins: { cached: false, n: 1 } },
                                        { ins: { cached: true, n: 1 } }]);
     __compactRuntime.queryLedgerState(context,
@@ -270,7 +292,7 @@ export class Contract {
                                                  value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(company_id_0),
                                                                                               alignment: _descriptor_0.alignment() }).encode() } },
                                        { push: { storage: true,
-                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(agent_did_0),
+                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(policy_hash_0),
                                                                                               alignment: _descriptor_0.alignment() }).encode() } },
                                        { ins: { cached: false, n: 1 } },
                                        { ins: { cached: true, n: 1 } }]);
@@ -287,13 +309,30 @@ export class Contract {
                                                  value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(company_id_0),
                                                                                               alignment: _descriptor_0.alignment() }).encode() } },
                                        { push: { storage: true,
-                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(policy_cid_0),
+                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_1.toValue(score_0),
+                                                                                              alignment: _descriptor_1.alignment() }).encode() } },
+                                       { ins: { cached: false, n: 1 } },
+                                       { ins: { cached: true, n: 1 } }]);
+    __compactRuntime.queryLedgerState(context,
+                                      partialProofData,
+                                      [
+                                       { idx: { cached: false,
+                                                pushPath: true,
+                                                path: [
+                                                       { tag: 'value',
+                                                         value: { value: _descriptor_6.toValue(3n),
+                                                                  alignment: _descriptor_6.alignment() } }] } },
+                                       { push: { storage: false,
+                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(company_id_0),
+                                                                                              alignment: _descriptor_0.alignment() }).encode() } },
+                                       { push: { storage: true,
+                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(auditor_did_0),
                                                                                               alignment: _descriptor_0.alignment() }).encode() } },
                                        { ins: { cached: false, n: 1 } },
                                        { ins: { cached: true, n: 1 } }]);
     return [];
   }
-  _getComplianceStatus_0(context, partialProofData, company_id_0) {
+  _getCompanyPrivacyScore_0(context, partialProofData, company_id_0) {
     if (_descriptor_2.fromValue(__compactRuntime.queryLedgerState(context,
                                                                   partialProofData,
                                                                   [
@@ -302,7 +341,7 @@ export class Contract {
                                                                             pushPath: false,
                                                                             path: [
                                                                                    { tag: 'value',
-                                                                                     value: { value: _descriptor_6.toValue(0n),
+                                                                                     value: { value: _descriptor_6.toValue(2n),
                                                                                               alignment: _descriptor_6.alignment() } }] } },
                                                                    { push: { storage: false,
                                                                              value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(company_id_0),
@@ -319,7 +358,7 @@ export class Contract {
                                                                                  pushPath: false,
                                                                                  path: [
                                                                                         { tag: 'value',
-                                                                                          value: { value: _descriptor_6.toValue(0n),
+                                                                                          value: { value: _descriptor_6.toValue(2n),
                                                                                                    alignment: _descriptor_6.alignment() } }] } },
                                                                         { idx: { cached: false,
                                                                                  pushPath: false,
@@ -348,7 +387,7 @@ export function ledger(stateOrChargedState) {
     privateTranscriptOutputs: []
   };
   return {
-    attestation_scores: {
+    kit_dpia_hashes: {
       isEmpty(...args_0) {
         if (args_0.length !== 0) {
           throw new __compactRuntime.CompactError(`isEmpty: expected 0 arguments, received ${args_0.length}`);
@@ -397,7 +436,7 @@ export function ledger(stateOrChargedState) {
         if (!(key_0.buffer instanceof ArrayBuffer && key_0.BYTES_PER_ELEMENT === 1 && key_0.length === 32)) {
           __compactRuntime.typeError('member',
                                      'argument 1',
-                                     'ComplianceRegistry.compact line 9 char 1',
+                                     'LgpdKitRegistry.compact line 11 char 1',
                                      'Bytes<32>',
                                      key_0)
         }
@@ -426,11 +465,11 @@ export function ledger(stateOrChargedState) {
         if (!(key_0.buffer instanceof ArrayBuffer && key_0.BYTES_PER_ELEMENT === 1 && key_0.length === 32)) {
           __compactRuntime.typeError('lookup',
                                      'argument 1',
-                                     'ComplianceRegistry.compact line 9 char 1',
+                                     'LgpdKitRegistry.compact line 11 char 1',
                                      'Bytes<32>',
                                      key_0)
         }
-        return _descriptor_1.fromValue(__compactRuntime.queryLedgerState(context,
+        return _descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
                                                                          partialProofData,
                                                                          [
                                                                           { dup: { n: 0 } },
@@ -454,10 +493,10 @@ export function ledger(stateOrChargedState) {
           throw new __compactRuntime.CompactError(`iter: expected 0 arguments, received ${args_0.length}`);
         }
         const self_0 = state.asArray()[0];
-        return self_0.asMap().keys().map(  (key) => {    const value = self_0.asMap().get(key).asCell();    return [      _descriptor_0.fromValue(key.value),      _descriptor_1.fromValue(value.value)    ];  })[Symbol.iterator]();
+        return self_0.asMap().keys().map(  (key) => {    const value = self_0.asMap().get(key).asCell();    return [      _descriptor_0.fromValue(key.value),      _descriptor_0.fromValue(value.value)    ];  })[Symbol.iterator]();
       }
     },
-    attestation_dids: {
+    kit_policy_hashes: {
       isEmpty(...args_0) {
         if (args_0.length !== 0) {
           throw new __compactRuntime.CompactError(`isEmpty: expected 0 arguments, received ${args_0.length}`);
@@ -506,7 +545,7 @@ export function ledger(stateOrChargedState) {
         if (!(key_0.buffer instanceof ArrayBuffer && key_0.BYTES_PER_ELEMENT === 1 && key_0.length === 32)) {
           __compactRuntime.typeError('member',
                                      'argument 1',
-                                     'ComplianceRegistry.compact line 10 char 1',
+                                     'LgpdKitRegistry.compact line 12 char 1',
                                      'Bytes<32>',
                                      key_0)
         }
@@ -535,7 +574,7 @@ export function ledger(stateOrChargedState) {
         if (!(key_0.buffer instanceof ArrayBuffer && key_0.BYTES_PER_ELEMENT === 1 && key_0.length === 32)) {
           __compactRuntime.typeError('lookup',
                                      'argument 1',
-                                     'ComplianceRegistry.compact line 10 char 1',
+                                     'LgpdKitRegistry.compact line 12 char 1',
                                      'Bytes<32>',
                                      key_0)
         }
@@ -566,7 +605,7 @@ export function ledger(stateOrChargedState) {
         return self_0.asMap().keys().map(  (key) => {    const value = self_0.asMap().get(key).asCell();    return [      _descriptor_0.fromValue(key.value),      _descriptor_0.fromValue(value.value)    ];  })[Symbol.iterator]();
       }
     },
-    attestation_cids: {
+    kit_privacy_scores: {
       isEmpty(...args_0) {
         if (args_0.length !== 0) {
           throw new __compactRuntime.CompactError(`isEmpty: expected 0 arguments, received ${args_0.length}`);
@@ -615,7 +654,7 @@ export function ledger(stateOrChargedState) {
         if (!(key_0.buffer instanceof ArrayBuffer && key_0.BYTES_PER_ELEMENT === 1 && key_0.length === 32)) {
           __compactRuntime.typeError('member',
                                      'argument 1',
-                                     'ComplianceRegistry.compact line 11 char 1',
+                                     'LgpdKitRegistry.compact line 13 char 1',
                                      'Bytes<32>',
                                      key_0)
         }
@@ -644,11 +683,11 @@ export function ledger(stateOrChargedState) {
         if (!(key_0.buffer instanceof ArrayBuffer && key_0.BYTES_PER_ELEMENT === 1 && key_0.length === 32)) {
           __compactRuntime.typeError('lookup',
                                      'argument 1',
-                                     'ComplianceRegistry.compact line 11 char 1',
+                                     'LgpdKitRegistry.compact line 13 char 1',
                                      'Bytes<32>',
                                      key_0)
         }
-        return _descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
+        return _descriptor_1.fromValue(__compactRuntime.queryLedgerState(context,
                                                                          partialProofData,
                                                                          [
                                                                           { dup: { n: 0 } },
@@ -672,6 +711,115 @@ export function ledger(stateOrChargedState) {
           throw new __compactRuntime.CompactError(`iter: expected 0 arguments, received ${args_0.length}`);
         }
         const self_0 = state.asArray()[2];
+        return self_0.asMap().keys().map(  (key) => {    const value = self_0.asMap().get(key).asCell();    return [      _descriptor_0.fromValue(key.value),      _descriptor_1.fromValue(value.value)    ];  })[Symbol.iterator]();
+      }
+    },
+    kit_auditor_dids: {
+      isEmpty(...args_0) {
+        if (args_0.length !== 0) {
+          throw new __compactRuntime.CompactError(`isEmpty: expected 0 arguments, received ${args_0.length}`);
+        }
+        return _descriptor_2.fromValue(__compactRuntime.queryLedgerState(context,
+                                                                         partialProofData,
+                                                                         [
+                                                                          { dup: { n: 0 } },
+                                                                          { idx: { cached: false,
+                                                                                   pushPath: false,
+                                                                                   path: [
+                                                                                          { tag: 'value',
+                                                                                            value: { value: _descriptor_6.toValue(3n),
+                                                                                                     alignment: _descriptor_6.alignment() } }] } },
+                                                                          'size',
+                                                                          { push: { storage: false,
+                                                                                    value: __compactRuntime.StateValue.newCell({ value: _descriptor_1.toValue(0n),
+                                                                                                                                 alignment: _descriptor_1.alignment() }).encode() } },
+                                                                          'eq',
+                                                                          { popeq: { cached: true,
+                                                                                     result: undefined } }]).value);
+      },
+      size(...args_0) {
+        if (args_0.length !== 0) {
+          throw new __compactRuntime.CompactError(`size: expected 0 arguments, received ${args_0.length}`);
+        }
+        return _descriptor_1.fromValue(__compactRuntime.queryLedgerState(context,
+                                                                         partialProofData,
+                                                                         [
+                                                                          { dup: { n: 0 } },
+                                                                          { idx: { cached: false,
+                                                                                   pushPath: false,
+                                                                                   path: [
+                                                                                          { tag: 'value',
+                                                                                            value: { value: _descriptor_6.toValue(3n),
+                                                                                                     alignment: _descriptor_6.alignment() } }] } },
+                                                                          'size',
+                                                                          { popeq: { cached: true,
+                                                                                     result: undefined } }]).value);
+      },
+      member(...args_0) {
+        if (args_0.length !== 1) {
+          throw new __compactRuntime.CompactError(`member: expected 1 argument, received ${args_0.length}`);
+        }
+        const key_0 = args_0[0];
+        if (!(key_0.buffer instanceof ArrayBuffer && key_0.BYTES_PER_ELEMENT === 1 && key_0.length === 32)) {
+          __compactRuntime.typeError('member',
+                                     'argument 1',
+                                     'LgpdKitRegistry.compact line 14 char 1',
+                                     'Bytes<32>',
+                                     key_0)
+        }
+        return _descriptor_2.fromValue(__compactRuntime.queryLedgerState(context,
+                                                                         partialProofData,
+                                                                         [
+                                                                          { dup: { n: 0 } },
+                                                                          { idx: { cached: false,
+                                                                                   pushPath: false,
+                                                                                   path: [
+                                                                                          { tag: 'value',
+                                                                                            value: { value: _descriptor_6.toValue(3n),
+                                                                                                     alignment: _descriptor_6.alignment() } }] } },
+                                                                          { push: { storage: false,
+                                                                                    value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(key_0),
+                                                                                                                                 alignment: _descriptor_0.alignment() }).encode() } },
+                                                                          'member',
+                                                                          { popeq: { cached: true,
+                                                                                     result: undefined } }]).value);
+      },
+      lookup(...args_0) {
+        if (args_0.length !== 1) {
+          throw new __compactRuntime.CompactError(`lookup: expected 1 argument, received ${args_0.length}`);
+        }
+        const key_0 = args_0[0];
+        if (!(key_0.buffer instanceof ArrayBuffer && key_0.BYTES_PER_ELEMENT === 1 && key_0.length === 32)) {
+          __compactRuntime.typeError('lookup',
+                                     'argument 1',
+                                     'LgpdKitRegistry.compact line 14 char 1',
+                                     'Bytes<32>',
+                                     key_0)
+        }
+        return _descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
+                                                                         partialProofData,
+                                                                         [
+                                                                          { dup: { n: 0 } },
+                                                                          { idx: { cached: false,
+                                                                                   pushPath: false,
+                                                                                   path: [
+                                                                                          { tag: 'value',
+                                                                                            value: { value: _descriptor_6.toValue(3n),
+                                                                                                     alignment: _descriptor_6.alignment() } }] } },
+                                                                          { idx: { cached: false,
+                                                                                   pushPath: false,
+                                                                                   path: [
+                                                                                          { tag: 'value',
+                                                                                            value: { value: _descriptor_0.toValue(key_0),
+                                                                                                     alignment: _descriptor_0.alignment() } }] } },
+                                                                          { popeq: { cached: false,
+                                                                                     result: undefined } }]).value);
+      },
+      [Symbol.iterator](...args_0) {
+        if (args_0.length !== 0) {
+          throw new __compactRuntime.CompactError(`iter: expected 0 arguments, received ${args_0.length}`);
+        }
+        const self_0 = state.asArray()[3];
         return self_0.asMap().keys().map(  (key) => {    const value = self_0.asMap().get(key).asCell();    return [      _descriptor_0.fromValue(key.value),      _descriptor_0.fromValue(value.value)    ];  })[Symbol.iterator]();
       }
     }

@@ -33,6 +33,20 @@ export type Circuits<PS> = {
 export type Ledger = {
   readonly expert_fee_pool: bigint;
   readonly auditor_fee_pool: bigint;
+  company_expert_fees: {
+    isEmpty(): boolean;
+    size(): bigint;
+    member(key_0: Uint8Array): boolean;
+    lookup(key_0: Uint8Array): bigint;
+    [Symbol.iterator](): Iterator<[Uint8Array, bigint]>
+  };
+  company_auditor_fees: {
+    isEmpty(): boolean;
+    size(): bigint;
+    member(key_0: Uint8Array): boolean;
+    lookup(key_0: Uint8Array): bigint;
+    [Symbol.iterator](): Iterator<[Uint8Array, bigint]>
+  };
 }
 
 export type ContractReferenceLocations = any;

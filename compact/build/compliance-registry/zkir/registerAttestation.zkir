@@ -91,21 +91,6 @@
     { "op": "declare_pub_input", "var": 17 },
     { "op": "pi_skip", "guard": 10, "count": 1 },
     { "op": "declare_pub_input", "var": 18 },
-    { "op": "pi_skip", "guard": 10, "count": 1 },
-    { "op": "load_imm", "imm": "03" },
-    { "op": "declare_pub_input", "var": 13 },
-    { "op": "declare_pub_input", "var": 10 },
-    { "op": "declare_pub_input", "var": 10 },
-    { "op": "declare_pub_input", "var": 10 },
-    { "op": "declare_pub_input", "var": 20 },
-    { "op": "pi_skip", "guard": 10, "count": 5 },
-    { "op": "declare_pub_input", "var": 15 },
-    { "op": "declare_pub_input", "var": 10 },
-    { "op": "declare_pub_input", "var": 10 },
-    { "op": "declare_pub_input", "var": 16 },
-    { "op": "declare_pub_input", "var": 6 },
-    { "op": "pi_skip", "guard": 10, "count": 5 },
-    { "op": "declare_pub_input", "var": 17 },
     { "op": "pi_skip", "guard": 10, "count": 1 }
   ]
 }

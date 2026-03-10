@@ -1,19 +1,26 @@
 /**
  * Registro de Agentes DPO2U (Arquitetura Compact/Midnight)
  * Gerencia ciclo de vida de agentes: registro, desativacao, rastreamento de tarefas.
- * Ownership via comparacao de secret_key com agent_owner armazenado.
+ * Ownership via comparacao de hash da secret_key com agent_owner_hash armazenado.
+ * A secret_key NUNCA e exposta no ledger publico — apenas seu hash.
  */
 pragma language_version >= 0.19;
 import CompactStandardLibrary;
 
-export ledger agent_owner: Bytes<32>;
+export ledger agent_owner_hash: Bytes<32>;
 export ledger agent_did: Bytes<32>;
 export ledger agent_active: Uint<64>;
 export ledger registered_at: Uint<64>;
 export ledger task_count: Uint<64>;
 
+// Funcao interna para derivar o hash da chave
+circuit hash_key(secret_key: Bytes<32>): Bytes<32> {
+  return persistentHash<Bytes<32>>(secret_key);
+}
+
 export circuit registerAgent(secret_key: Bytes<32>, did: Bytes<32>, block_height: Uint<64>): [] {
-  agent_owner = disclose(secret_key);
+  // Armazenar apenas o HASH da chave secreta, nunca a chave em si
+  agent_owner_hash = disclose(hash_key(secret_key));
   agent_did = disclose(did);
   agent_active = disclose(1);
   registered_at = disclose(block_height);
@@ -21,15 +28,15 @@ export circuit registerAgent(secret_key: Bytes<32>, did: Bytes<32>, block_height
 }
 
 export circuit deactivateAgent(secret_key: Bytes<32>): [] {
-  assert(secret_key == agent_owner, "Only owner can deactivate agent");
+  assert(hash_key(secret_key) == agent_owner_hash, "Only owner can deactivate agent");
   assert(agent_active == 1, "Agent must be active");
   agent_active = disclose(0);
 }
 
 export circuit recordTask(secret_key: Bytes<32>): [] {
-  assert(secret_key == agent_owner, "Only owner can record tasks");
+  assert(hash_key(secret_key) == agent_owner_hash, "Only owner can record tasks");
   assert(agent_active == 1, "Agent must be active");
-  task_count = (task_count + 1) as Uint<64>;
+  task_count = disclose((task_count + 1) as Uint<64>);
 }
 
 export circuit verifyAgent(): Uint<64> {

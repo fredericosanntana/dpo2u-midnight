@@ -31,7 +31,7 @@ export type Circuits<PS> = {
 }
 
 export type Ledger = {
-  readonly agent_owner: Uint8Array;
+  readonly agent_owner_hash: Uint8Array;
   readonly agent_did: Uint8Array;
   readonly agent_active: bigint;
   readonly registered_at: bigint;

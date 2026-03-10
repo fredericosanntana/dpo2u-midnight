@@ -48,7 +48,6 @@ export type Ledger = {
     lookup(key_0: Uint8Array): Uint8Array;
     [Symbol.iterator](): Iterator<[Uint8Array, Uint8Array]>
   };
-  readonly attestation_score: bigint;
 }
 
 export type ContractReferenceLocations = any;

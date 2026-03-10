@@ -1,6 +1,6 @@
 /**
  * Payment Gateway & Treasury DPO2U
- * Ponto de entrada para depósitos escrow de Empresas e liberação fiduciária
+ * Ponto de entrada para depositos escrow de Empresas e liberacao fiduciaria
  */
 pragma language_version >= 0.19;
 import CompactStandardLibrary;
@@ -10,14 +10,32 @@ export ledger total_staked_night: Uint<64>;
 
 export circuit depositToTreasury(amount: Uint<64>): [] {
   assert(amount > 0, "Deposit must be greater than zero");
-  protocol_treasury = disclose(amount);
+  // Acumular no treasury ao inves de sobrescrever
+  protocol_treasury = disclose((protocol_treasury + amount) as Uint<64>);
 }
 
 export circuit stakeTokens(amount: Uint<64>): [] {
   assert(amount > 0, "Stake must be greater than zero");
-  total_staked_night = disclose(amount);
+  // Acumular staking ao inves de sobrescrever
+  total_staked_night = disclose((total_staked_night + amount) as Uint<64>);
+}
+
+export circuit withdrawFromTreasury(amount: Uint<64>): [] {
+  assert(amount > 0, "Withdrawal must be greater than zero");
+  assert(protocol_treasury >= amount, "Insufficient treasury balance");
+  protocol_treasury = disclose((protocol_treasury - amount) as Uint<64>);
+}
+
+export circuit unstakeTokens(amount: Uint<64>): [] {
+  assert(amount > 0, "Unstake must be greater than zero");
+  assert(total_staked_night >= amount, "Insufficient staked balance");
+  total_staked_night = disclose((total_staked_night - amount) as Uint<64>);
 }
 
 export circuit getTreasuryBalance(): Uint<64> {
   return protocol_treasury;
+}
+
+export circuit getStakedBalance(): Uint<64> {
+  return total_staked_night;
 }

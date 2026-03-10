@@ -3,23 +3,23 @@ __compactRuntime.checkRuntimeVersion('0.14.0');
 
 const _descriptor_0 = new __compactRuntime.CompactTypeUnsignedInteger(18446744073709551615n, 8);
 
-const _descriptor_1 = __compactRuntime.CompactTypeBoolean;
+const _descriptor_1 = new __compactRuntime.CompactTypeBytes(32);
 
-const _descriptor_2 = new __compactRuntime.CompactTypeBytes(32);
+const _descriptor_2 = __compactRuntime.CompactTypeBoolean;
 
 class _Either_0 {
   alignment() {
-    return _descriptor_1.alignment().concat(_descriptor_2.alignment().concat(_descriptor_2.alignment()));
+    return _descriptor_2.alignment().concat(_descriptor_1.alignment().concat(_descriptor_1.alignment()));
   }
   fromValue(value_0) {
     return {
-      is_left: _descriptor_1.fromValue(value_0),
-      left: _descriptor_2.fromValue(value_0),
-      right: _descriptor_2.fromValue(value_0)
+      is_left: _descriptor_2.fromValue(value_0),
+      left: _descriptor_1.fromValue(value_0),
+      right: _descriptor_1.fromValue(value_0)
     }
   }
   toValue(value_0) {
-    return _descriptor_1.toValue(value_0.is_left).concat(_descriptor_2.toValue(value_0.left).concat(_descriptor_2.toValue(value_0.right)));
+    return _descriptor_2.toValue(value_0.is_left).concat(_descriptor_1.toValue(value_0.left).concat(_descriptor_1.toValue(value_0.right)));
   }
 }
 
@@ -29,15 +29,15 @@ const _descriptor_4 = new __compactRuntime.CompactTypeUnsignedInteger(3402823669
 
 class _ContractAddress_0 {
   alignment() {
-    return _descriptor_2.alignment();
+    return _descriptor_1.alignment();
   }
   fromValue(value_0) {
     return {
-      bytes: _descriptor_2.fromValue(value_0)
+      bytes: _descriptor_1.fromValue(value_0)
     }
   }
   toValue(value_0) {
-    return _descriptor_2.toValue(value_0.bytes);
+    return _descriptor_1.toValue(value_0.bytes);
   }
 }
 
@@ -68,46 +68,46 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('registerAgent',
                                      'argument 1 (as invoked from Typescript)',
-                                     'AgentRegistry.compact line 16 char 1',
+                                     'AgentRegistry.compact line 21 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(secret_key_0.buffer instanceof ArrayBuffer && secret_key_0.BYTES_PER_ELEMENT === 1 && secret_key_0.length === 32)) {
           __compactRuntime.typeError('registerAgent',
                                      'argument 1 (argument 2 as invoked from Typescript)',
-                                     'AgentRegistry.compact line 16 char 1',
+                                     'AgentRegistry.compact line 21 char 1',
                                      'Bytes<32>',
                                      secret_key_0)
         }
         if (!(did_0.buffer instanceof ArrayBuffer && did_0.BYTES_PER_ELEMENT === 1 && did_0.length === 32)) {
           __compactRuntime.typeError('registerAgent',
                                      'argument 2 (argument 3 as invoked from Typescript)',
-                                     'AgentRegistry.compact line 16 char 1',
+                                     'AgentRegistry.compact line 21 char 1',
                                      'Bytes<32>',
                                      did_0)
         }
         if (!(typeof(block_height_0) === 'bigint' && block_height_0 >= 0n && block_height_0 <= 18446744073709551615n)) {
           __compactRuntime.typeError('registerAgent',
                                      'argument 3 (argument 4 as invoked from Typescript)',
-                                     'AgentRegistry.compact line 16 char 1',
+                                     'AgentRegistry.compact line 21 char 1',
                                      'Uint<0..18446744073709551616>',
                                      block_height_0)
         }
         const context = { ...contextOrig_0, gasCost: __compactRuntime.emptyRunningCost() };
         const partialProofData = {
           input: {
-            value: _descriptor_2.toValue(secret_key_0).concat(_descriptor_2.toValue(did_0).concat(_descriptor_0.toValue(block_height_0))),
-            alignment: _descriptor_2.alignment().concat(_descriptor_2.alignment().concat(_descriptor_0.alignment()))
+            value: _descriptor_1.toValue(secret_key_0).concat(_descriptor_1.toValue(did_0).concat(_descriptor_0.toValue(block_height_0))),
+            alignment: _descriptor_1.alignment().concat(_descriptor_1.alignment().concat(_descriptor_0.alignment()))
           },
           output: undefined,
           publicTranscript: [],
           privateTranscriptOutputs: []
         };
         const result_0 = this._registerAgent_0(context,
-                                                partialProofData,
-                                                secret_key_0,
-                                                did_0,
-                                                block_height_0);
+                                               partialProofData,
+                                               secret_key_0,
+                                               did_0,
+                                               block_height_0);
         partialProofData.output = { value: [], alignment: [] };
         return { result: result_0, context: context, proofData: partialProofData, gasCost: context.gasCost };
       },
@@ -120,30 +120,30 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('deactivateAgent',
                                      'argument 1 (as invoked from Typescript)',
-                                     'AgentRegistry.compact line 24 char 1',
+                                     'AgentRegistry.compact line 30 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(secret_key_0.buffer instanceof ArrayBuffer && secret_key_0.BYTES_PER_ELEMENT === 1 && secret_key_0.length === 32)) {
           __compactRuntime.typeError('deactivateAgent',
                                      'argument 1 (argument 2 as invoked from Typescript)',
-                                     'AgentRegistry.compact line 24 char 1',
+                                     'AgentRegistry.compact line 30 char 1',
                                      'Bytes<32>',
                                      secret_key_0)
         }
         const context = { ...contextOrig_0, gasCost: __compactRuntime.emptyRunningCost() };
         const partialProofData = {
           input: {
-            value: _descriptor_2.toValue(secret_key_0),
-            alignment: _descriptor_2.alignment()
+            value: _descriptor_1.toValue(secret_key_0),
+            alignment: _descriptor_1.alignment()
           },
           output: undefined,
           publicTranscript: [],
           privateTranscriptOutputs: []
         };
         const result_0 = this._deactivateAgent_0(context,
-                                                  partialProofData,
-                                                  secret_key_0);
+                                                 partialProofData,
+                                                 secret_key_0);
         partialProofData.output = { value: [], alignment: [] };
         return { result: result_0, context: context, proofData: partialProofData, gasCost: context.gasCost };
       },
@@ -156,30 +156,30 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('recordTask',
                                      'argument 1 (as invoked from Typescript)',
-                                     'AgentRegistry.compact line 30 char 1',
+                                     'AgentRegistry.compact line 36 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(secret_key_0.buffer instanceof ArrayBuffer && secret_key_0.BYTES_PER_ELEMENT === 1 && secret_key_0.length === 32)) {
           __compactRuntime.typeError('recordTask',
                                      'argument 1 (argument 2 as invoked from Typescript)',
-                                     'AgentRegistry.compact line 30 char 1',
+                                     'AgentRegistry.compact line 36 char 1',
                                      'Bytes<32>',
                                      secret_key_0)
         }
         const context = { ...contextOrig_0, gasCost: __compactRuntime.emptyRunningCost() };
         const partialProofData = {
           input: {
-            value: _descriptor_2.toValue(secret_key_0),
-            alignment: _descriptor_2.alignment()
+            value: _descriptor_1.toValue(secret_key_0),
+            alignment: _descriptor_1.alignment()
           },
           output: undefined,
           publicTranscript: [],
           privateTranscriptOutputs: []
         };
         const result_0 = this._recordTask_0(context,
-                                             partialProofData,
-                                             secret_key_0);
+                                            partialProofData,
+                                            secret_key_0);
         partialProofData.output = { value: [], alignment: [] };
         return { result: result_0, context: context, proofData: partialProofData, gasCost: context.gasCost };
       },
@@ -191,7 +191,7 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('verifyAgent',
                                      'argument 1 (as invoked from Typescript)',
-                                     'AgentRegistry.compact line 36 char 1',
+                                     'AgentRegistry.compact line 42 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
@@ -247,7 +247,6 @@ export class Contract {
       publicTranscript: [],
       privateTranscriptOutputs: []
     };
-    // slot 0: agent_owner (Bytes<32>) — init null
     __compactRuntime.queryLedgerState(context,
                                       partialProofData,
                                       [
@@ -255,10 +254,9 @@ export class Contract {
                                                  value: __compactRuntime.StateValue.newCell({ value: _descriptor_6.toValue(0n),
                                                                                               alignment: _descriptor_6.alignment() }).encode() } },
                                        { push: { storage: true,
-                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_2.toValue(new Uint8Array(32)),
-                                                                                              alignment: _descriptor_2.alignment() }).encode() } },
+                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_1.toValue(new Uint8Array(32)),
+                                                                                              alignment: _descriptor_1.alignment() }).encode() } },
                                        { ins: { cached: false, n: 1 } }]);
-    // slot 1: agent_did (Bytes<32>) — init null
     __compactRuntime.queryLedgerState(context,
                                       partialProofData,
                                       [
@@ -266,10 +264,9 @@ export class Contract {
                                                  value: __compactRuntime.StateValue.newCell({ value: _descriptor_6.toValue(1n),
                                                                                               alignment: _descriptor_6.alignment() }).encode() } },
                                        { push: { storage: true,
-                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_2.toValue(new Uint8Array(32)),
-                                                                                              alignment: _descriptor_2.alignment() }).encode() } },
+                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_1.toValue(new Uint8Array(32)),
+                                                                                              alignment: _descriptor_1.alignment() }).encode() } },
                                        { ins: { cached: false, n: 1 } }]);
-    // slot 2: agent_active (Uint<64>) — init 0
     __compactRuntime.queryLedgerState(context,
                                       partialProofData,
                                       [
@@ -280,7 +277,6 @@ export class Contract {
                                                  value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(0n),
                                                                                               alignment: _descriptor_0.alignment() }).encode() } },
                                        { ins: { cached: false, n: 1 } }]);
-    // slot 3: registered_at (Uint<64>) — init 0
     __compactRuntime.queryLedgerState(context,
                                       partialProofData,
                                       [
@@ -291,7 +287,6 @@ export class Contract {
                                                  value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(0n),
                                                                                               alignment: _descriptor_0.alignment() }).encode() } },
                                        { ins: { cached: false, n: 1 } }]);
-    // slot 4: task_count (Uint<64>) — init 0
     __compactRuntime.queryLedgerState(context,
                                       partialProofData,
                                       [
@@ -309,8 +304,18 @@ export class Contract {
       currentZswapLocalState: context.currentZswapLocalState
     }
   }
-  _registerAgent_0(context, partialProofData, secret_key_0, did_0, block_height_0) {
-    // agent_owner = secret_key
+  _persistentHash_0(value_0) {
+    const result_0 = __compactRuntime.persistentHash(_descriptor_1, value_0);
+    return result_0;
+  }
+  _hash_key_0(secret_key_0) { return this._persistentHash_0(secret_key_0); }
+  _registerAgent_0(context,
+                   partialProofData,
+                   secret_key_0,
+                   did_0,
+                   block_height_0)
+  {
+    const tmp_0 = this._hash_key_0(secret_key_0);
     __compactRuntime.queryLedgerState(context,
                                       partialProofData,
                                       [
@@ -318,10 +323,9 @@ export class Contract {
                                                  value: __compactRuntime.StateValue.newCell({ value: _descriptor_6.toValue(0n),
                                                                                               alignment: _descriptor_6.alignment() }).encode() } },
                                        { push: { storage: true,
-                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_2.toValue(secret_key_0),
-                                                                                              alignment: _descriptor_2.alignment() }).encode() } },
+                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_1.toValue(tmp_0),
+                                                                                              alignment: _descriptor_1.alignment() }).encode() } },
                                        { ins: { cached: false, n: 1 } }]);
-    // agent_did = did
     __compactRuntime.queryLedgerState(context,
                                       partialProofData,
                                       [
@@ -329,10 +333,10 @@ export class Contract {
                                                  value: __compactRuntime.StateValue.newCell({ value: _descriptor_6.toValue(1n),
                                                                                               alignment: _descriptor_6.alignment() }).encode() } },
                                        { push: { storage: true,
-                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_2.toValue(did_0),
-                                                                                              alignment: _descriptor_2.alignment() }).encode() } },
+                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_1.toValue(did_0),
+                                                                                              alignment: _descriptor_1.alignment() }).encode() } },
                                        { ins: { cached: false, n: 1 } }]);
-    // agent_active = 1
+    const tmp_1 = 1n;
     __compactRuntime.queryLedgerState(context,
                                       partialProofData,
                                       [
@@ -340,10 +344,9 @@ export class Contract {
                                                  value: __compactRuntime.StateValue.newCell({ value: _descriptor_6.toValue(2n),
                                                                                               alignment: _descriptor_6.alignment() }).encode() } },
                                        { push: { storage: true,
-                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(1n),
+                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(tmp_1),
                                                                                               alignment: _descriptor_0.alignment() }).encode() } },
                                        { ins: { cached: false, n: 1 } }]);
-    // registered_at = block_height
     __compactRuntime.queryLedgerState(context,
                                       partialProofData,
                                       [
@@ -354,7 +357,7 @@ export class Contract {
                                                  value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(block_height_0),
                                                                                               alignment: _descriptor_0.alignment() }).encode() } },
                                        { ins: { cached: false, n: 1 } }]);
-    // task_count = 0
+    const tmp_2 = 0n;
     __compactRuntime.queryLedgerState(context,
                                       partialProofData,
                                       [
@@ -362,41 +365,41 @@ export class Contract {
                                                  value: __compactRuntime.StateValue.newCell({ value: _descriptor_6.toValue(4n),
                                                                                               alignment: _descriptor_6.alignment() }).encode() } },
                                        { push: { storage: true,
-                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(0n),
+                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(tmp_2),
                                                                                               alignment: _descriptor_0.alignment() }).encode() } },
                                        { ins: { cached: false, n: 1 } }]);
     return [];
   }
   _deactivateAgent_0(context, partialProofData, secret_key_0) {
-    // Read agent_owner (slot 0) and compare
-    const stored_owner = _descriptor_2.fromValue(__compactRuntime.queryLedgerState(context,
-                                                                                   partialProofData,
-                                                                                   [
-                                                                                    { dup: { n: 0 } },
-                                                                                    { idx: { cached: false,
-                                                                                             pushPath: false,
-                                                                                             path: [
-                                                                                                    { tag: 'value',
-                                                                                                      value: { value: _descriptor_6.toValue(0n),
-                                                                                                               alignment: _descriptor_6.alignment() } }] } },
-                                                                                    { popeq: { cached: false,
-                                                                                               result: undefined } }]).value);
-    __compactRuntime.assert(_bytesEqual(secret_key_0, stored_owner), 'Only owner can deactivate agent');
-    // Read agent_active (slot 2)
-    const current_active = _descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
-                                                                                     partialProofData,
-                                                                                     [
-                                                                                      { dup: { n: 0 } },
-                                                                                      { idx: { cached: false,
-                                                                                               pushPath: false,
-                                                                                               path: [
-                                                                                                      { tag: 'value',
-                                                                                                        value: { value: _descriptor_6.toValue(2n),
-                                                                                                                 alignment: _descriptor_6.alignment() } }] } },
-                                                                                      { popeq: { cached: false,
-                                                                                                 result: undefined } }]).value);
-    __compactRuntime.assert(current_active === 1n, 'Agent must be active');
-    // agent_active = 0
+    __compactRuntime.assert(this._equal_0(this._hash_key_0(secret_key_0),
+                                          _descriptor_1.fromValue(__compactRuntime.queryLedgerState(context,
+                                                                                                    partialProofData,
+                                                                                                    [
+                                                                                                     { dup: { n: 0 } },
+                                                                                                     { idx: { cached: false,
+                                                                                                              pushPath: false,
+                                                                                                              path: [
+                                                                                                                     { tag: 'value',
+                                                                                                                       value: { value: _descriptor_6.toValue(0n),
+                                                                                                                                alignment: _descriptor_6.alignment() } }] } },
+                                                                                                     { popeq: { cached: false,
+                                                                                                                result: undefined } }]).value)),
+                            'Only owner can deactivate agent');
+    __compactRuntime.assert(this._equal_1(_descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
+                                                                                                    partialProofData,
+                                                                                                    [
+                                                                                                     { dup: { n: 0 } },
+                                                                                                     { idx: { cached: false,
+                                                                                                              pushPath: false,
+                                                                                                              path: [
+                                                                                                                     { tag: 'value',
+                                                                                                                       value: { value: _descriptor_6.toValue(2n),
+                                                                                                                                alignment: _descriptor_6.alignment() } }] } },
+                                                                                                     { popeq: { cached: false,
+                                                                                                                result: undefined } }]).value),
+                                          1n),
+                            'Agent must be active');
+    const tmp_0 = 0n;
     __compactRuntime.queryLedgerState(context,
                                       partialProofData,
                                       [
@@ -404,53 +407,59 @@ export class Contract {
                                                  value: __compactRuntime.StateValue.newCell({ value: _descriptor_6.toValue(2n),
                                                                                               alignment: _descriptor_6.alignment() }).encode() } },
                                        { push: { storage: true,
-                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(0n),
+                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(tmp_0),
                                                                                               alignment: _descriptor_0.alignment() }).encode() } },
                                        { ins: { cached: false, n: 1 } }]);
     return [];
   }
   _recordTask_0(context, partialProofData, secret_key_0) {
-    // Read agent_owner (slot 0) and compare
-    const stored_owner = _descriptor_2.fromValue(__compactRuntime.queryLedgerState(context,
-                                                                                   partialProofData,
-                                                                                   [
-                                                                                    { dup: { n: 0 } },
-                                                                                    { idx: { cached: false,
-                                                                                             pushPath: false,
-                                                                                             path: [
-                                                                                                    { tag: 'value',
-                                                                                                      value: { value: _descriptor_6.toValue(0n),
-                                                                                                               alignment: _descriptor_6.alignment() } }] } },
-                                                                                    { popeq: { cached: false,
-                                                                                               result: undefined } }]).value);
-    __compactRuntime.assert(_bytesEqual(secret_key_0, stored_owner), 'Only owner can record tasks');
-    // Read agent_active (slot 2)
-    const current_active = _descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
-                                                                                     partialProofData,
-                                                                                     [
-                                                                                      { dup: { n: 0 } },
-                                                                                      { idx: { cached: false,
-                                                                                               pushPath: false,
-                                                                                               path: [
-                                                                                                      { tag: 'value',
-                                                                                                        value: { value: _descriptor_6.toValue(2n),
-                                                                                                                 alignment: _descriptor_6.alignment() } }] } },
-                                                                                      { popeq: { cached: false,
-                                                                                                 result: undefined } }]).value);
-    __compactRuntime.assert(current_active === 1n, 'Agent must be active');
-    // Read task_count (slot 4), increment, write back
-    const current_count = _descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
-                                                                                    partialProofData,
-                                                                                    [
-                                                                                     { dup: { n: 0 } },
-                                                                                     { idx: { cached: false,
-                                                                                              pushPath: false,
-                                                                                              path: [
-                                                                                                     { tag: 'value',
-                                                                                                       value: { value: _descriptor_6.toValue(4n),
-                                                                                                                alignment: _descriptor_6.alignment() } }] } },
-                                                                                     { popeq: { cached: false,
-                                                                                                result: undefined } }]).value);
+    __compactRuntime.assert(this._equal_2(this._hash_key_0(secret_key_0),
+                                          _descriptor_1.fromValue(__compactRuntime.queryLedgerState(context,
+                                                                                                    partialProofData,
+                                                                                                    [
+                                                                                                     { dup: { n: 0 } },
+                                                                                                     { idx: { cached: false,
+                                                                                                              pushPath: false,
+                                                                                                              path: [
+                                                                                                                     { tag: 'value',
+                                                                                                                       value: { value: _descriptor_6.toValue(0n),
+                                                                                                                                alignment: _descriptor_6.alignment() } }] } },
+                                                                                                     { popeq: { cached: false,
+                                                                                                                result: undefined } }]).value)),
+                            'Only owner can record tasks');
+    __compactRuntime.assert(this._equal_3(_descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
+                                                                                                    partialProofData,
+                                                                                                    [
+                                                                                                     { dup: { n: 0 } },
+                                                                                                     { idx: { cached: false,
+                                                                                                              pushPath: false,
+                                                                                                              path: [
+                                                                                                                     { tag: 'value',
+                                                                                                                       value: { value: _descriptor_6.toValue(2n),
+                                                                                                                                alignment: _descriptor_6.alignment() } }] } },
+                                                                                                     { popeq: { cached: false,
+                                                                                                                result: undefined } }]).value),
+                                          1n),
+                            'Agent must be active');
+    const tmp_0 = ((t1) => {
+                    if (t1 > 18446744073709551615n) {
+                      throw new __compactRuntime.CompactError('AgentRegistry.compact line 39 char 25: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 18446744073709551615');
+                    }
+                    return t1;
+                  })(_descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
+                                                                               partialProofData,
+                                                                               [
+                                                                                { dup: { n: 0 } },
+                                                                                { idx: { cached: false,
+                                                                                         pushPath: false,
+                                                                                         path: [
+                                                                                                { tag: 'value',
+                                                                                                  value: { value: _descriptor_6.toValue(4n),
+                                                                                                           alignment: _descriptor_6.alignment() } }] } },
+                                                                                { popeq: { cached: false,
+                                                                                           result: undefined } }]).value)
+                     +
+                     1n);
     __compactRuntime.queryLedgerState(context,
                                       partialProofData,
                                       [
@@ -458,7 +467,7 @@ export class Contract {
                                                  value: __compactRuntime.StateValue.newCell({ value: _descriptor_6.toValue(4n),
                                                                                               alignment: _descriptor_6.alignment() }).encode() } },
                                        { push: { storage: true,
-                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(current_count + 1n),
+                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(tmp_0),
                                                                                               alignment: _descriptor_0.alignment() }).encode() } },
                                        { ins: { cached: false, n: 1 } }]);
     return [];
@@ -477,16 +486,23 @@ export class Contract {
                                                                       { popeq: { cached: false,
                                                                                  result: undefined } }]).value);
   }
-}
-
-function _bytesEqual(a, b) {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
+  _equal_0(x0, y0) {
+    if (!x0.every((x, i) => y0[i] === x)) { return false; }
+    return true;
   }
-  return true;
+  _equal_1(x0, y0) {
+    if (x0 !== y0) { return false; }
+    return true;
+  }
+  _equal_2(x0, y0) {
+    if (!x0.every((x, i) => y0[i] === x)) { return false; }
+    return true;
+  }
+  _equal_3(x0, y0) {
+    if (x0 !== y0) { return false; }
+    return true;
+  }
 }
-
 export function ledger(stateOrChargedState) {
   const state = stateOrChargedState instanceof __compactRuntime.StateValue ? stateOrChargedState : stateOrChargedState.state;
   const chargedState = stateOrChargedState instanceof __compactRuntime.StateValue ? new __compactRuntime.ChargedState(stateOrChargedState) : stateOrChargedState;
@@ -501,8 +517,8 @@ export function ledger(stateOrChargedState) {
     privateTranscriptOutputs: []
   };
   return {
-    get agent_owner() {
-      return _descriptor_2.fromValue(__compactRuntime.queryLedgerState(context,
+    get agent_owner_hash() {
+      return _descriptor_1.fromValue(__compactRuntime.queryLedgerState(context,
                                                                        partialProofData,
                                                                        [
                                                                         { dup: { n: 0 } },
@@ -516,7 +532,7 @@ export function ledger(stateOrChargedState) {
                                                                                    result: undefined } }]).value);
     },
     get agent_did() {
-      return _descriptor_2.fromValue(__compactRuntime.queryLedgerState(context,
+      return _descriptor_1.fromValue(__compactRuntime.queryLedgerState(context,
                                                                        partialProofData,
                                                                        [
                                                                         { dup: { n: 0 } },
@@ -580,3 +596,4 @@ const _dummyContract = new Contract({ });
 export const pureCircuits = {};
 export const contractReferenceLocations =
   { tag: 'publicLedgerArray', indices: { } };
+//# sourceMappingURL=index.js.map

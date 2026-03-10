@@ -1,6 +1,6 @@
 /**
  * Contrato de Registro de Conformidade DPO2U (Arquitetura Compact/Midnight)
- * Focado na privacidade e preservação de dados:
+ * Focado na privacidade e preservacao de dados:
  * Nunca registrar dados sensiveis. Apenas hashes de docs (CID), DIDs de agentes responsaveis e o score zk final.
  */
 pragma language_version >= 0.19;
@@ -10,8 +10,6 @@ export ledger attestation_scores: Map<Bytes<32>, Uint<64>>;
 export ledger attestation_dids: Map<Bytes<32>, Bytes<32>>;
 export ledger attestation_cids: Map<Bytes<32>, Bytes<32>>;
 
-export ledger attestation_score: Uint<64>;
-
 export circuit registerAttestation(
   company_id: Bytes<32>,
   agent_did: Bytes<32>,
@@ -19,17 +17,18 @@ export circuit registerAttestation(
   score: Uint<64>
 ): [] {
   assert(score <= 100, "Invalid compliance score, must be bounded to 0-100%");
-  
-  // Update global ledger state
+
+  // Update ledger state per company
   attestation_scores.insert(disclose(company_id), disclose(score));
   attestation_dids.insert(disclose(company_id), disclose(agent_did));
   attestation_cids.insert(disclose(company_id), disclose(policy_cid));
-  
-  // Also store the latest global score for simpler testing queries
-  attestation_score = disclose(score);
 }
 
 export circuit getComplianceStatus(company_id: Bytes<32>): Uint<64> {
-  return attestation_score;
+  // Retornar score da empresa especifica, nao um global
+  if (attestation_scores.member(disclose(company_id))) {
+    return attestation_scores.lookup(disclose(company_id));
+  } else {
+    return 0;
+  }
 }
-

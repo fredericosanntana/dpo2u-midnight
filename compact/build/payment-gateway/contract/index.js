@@ -102,14 +102,14 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('stakeTokens',
                                      'argument 1 (as invoked from Typescript)',
-                                     'PaymentGateway.compact line 16 char 1',
+                                     'PaymentGateway.compact line 17 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(typeof(amount_0) === 'bigint' && amount_0 >= 0n && amount_0 <= 18446744073709551615n)) {
           __compactRuntime.typeError('stakeTokens',
                                      'argument 1 (argument 2 as invoked from Typescript)',
-                                     'PaymentGateway.compact line 16 char 1',
+                                     'PaymentGateway.compact line 17 char 1',
                                      'Uint<0..18446744073709551616>',
                                      amount_0)
         }
@@ -127,6 +127,78 @@ export class Contract {
         partialProofData.output = { value: [], alignment: [] };
         return { result: result_0, context: context, proofData: partialProofData, gasCost: context.gasCost };
       },
+      withdrawFromTreasury: (...args_1) => {
+        if (args_1.length !== 2) {
+          throw new __compactRuntime.CompactError(`withdrawFromTreasury: expected 2 arguments (as invoked from Typescript), received ${args_1.length}`);
+        }
+        const contextOrig_0 = args_1[0];
+        const amount_0 = args_1[1];
+        if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
+          __compactRuntime.typeError('withdrawFromTreasury',
+                                     'argument 1 (as invoked from Typescript)',
+                                     'PaymentGateway.compact line 23 char 1',
+                                     'CircuitContext',
+                                     contextOrig_0)
+        }
+        if (!(typeof(amount_0) === 'bigint' && amount_0 >= 0n && amount_0 <= 18446744073709551615n)) {
+          __compactRuntime.typeError('withdrawFromTreasury',
+                                     'argument 1 (argument 2 as invoked from Typescript)',
+                                     'PaymentGateway.compact line 23 char 1',
+                                     'Uint<0..18446744073709551616>',
+                                     amount_0)
+        }
+        const context = { ...contextOrig_0, gasCost: __compactRuntime.emptyRunningCost() };
+        const partialProofData = {
+          input: {
+            value: _descriptor_0.toValue(amount_0),
+            alignment: _descriptor_0.alignment()
+          },
+          output: undefined,
+          publicTranscript: [],
+          privateTranscriptOutputs: []
+        };
+        const result_0 = this._withdrawFromTreasury_0(context,
+                                                      partialProofData,
+                                                      amount_0);
+        partialProofData.output = { value: [], alignment: [] };
+        return { result: result_0, context: context, proofData: partialProofData, gasCost: context.gasCost };
+      },
+      unstakeTokens: (...args_1) => {
+        if (args_1.length !== 2) {
+          throw new __compactRuntime.CompactError(`unstakeTokens: expected 2 arguments (as invoked from Typescript), received ${args_1.length}`);
+        }
+        const contextOrig_0 = args_1[0];
+        const amount_0 = args_1[1];
+        if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
+          __compactRuntime.typeError('unstakeTokens',
+                                     'argument 1 (as invoked from Typescript)',
+                                     'PaymentGateway.compact line 29 char 1',
+                                     'CircuitContext',
+                                     contextOrig_0)
+        }
+        if (!(typeof(amount_0) === 'bigint' && amount_0 >= 0n && amount_0 <= 18446744073709551615n)) {
+          __compactRuntime.typeError('unstakeTokens',
+                                     'argument 1 (argument 2 as invoked from Typescript)',
+                                     'PaymentGateway.compact line 29 char 1',
+                                     'Uint<0..18446744073709551616>',
+                                     amount_0)
+        }
+        const context = { ...contextOrig_0, gasCost: __compactRuntime.emptyRunningCost() };
+        const partialProofData = {
+          input: {
+            value: _descriptor_0.toValue(amount_0),
+            alignment: _descriptor_0.alignment()
+          },
+          output: undefined,
+          publicTranscript: [],
+          privateTranscriptOutputs: []
+        };
+        const result_0 = this._unstakeTokens_0(context,
+                                               partialProofData,
+                                               amount_0);
+        partialProofData.output = { value: [], alignment: [] };
+        return { result: result_0, context: context, proofData: partialProofData, gasCost: context.gasCost };
+      },
       getTreasuryBalance: (...args_1) => {
         if (args_1.length !== 1) {
           throw new __compactRuntime.CompactError(`getTreasuryBalance: expected 1 argument (as invoked from Typescript), received ${args_1.length}`);
@@ -135,7 +207,7 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('getTreasuryBalance',
                                      'argument 1 (as invoked from Typescript)',
-                                     'PaymentGateway.compact line 21 char 1',
+                                     'PaymentGateway.compact line 35 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
@@ -149,12 +221,38 @@ export class Contract {
         const result_0 = this._getTreasuryBalance_0(context, partialProofData);
         partialProofData.output = { value: _descriptor_0.toValue(result_0), alignment: _descriptor_0.alignment() };
         return { result: result_0, context: context, proofData: partialProofData, gasCost: context.gasCost };
+      },
+      getStakedBalance: (...args_1) => {
+        if (args_1.length !== 1) {
+          throw new __compactRuntime.CompactError(`getStakedBalance: expected 1 argument (as invoked from Typescript), received ${args_1.length}`);
+        }
+        const contextOrig_0 = args_1[0];
+        if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
+          __compactRuntime.typeError('getStakedBalance',
+                                     'argument 1 (as invoked from Typescript)',
+                                     'PaymentGateway.compact line 39 char 1',
+                                     'CircuitContext',
+                                     contextOrig_0)
+        }
+        const context = { ...contextOrig_0, gasCost: __compactRuntime.emptyRunningCost() };
+        const partialProofData = {
+          input: { value: [], alignment: [] },
+          output: undefined,
+          publicTranscript: [],
+          privateTranscriptOutputs: []
+        };
+        const result_0 = this._getStakedBalance_0(context, partialProofData);
+        partialProofData.output = { value: _descriptor_0.toValue(result_0), alignment: _descriptor_0.alignment() };
+        return { result: result_0, context: context, proofData: partialProofData, gasCost: context.gasCost };
       }
     };
     this.impureCircuits = {
       depositToTreasury: this.circuits.depositToTreasury,
       stakeTokens: this.circuits.stakeTokens,
-      getTreasuryBalance: this.circuits.getTreasuryBalance
+      withdrawFromTreasury: this.circuits.withdrawFromTreasury,
+      unstakeTokens: this.circuits.unstakeTokens,
+      getTreasuryBalance: this.circuits.getTreasuryBalance,
+      getStakedBalance: this.circuits.getStakedBalance
     };
   }
   initialState(...args_0) {
@@ -178,7 +276,10 @@ export class Contract {
     state_0.data = new __compactRuntime.ChargedState(stateValue_0);
     state_0.setOperation('depositToTreasury', new __compactRuntime.ContractOperation());
     state_0.setOperation('stakeTokens', new __compactRuntime.ContractOperation());
+    state_0.setOperation('withdrawFromTreasury', new __compactRuntime.ContractOperation());
+    state_0.setOperation('unstakeTokens', new __compactRuntime.ContractOperation());
     state_0.setOperation('getTreasuryBalance', new __compactRuntime.ContractOperation());
+    state_0.setOperation('getStakedBalance', new __compactRuntime.ContractOperation());
     const context = __compactRuntime.createCircuitContext(__compactRuntime.dummyContractAddress(), constructorContext_0.initialZswapLocalState.coinPublicKey, state_0.data, constructorContext_0.initialPrivateState);
     const partialProofData = {
       input: { value: [], alignment: [] },
@@ -215,6 +316,25 @@ export class Contract {
   }
   _depositToTreasury_0(context, partialProofData, amount_0) {
     __compactRuntime.assert(amount_0 > 0n, 'Deposit must be greater than zero');
+    const tmp_0 = ((t1) => {
+                    if (t1 > 18446744073709551615n) {
+                      throw new __compactRuntime.CompactError('PaymentGateway.compact line 14 char 32: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 18446744073709551615');
+                    }
+                    return t1;
+                  })(_descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
+                                                                               partialProofData,
+                                                                               [
+                                                                                { dup: { n: 0 } },
+                                                                                { idx: { cached: false,
+                                                                                         pushPath: false,
+                                                                                         path: [
+                                                                                                { tag: 'value',
+                                                                                                  value: { value: _descriptor_6.toValue(0n),
+                                                                                                           alignment: _descriptor_6.alignment() } }] } },
+                                                                                { popeq: { cached: false,
+                                                                                           result: undefined } }]).value)
+                     +
+                     amount_0);
     __compactRuntime.queryLedgerState(context,
                                       partialProofData,
                                       [
@@ -222,13 +342,32 @@ export class Contract {
                                                  value: __compactRuntime.StateValue.newCell({ value: _descriptor_6.toValue(0n),
                                                                                               alignment: _descriptor_6.alignment() }).encode() } },
                                        { push: { storage: true,
-                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(amount_0),
+                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(tmp_0),
                                                                                               alignment: _descriptor_0.alignment() }).encode() } },
                                        { ins: { cached: false, n: 1 } }]);
     return [];
   }
   _stakeTokens_0(context, partialProofData, amount_0) {
     __compactRuntime.assert(amount_0 > 0n, 'Stake must be greater than zero');
+    const tmp_0 = ((t1) => {
+                    if (t1 > 18446744073709551615n) {
+                      throw new __compactRuntime.CompactError('PaymentGateway.compact line 20 char 33: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 18446744073709551615');
+                    }
+                    return t1;
+                  })(_descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
+                                                                               partialProofData,
+                                                                               [
+                                                                                { dup: { n: 0 } },
+                                                                                { idx: { cached: false,
+                                                                                         pushPath: false,
+                                                                                         path: [
+                                                                                                { tag: 'value',
+                                                                                                  value: { value: _descriptor_6.toValue(1n),
+                                                                                                           alignment: _descriptor_6.alignment() } }] } },
+                                                                                { popeq: { cached: false,
+                                                                                           result: undefined } }]).value)
+                     +
+                     amount_0);
     __compactRuntime.queryLedgerState(context,
                                       partialProofData,
                                       [
@@ -236,7 +375,98 @@ export class Contract {
                                                  value: __compactRuntime.StateValue.newCell({ value: _descriptor_6.toValue(1n),
                                                                                               alignment: _descriptor_6.alignment() }).encode() } },
                                        { push: { storage: true,
-                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(amount_0),
+                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(tmp_0),
+                                                                                              alignment: _descriptor_0.alignment() }).encode() } },
+                                       { ins: { cached: false, n: 1 } }]);
+    return [];
+  }
+  _withdrawFromTreasury_0(context, partialProofData, amount_0) {
+    __compactRuntime.assert(amount_0 > 0n,
+                            'Withdrawal must be greater than zero');
+    __compactRuntime.assert(_descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
+                                                                                      partialProofData,
+                                                                                      [
+                                                                                       { dup: { n: 0 } },
+                                                                                       { idx: { cached: false,
+                                                                                                pushPath: false,
+                                                                                                path: [
+                                                                                                       { tag: 'value',
+                                                                                                         value: { value: _descriptor_6.toValue(0n),
+                                                                                                                  alignment: _descriptor_6.alignment() } }] } },
+                                                                                       { popeq: { cached: false,
+                                                                                                  result: undefined } }]).value)
+                            >=
+                            amount_0,
+                            'Insufficient treasury balance');
+    let t_0;
+    const tmp_0 = (t_0 = _descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
+                                                                                   partialProofData,
+                                                                                   [
+                                                                                    { dup: { n: 0 } },
+                                                                                    { idx: { cached: false,
+                                                                                             pushPath: false,
+                                                                                             path: [
+                                                                                                    { tag: 'value',
+                                                                                                      value: { value: _descriptor_6.toValue(0n),
+                                                                                                               alignment: _descriptor_6.alignment() } }] } },
+                                                                                    { popeq: { cached: false,
+                                                                                               result: undefined } }]).value),
+                   (__compactRuntime.assert(t_0 >= amount_0,
+                                            'result of subtraction would be negative'),
+                    t_0 - amount_0));
+    __compactRuntime.queryLedgerState(context,
+                                      partialProofData,
+                                      [
+                                       { push: { storage: false,
+                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_6.toValue(0n),
+                                                                                              alignment: _descriptor_6.alignment() }).encode() } },
+                                       { push: { storage: true,
+                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(tmp_0),
+                                                                                              alignment: _descriptor_0.alignment() }).encode() } },
+                                       { ins: { cached: false, n: 1 } }]);
+    return [];
+  }
+  _unstakeTokens_0(context, partialProofData, amount_0) {
+    __compactRuntime.assert(amount_0 > 0n, 'Unstake must be greater than zero');
+    __compactRuntime.assert(_descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
+                                                                                      partialProofData,
+                                                                                      [
+                                                                                       { dup: { n: 0 } },
+                                                                                       { idx: { cached: false,
+                                                                                                pushPath: false,
+                                                                                                path: [
+                                                                                                       { tag: 'value',
+                                                                                                         value: { value: _descriptor_6.toValue(1n),
+                                                                                                                  alignment: _descriptor_6.alignment() } }] } },
+                                                                                       { popeq: { cached: false,
+                                                                                                  result: undefined } }]).value)
+                            >=
+                            amount_0,
+                            'Insufficient staked balance');
+    let t_0;
+    const tmp_0 = (t_0 = _descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
+                                                                                   partialProofData,
+                                                                                   [
+                                                                                    { dup: { n: 0 } },
+                                                                                    { idx: { cached: false,
+                                                                                             pushPath: false,
+                                                                                             path: [
+                                                                                                    { tag: 'value',
+                                                                                                      value: { value: _descriptor_6.toValue(1n),
+                                                                                                               alignment: _descriptor_6.alignment() } }] } },
+                                                                                    { popeq: { cached: false,
+                                                                                               result: undefined } }]).value),
+                   (__compactRuntime.assert(t_0 >= amount_0,
+                                            'result of subtraction would be negative'),
+                    t_0 - amount_0));
+    __compactRuntime.queryLedgerState(context,
+                                      partialProofData,
+                                      [
+                                       { push: { storage: false,
+                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_6.toValue(1n),
+                                                                                              alignment: _descriptor_6.alignment() }).encode() } },
+                                       { push: { storage: true,
+                                                 value: __compactRuntime.StateValue.newCell({ value: _descriptor_0.toValue(tmp_0),
                                                                                               alignment: _descriptor_0.alignment() }).encode() } },
                                        { ins: { cached: false, n: 1 } }]);
     return [];
@@ -251,6 +481,20 @@ export class Contract {
                                                                                path: [
                                                                                       { tag: 'value',
                                                                                         value: { value: _descriptor_6.toValue(0n),
+                                                                                                 alignment: _descriptor_6.alignment() } }] } },
+                                                                      { popeq: { cached: false,
+                                                                                 result: undefined } }]).value);
+  }
+  _getStakedBalance_0(context, partialProofData) {
+    return _descriptor_0.fromValue(__compactRuntime.queryLedgerState(context,
+                                                                     partialProofData,
+                                                                     [
+                                                                      { dup: { n: 0 } },
+                                                                      { idx: { cached: false,
+                                                                               pushPath: false,
+                                                                               path: [
+                                                                                      { tag: 'value',
+                                                                                        value: { value: _descriptor_6.toValue(1n),
                                                                                                  alignment: _descriptor_6.alignment() } }] } },
                                                                       { popeq: { cached: false,
                                                                                  result: undefined } }]).value);

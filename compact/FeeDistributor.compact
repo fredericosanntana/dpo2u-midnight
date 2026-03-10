@@ -1,7 +1,7 @@
 /**
  * Fee Distributor DPO2U (Arquitetura Compact/Midnight)
- * Responsável por orquestrar repasses de valores do Protocolo B2B para $NIGHT (Self-Funding).
- * Split 40/60: expert_share + auditor_share são computados off-chain e validados on-chain.
+ * Responsavel por orquestrar repasses de valores do Protocolo B2B para $NIGHT (Self-Funding).
+ * Split 40/60: expert_share + auditor_share sao computados off-chain e validados on-chain.
  * O contrato verifica que expert_share + auditor_share == total_amount (constraint ZK).
  */
 pragma language_version >= 0.19;
@@ -9,6 +9,10 @@ import CompactStandardLibrary;
 
 export ledger expert_fee_pool: Uint<64>;
 export ledger auditor_fee_pool: Uint<64>;
+
+// Historico de distribuicoes por empresa
+export ledger company_expert_fees: Map<Bytes<32>, Uint<64>>;
+export ledger company_auditor_fees: Map<Bytes<32>, Uint<64>>;
 
 export circuit distributeComplianceFee(
   company_id: Bytes<32>,
@@ -22,8 +26,13 @@ export circuit distributeComplianceFee(
   // ZK constraint: shares must sum to total (40/60 split enforced off-chain)
   assert(expert_share + auditor_share == total_amount, "Shares must sum to total amount");
 
-  expert_fee_pool = disclose(expert_share);
-  auditor_fee_pool = disclose(auditor_share);
+  // Acumular nos pools globais (nao sobrescrever)
+  expert_fee_pool = disclose((expert_fee_pool + expert_share) as Uint<64>);
+  auditor_fee_pool = disclose((auditor_fee_pool + auditor_share) as Uint<64>);
+
+  // Rastrear fees por empresa
+  company_expert_fees.insert(disclose(company_id), disclose(expert_share));
+  company_auditor_fees.insert(disclose(company_id), disclose(auditor_share));
 }
 
 export circuit getAuditorPools(): Uint<64> {
