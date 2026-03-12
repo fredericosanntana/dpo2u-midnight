@@ -3,6 +3,9 @@ export interface DeployedAddresses {
   PaymentGateway?: string;
   FeeDistributor?: string;
   AgentRegistry?: string;
+  HealthDIDRegistry?: string;
+  HealthConsentRegistry?: string;
+  CuidaBotCompliance?: string;
 }
 
 export function padTo32Bytes(str: string): Uint8Array {
