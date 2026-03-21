@@ -4,15 +4,22 @@ services:
     container_name: midnight-node-local
     ports:
       - "9944:9944"
+      - "30333:30333"
     environment:
-      CFG_PRESET: dev
+      CFG_PRESET: testnet-02
+    command:
+      - "--rpc-methods=Safe"
+      - "--rpc-cors=all"
+      - "--rpc-external"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9944/health"]
-      interval: 2s
-      timeout: 5s
-      retries: 5
-      start_period: 5s
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 30s
     restart: unless-stopped
+    volumes:
+      - node-data:/data
 
   indexer:
     image: midnightntwrk/indexer-standalone:3.0.0
@@ -30,4 +37,5 @@ services:
     restart: unless-stopped
 
 volumes:
+  node-data:
   indexer-data:
