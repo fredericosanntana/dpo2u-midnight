@@ -1,14 +1,8 @@
-# Shared ZK Trust Stacks as Evolutionarily Stable Compliance Mechanisms: PACT Protocol and the Seven-Layer Security Concentration Problem
+# Shared ZK Trust Stacks as Evolutionarily Stable Compliance Mechanisms: DPO2U Protocol and the Seven-Layer Security Concentration Problem
 
 **Fred Santana**
-Knight Shield Digital Inc., Edmonton, Alberta, Canada
 DPO2U, Niterói, Rio de Janeiro, Brazil
-*fred@knightshield.ca*
 
-**Matt Corbett**
-Knight Shield Digital Inc., Edmonton, Alberta, Canada
-
-*Submitted for consideration — University of Alberta, Faculty of Law / Computing Science*
 *April 2026*
 
 ---
@@ -19,7 +13,7 @@ Hoskinson [1] demonstrates that zero-knowledge proof systems decompose trust int
 
 We propose the **Shared ZK Trust Stack** as the structural solution — a single, audited ZK compliance infrastructure used by all ecosystem participants, where the stack itself is registered on-chain as a hash commitment. Under this architecture, ecosystem-wide failure probability converges to `p`, independent of `n`: security scales with adoption rather than degrading.
 
-We describe PACT (Privacy Attestation and Compliance Toolkit), a concrete implementation of the Shared ZK Trust Stack on the Midnight Network, comprising: (1) a compliance kit that generates jurisdiction-specific predicate witnesses, (2) a DPO2U-MCP orchestration layer that standardizes attestation generation and propagation, and (3) a `PACTRegistry` smart contract whose own hash is registered on-chain — making every PACT-attested dApp a verifiable participant in a single audited base. We formalize PACT's equilibrium properties using evolutionary game theory, demonstrating that PACT-certified ecosystems constitute an Evolutionarily Stable Strategy (ESS) with security resilience independent of ecosystem size. We further show that existing compliance frameworks (PIPEDA, FINTRAC, AIDA, LGPD, GDPR) can be expressed as predicate conjunctions over private witnesses, satisfying Privacy by Design requirements at the protocol level without surveillance.
+We describeDPO2U (Privacy Attestation and Compliance Toolkit), a concrete implementation of the Shared ZK Trust Stack on the Midnight Network, comprising: (1) a compliance kit that generates jurisdiction-specific predicate witnesses, (2) a DPO2U-MCP orchestration layer that standardizes attestation generation and propagation, and (3) a `PACTRegistry` smart contract whose own hash is registered on-chain — making everyDPO2U-attested dApp a verifiable participant in a single audited base. We formalizeDPO2U's equilibrium properties using evolutionary game theory, demonstrating thatDPO2U-certified ecosystems constitute an Evolutionarily Stable Strategy (ESS) with security resilience independent of ecosystem size. We further show that existing compliance frameworks (PIPEDA, FINTRAC, AIDA, LGPD, GDPR) can be expressed as predicate conjunctions over private witnesses, satisfying Privacy by Design requirements at the protocol level without surveillance.
 
 **Keywords:** zero-knowledge proofs, compliance as protocol, evolutionarily stable strategies, privacy by design, Midnight Network, Compact language, shared trust infrastructure
 
@@ -69,19 +63,19 @@ P(at least one failure | Shared Stack) = P(stack failure) = p_stack
 
 This probability is independent of `n`. Adding more dApps to the ecosystem does not increase the probability of failure — it increases the number of auditors who can detect and report failures in the shared base. Security scales with adoption rather than degrading.
 
-We describe PACT as a concrete implementation of this architecture on the Midnight Network.
+We describeDPO2U as a concrete implementation of this architecture on the Midnight Network.
 
 ---
 
-## 2. The PACT Stack: Operational Architecture
+## 2. TheDPO2U Stack: Operational Architecture
 
 ### 2.1 Three-Layer Stack
 
-The PACT operational stack comprises three components that map cleanly to Hoskinson's L1-L3 (the layers most vulnerable to per-implementation failure [1]):
+TheDPO2U operational stack comprises three components that map cleanly to Hoskinson's L1-L3 (the layers most vulnerable to per-implementation failure [1]):
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  COMPLIANCE KIT (lgpd-kit / PACT CLI)                        │
+│  COMPLIANCE KIT (lgpd-kit /DPO2U CLI)                        │
 │  → Generates jurisdiction-specific predicate witnesses        │
 │  → Maps regulatory requirements to circuit inputs             │
 │  → L3: Witness Generation — standardized, audited once       │
@@ -91,20 +85,20 @@ The PACT operational stack comprises three components that map cleanly to Hoskin
 │  → Connects compliance kit to Midnight Protocol               │
 │  → L2: Circuit invocation — consistent across all dApps      │
 ├─────────────────────────────────────────────────────────────┤
-│  PACT REGISTRY (PACTRegistry.compact on Midnight)            │
+│ DPO2U REGISTRY (PACTRegistry.compact on Midnight)            │
 │  → Hash of stack registered on-chain                         │
 │  → Every attestation references the same verified base        │
 │  → L1: Setup — one ceremony, one audit, one hash             │
 └─────────────────────────────────────────────────────────────┘
 ```
 
-**The on-chain hash is the proof of shared base.** When a dApp calls `verifyAttestation`, it is not claiming "my circuits work." It is claiming "I used the same base as every other PACT-certified dApp, and here is the hash that proves it." The auditor verifies one hash, not `n` independent implementations.
+**The on-chain hash is the proof of shared base.** When a dApp calls `verifyAttestation`, it is not claiming "my circuits work." It is claiming "I used the same base as every otherDPO2U-certified dApp, and here is the hash that proves it." The auditor verifies one hash, not `n` independent implementations.
 
 ### 2.2 The Hash Commitment as Trust Anchor
 
-The `PACTRegistry.compact` contract is itself registered in the PACT Registry under `pact/oss/v1`. The artifact hash — `SHA-256(PACTRegistry.compact)` — is stored on-chain at a specific block height.
+The `PACTRegistry.compact` contract is itself registered in theDPO2U Registry under `pact/oss/v1`. The artifact hash — `SHA-256(PACTRegistry.compact)` — is stored on-chain at a specific block height.
 
-When dApp A and dApp B both hold valid PACT Attestations, the verifier can confirm:
+When dApp A and dApp B both hold validDPO2U Attestations, the verifier can confirm:
 1. Both Attestations reference the same `predicateSetId`
 2. The `PACTRegistry.compact` artifact hash is identical for both
 3. Both are therefore using the same audited circuit base
@@ -113,18 +107,18 @@ This is a verifiable statement about infrastructure sharing, not a legal asserti
 
 ### 2.3 Layer Concentration Table
 
-| Hoskinson Layer | Without PACT | With PACT |
+| Hoskinson Layer | WithoutDPO2U | WithDPO2U |
 |----------------|--------------|-----------|
 | L1: Setup | n independent ceremonies | 1 ceremony, hash on-chain |
 | L2: Language | n independent circuit implementations | 1 Compact implementation, audited |
-| L3: Witness | n independent witness generators | 1 compliance kit (lgpd-kit / PACT CLI) |
+| L3: Witness | n independent witness generators | 1 compliance kit (lgpd-kit /DPO2U CLI) |
 | L4: Arithmetization | n independent compilations | 1 Compact compiler pass |
 | L5: Proof System | n independent SNARK configs | Midnight's SNARK backend (shared) |
-| L6: Primitives | n independent hash/curve selections | SHA-256 + Ed25519 (specified in PACT) |
-| L7: Verification | n independent verifier contracts | PACTRegistry (one contract, shared) |
+| L6: Primitives | n independent hash/curve selections | SHA-256 + Ed25519 (specified inDPO2U) |
+| L7: Verification | n independent verifier contracts |DPO2URegistry (one contract, shared) |
 
-Without PACT: `7n` independent trust assumptions.
-With PACT: `7` trust assumptions, each covered once.
+WithoutDPO2U: `7n` independent trust assumptions.
+WithDPO2U: `7` trust assumptions, each covered once.
 
 ---
 
@@ -215,7 +209,7 @@ For `p = 0.01`, `k = 7`, `n = 50`: the right-hand side evaluates to `0.019`. Thu
 We model ecosystem participants as players in an evolutionary game where each participant chooses a compliance strategy. We identify two pure strategies:
 
 - **I (Independent):** Build and maintain a proprietary ZK compliance stack
-- **P (PACT):** Use the shared PACT stack
+- **P (PACT):** Use the sharedDPO2U stack
 
 ### 4.2 Payoff Structure
 
@@ -223,10 +217,10 @@ Let the payoff matrix be defined by the following parameters:
 
 - `B`: benefit of operating in the ecosystem (transactions, reputation, access)
 - `C_I`: cost of building and auditing an independent ZK stack
-- `C_P`: cost of using PACT (attestation fees, integration)
+- `C_P`: cost of usingDPO2U (attestation fees, integration)
 - `F`: penalty for a compliance failure (regulatory, reputational)
 - `p_I`: failure probability of an independent implementation
-- `p_P`: failure probability of the shared PACT stack (= `p_stack`)
+- `p_P`: failure probability of the sharedDPO2U stack (= `p_stack`)
 
 **Assumption:** `C_I >> C_P` (building a ZK compliance stack is substantially more expensive than using a shared one) and `p_I >> p_P` (independent implementations have higher failure rates than a professionally audited shared stack).
 
@@ -240,7 +234,7 @@ Payoff for strategy P:
 π(P) = B - C_P - p_P × F
 ```
 
-### 4.3 PACT as Evolutionarily Stable Strategy
+### 4.3DPO2U as Evolutionarily Stable Strategy
 
 **Definition 5 (ESS).** A strategy S* is an Evolutionarily Stable Strategy if, for any alternative strategy S:
 ```
@@ -248,7 +242,7 @@ Payoff for strategy P:
 ```
 with strict inequality when π(S*, S*) = π(S, S*).
 
-**Theorem 4 (PACT-ESS).** Under the assumptions `C_I >> C_P` and `p_I >> p_P`, the PACT strategy (P) is an ESS.
+**Theorem 4 (PACT-ESS).** Under the assumptions `C_I >> C_P` and `p_I >> p_P`, theDPO2U strategy (P) is an ESS.
 
 *Proof sketch.* Consider a population where fraction `x` plays P and `(1-x)` plays I.
 
@@ -262,13 +256,13 @@ The expected payoff of I in a mixed population:
 ```
 π(I, x) = B - C_I - p_I(x) × F
 ```
-where `p_I(x)` is the effective failure probability for an independent implementer in an ecosystem with `x` fraction using PACT.
+where `p_I(x)` is the effective failure probability for an independent implementer in an ecosystem with `x` fraction usingDPO2U.
 
-As `x → 1` (most of the ecosystem uses PACT), the auditing pressure on PACT increases, driving `p_P` down. Meanwhile `p_I(x)` remains at least `p_I` for independent implementers, who receive no benefit from PACT's auditing.
+As `x → 1` (most of the ecosystem usesDPO2U), the auditing pressure onDPO2U increases, driving `p_P` down. Meanwhile `p_I(x)` remains at least `p_I` for independent implementers, who receive no benefit fromDPO2U's auditing.
 
-Since `C_I >> C_P` and `p_I >> p_P`, we have `π(P) > π(I)` for all `x`. PACT is a dominant strategy, which implies it is an ESS. □
+Since `C_I >> C_P` and `p_I >> p_P`, we have `π(P) > π(I)` for all `x`.DPO2U is a dominant strategy, which implies it is an ESS. □
 
-**Corollary 4 (Network Effect).** PACT adoption creates a positive network effect: each additional dApp using PACT increases auditing pressure on the shared base, reducing `p_P` for all participants. This creates a supermodular game where the marginal benefit of PACT adoption increases with the number of adopters — the opposite of the fragility dynamic in the independent model.
+**Corollary 4 (Network Effect).**DPO2U adoption creates a positive network effect: each additional dApp usingDPO2U increases auditing pressure on the shared base, reducing `p_P` for all participants. This creates a supermodular game where the marginal benefit ofDPO2U adoption increases with the number of adopters — the opposite of the fragility dynamic in the independent model.
 
 ### 4.4 The Muralha vs. Cem Castelos Theorem
 
@@ -286,15 +280,15 @@ In the shared stack model, total audit effort is:
 A_total(PACT) = Σ_k A_k = 7A
 ```
 
-The ratio `A_total(independent) / A_total(PACT) = n`. At 100 dApps, PACT requires 1% of the audit effort of the independent model to achieve identical security guarantees.
+The ratio `A_total(independent) / A_total(PACT) = n`. At 100 dApps,DPO2U requires 1% of the audit effort of the independent model to achieve identical security guarantees.
 
-This is the economic core of the PACT value proposition: one audit covers the ecosystem.
+This is the economic core of theDPO2U value proposition: one audit covers the ecosystem.
 
 ---
 
-## 5. PACT Layer Mapping: Seven Circuits, Seven Layers
+## 5.DPO2U Layer Mapping: Seven Circuits, Seven Layers
 
-Following Hoskinson's framework [1], PACT's seven circuits address the seven trust layers:
+Following Hoskinson's framework [1],DPO2U's seven circuits address the seven trust layers:
 
 | Circuit | Hoskinson Layer | Trust Assumption Addressed |
 |---------|----------------|---------------------------|
@@ -306,7 +300,7 @@ Following Hoskinson's framework [1], PACT's seven circuits address the seven tru
 | `revokeAttestation` | L6: Primitives | Lifecycle management enforced by SHA-256 + Ed25519 |
 | `verifyAttestation` | L7: Verification | Final public verdict — the ecosystem compliance gate |
 
-The one-to-one correspondence is not incidental. PACT was designed so that each circuit addresses exactly one independently auditable trust assumption — instantiating Hoskinson's decomposition principle as a compliance enforcement mechanism.
+The one-to-one correspondence is not incidental.DPO2U was designed so that each circuit addresses exactly one independently auditable trust assumption — instantiating Hoskinson's decomposition principle as a compliance enforcement mechanism.
 
 ---
 
@@ -324,11 +318,11 @@ A Predicate Set `PS = {P₁, ..., Pₙ}` is satisfied when:
 PS(W) = ⋀ᵢ Pᵢ(W) = true
 ```
 
-A system is PACT-compliant for `PS` iff it produces a ZK proof that `PS(W) = true` for some witness `W`, without revealing `W`.
+A system isDPO2U-compliant for `PS` iff it produces a ZK proof that `PS(W) = true` for some witness `W`, without revealing `W`.
 
 ### 6.2 Under-Constrained Predicates
 
-Applying Hoskinson's under-constrained circuit analysis [1] to the compliance domain: an under-constrained predicate admits witnesses that satisfy the circuit without satisfying the underlying regulatory requirement. PACT mitigates this through:
+Applying Hoskinson's under-constrained circuit analysis [1] to the compliance domain: an under-constrained predicate admits witnesses that satisfy the circuit without satisfying the underlying regulatory requirement.DPO2U mitigates this through:
 
 1. Explicit statute-referenced assertions (no implicit constraint)
 2. Jurisdiction-specific error messages identifying the unsatisfied predicate
@@ -336,7 +330,7 @@ Applying Hoskinson's under-constrained circuit analysis [1] to the compliance do
 
 ### 6.3 Canadian Predicate Sets
 
-The full Canadian stack (`pact/combined/ca/v1`) evaluates 18 predicates across three regulatory frameworks (PIPEDA, FINTRAC, AIDA) in a single `attestCanadianCompliance` circuit call. See PACT Protocol technical documentation for full predicate specifications.
+The full Canadian stack (`pact/combined/ca/v1`) evaluates 18 predicates across three regulatory frameworks (PIPEDA, FINTRAC, AIDA) in a single `attestCanadianCompliance` circuit call. SeeDPO2U Protocol technical documentation for full predicate specifications.
 
 ---
 
@@ -354,7 +348,7 @@ Applying Cavoukian's seven PbD principles [Cavoukian, 2009]:
 | Visibility and transparency | Attestation on-chain; predicate spec on IPFS |
 | Respect for user privacy | Evidence is about the system, not the user |
 
-The shared stack strengthens each principle: because all PACT-attested dApps share the same privacy-preserving infrastructure, PbD is not a per-dApp design choice — it is an ecosystem invariant.
+The shared stack strengthens each principle: because allDPO2U-attested dApps share the same privacy-preserving infrastructure, PbD is not a per-dApp design choice — it is an ecosystem invariant.
 
 ---
 
@@ -362,19 +356,19 @@ The shared stack strengthens each principle: because all PACT-attested dApps sha
 
 **Hoskinson [1]** provides the seven-layer framework that motivates our ecosystem-level extension. We cite this work as the primary theoretical foundation.
 
-**Ostrom [Ostrom, 1990]** provides the commons governance framework for PACT's predicate set registry: one audited base shared across participants, governed by clearly defined boundaries and collective choice arrangements.
+**Ostrom [Ostrom, 1990]** provides the commons governance framework forDPO2U's predicate set registry: one audited base shared across participants, governed by clearly defined boundaries and collective choice arrangements.
 
-**Spence [Spence, 1973]** provides the signaling game framework: PACT Attestations are costly, unforgeable signals that create a separating equilibrium between compliant and non-compliant dApps.
+**Spence [Spence, 1973]** provides the signaling game framework:DPO2U Attestations are costly, unforgeable signals that create a separating equilibrium between compliant and non-compliant dApps.
 
-**De Filippi and Wright [2018]** establish the legal-cryptographic bridge: code as law, enforced by the network rather than courts. PACT instantiates this for the compliance domain: regulatory obligations as circuit constraints, enforced by Midnight's ZK execution layer.
+**De Filippi and Wright [2018]** establish the legal-cryptographic bridge: code as law, enforced by the network rather than courts.DPO2U instantiates this for the compliance domain: regulatory obligations as circuit constraints, enforced by Midnight's ZK execution layer.
 
-**Santana [Santana, 2026]** establishes the foundational compliance-as-protocol thesis that PACT implements, including the Nash equilibrium analysis of ZK compliance mechanisms.
+**Santana [Santana, 2026]** establishes the foundational compliance-as-protocol thesis thatDPO2U implements, including the Nash equilibrium analysis of ZK compliance mechanisms.
 
 ---
 
 ## 9. Discussion: The Open Questions
 
-Hoskinson's book [1] concludes with seven open research questions about ZK systems. We briefly address three that are directly implicated by PACT:
+Hoskinson's book [1] concludes with seven open research questions about ZK systems. We briefly address three that are directly implicated byDPO2U:
 
 **Q1 (implied): Can ZK trust decomposition be applied to the compliance layer itself?**
 PACT answers yes. The seven-circuit architecture is a direct application of the seven-layer decomposition to compliance enforcement.
@@ -389,11 +383,11 @@ Theorem 5 provides a formal answer: in a shared stack ecosystem, the unit of aud
 
 ## 10. Conclusion
 
-We have identified the Seven-Layer Multiplication Problem: in ecosystems of independent ZK compliance implementations, security degrades as `1-(1-p)^(kn)`, approaching near-certain failure as the ecosystem scales. We have proposed the Shared ZK Trust Stack as the structural solution, proven that ecosystem failure probability under the shared stack is independent of `n`, and demonstrated that PACT adoption constitutes an Evolutionarily Stable Strategy under natural payoff assumptions.
+We have identified the Seven-Layer Multiplication Problem: in ecosystems of independent ZK compliance implementations, security degrades as `1-(1-p)^(kn)`, approaching near-certain failure as the ecosystem scales. We have proposed the Shared ZK Trust Stack as the structural solution, proven that ecosystem failure probability under the shared stack is independent of `n`, and demonstrated thatDPO2U adoption constitutes an Evolutionarily Stable Strategy under natural payoff assumptions.
 
 PACT is not the only possible instantiation of the Shared ZK Trust Stack. But it is the first operational implementation on the Midnight Network, and the first to register its own hash on-chain as the verifiable anchor of ecosystem-wide compliance.
 
-Hoskinson's book [1] argues that ZK proofs perform a structured reduction of risk: not elimination, but decomposition into manageable pieces. PACT extends this argument from the individual system to the ecosystem. The decomposition compounds: seven layers, shared across `n` dApps, audited once. The muralha, not cem castelos.
+Hoskinson's book [1] argues that ZK proofs perform a structured reduction of risk: not elimination, but decomposition into manageable pieces.DPO2U extends this argument from the individual system to the ecosystem. The decomposition compounds: seven layers, shared across `n` dApps, audited once. The muralha, not cem castelos.
 
 ---
 
@@ -428,7 +422,4 @@ Hoskinson's book [1] argues that ZK proofs perform a structured reduction of ris
 [14] Compact Language Reference. IOG. 2024. https://docs.midnight.network/develop/reference/compact
 
 ---
-
-*Correspondence: fred@knightshield.ca*
-*Repository: github.com/knightshield/pact-protocol*
 *License: CC BY 4.0 (this paper) | LicenseRef-PACT-1.0 (the protocol)*
