@@ -15,6 +15,9 @@ const CONTRACT_BUILDS: Record<string, string> = {
   PaymentGateway: 'payment-gateway',
   FeeDistributor: 'fee-distributor',
   AgentRegistry: 'agent-registry',
+  HealthDIDRegistry: 'health-did-registry',
+  HealthConsentRegistry: 'health-consent-registry',
+  CuidaBotCompliance: 'cuidabot-compliance',
 };
 
 // Determine network from CLI args
@@ -71,17 +74,22 @@ async function main() {
   console.log('[2/3] Deploying contracts sequentially...');
   const addresses: DeployedAddresses = {};
 
-  // Deploy order: ComplianceRegistry → PaymentGateway → FeeDistributor → AgentRegistry
+  // Deploy order: Core contracts first, then CuidaBot health contracts
   addresses.ComplianceRegistry = await deployOne('ComplianceRegistry', ctx);
   addresses.PaymentGateway = await deployOne('PaymentGateway', ctx);
   addresses.FeeDistributor = await deployOne('FeeDistributor', ctx);
   addresses.AgentRegistry = await deployOne('AgentRegistry', ctx);
 
+  // CuidaBot health privacy contracts
+  addresses.HealthDIDRegistry = await deployOne('HealthDIDRegistry', ctx);
+  addresses.HealthConsentRegistry = await deployOne('HealthConsentRegistry', ctx);
+  addresses.CuidaBotCompliance = await deployOne('CuidaBotCompliance', ctx);
+
   console.log('\n[3/3] Saving addresses...');
   fs.writeFileSync(ADDRESS_FILE, JSON.stringify(addresses, null, 2), 'utf-8');
   console.log(`  Addresses saved to ${ADDRESS_FILE}`);
 
-  console.log('\n=== All 4 contracts deployed successfully ===');
+  console.log('\n=== All 7 contracts deployed successfully ===');
   console.log(JSON.stringify(addresses, null, 2));
 
   await ctx.wallet.stop();
