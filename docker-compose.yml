@@ -1,6 +1,6 @@
 services:
   node:
-    image: midnightntwrk/midnight-node:0.20.1
+    image: midnightntwrk/midnight-node:0.21.0
     container_name: midnight-node-local
     ports:
       - "9944:9944"
