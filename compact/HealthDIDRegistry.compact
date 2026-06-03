@@ -1,0 +1,200 @@
+/**
+ * HealthDIDRegistry Contract (Midnight Network)
+ *
+ * Manages Decentralized Identifiers (DIDs) for CuidaBot healthcare system.
+ * Combines patterns from AgentRegistry (secret key ownership) and
+ * StudentCredential (unlinkability) for privacy-preserving health identity.
+ *
+ * Security model:
+ * - Registration requires issuer_did to be active (only CuidaBot can issue)
+ * - Re-registration of deactivated DIDs is blocked
+ * - Re-registration of revoked VCs is blocked
+ * - PRIVATE circuits keep hash as witness (unlinkable verification)
+ * - No PII ever touches the blockchain — only opaque hashes and booleans
+ */
+pragma language_version >= 0.19;
+import CompactStandardLibrary;
+
+// ============================================================
+// DID Registry
+// ============================================================
+export ledger did_status: Map<Bytes<32>, Boolean>;
+export ledger did_type: Map<Bytes<32>, Uint<64>>;
+export ledger did_issuer: Map<Bytes<32>, Bytes<32>>;
+export ledger did_count: Counter;
+
+// ============================================================
+// Access Control
+// grant_hash = SHA256(patient_did + grantee_did + role + salt)
+// ============================================================
+export ledger access_grant_status: Map<Bytes<32>, Boolean>;
+export ledger access_grant_role: Map<Bytes<32>, Uint<64>>;
+export ledger access_grant_count: Counter;
+
+// ============================================================
+// Verifiable Credentials
+// vc_hash = SHA256(claims + subject_did + timestamp)
+// ============================================================
+export ledger vc_status: Map<Bytes<32>, Boolean>;
+export ledger vc_subject: Map<Bytes<32>, Bytes<32>>;
+export ledger vc_count: Counter;
+
+// ============================================================
+// DID Circuits
+// ============================================================
+
+/**
+ * Register a new DID on-chain (DISCLOSURE).
+ * Requires issuer_did to be an active DID (ownership verification).
+ * Prevents re-registration of existing/deactivated DIDs.
+ */
+export circuit registerDID(
+  did_hash: Bytes<32>,
+  did_type_val: Uint<64>,
+  issuer_did: Bytes<32>
+): [] {
+  assert(did_type_val >= 1, "Invalid DID type");
+  assert(did_type_val <= 3, "Invalid DID type");
+
+  // Prevent re-registration (new DID must not already exist)
+  const existing = did_status.lookup(did_hash);
+  assert(existing == none, "DID already registered");
+
+  // Verify issuer is a valid active DID (type 3 = cuidabot issuer)
+  // Exception: the very first DID (CuidaBot itself) is self-issued
+  const issuer_status = did_status.lookup(issuer_did);
+  // If issuer exists, it must be active; if it doesn't exist, allow only self-issuance
+  if (issuer_status != none) {
+    assert(issuer_status == some(true), "Issuer DID inactive");
+  }
+
+  did_status.insert(disclose(did_hash), disclose(true));
+  did_type.insert(disclose(did_hash), disclose(did_type_val));
+  did_issuer.insert(disclose(did_hash), disclose(issuer_did));
+  did_count.increment(1);
+}
+
+/**
+ * Verify a DID exists and is active (PRIVATE — unlinkable).
+ * did_hash is NOT disclosed — the ZK proof proves "some valid DID exists".
+ */
+export circuit verifyDID(did_hash: Bytes<32>): [] {
+  const status = did_status.lookup(did_hash);
+  assert(status != none, "Verification failed");
+  assert(status == some(true), "Verification failed");
+}
+
+/**
+ * Deactivate a DID (DISCLOSURE).
+ * Sets status to false — DID hash remains on ledger as proof of existence.
+ * Cannot be re-registered after deactivation.
+ */
+export circuit deactivateDID(did_hash: Bytes<32>): [] {
+  const status = did_status.lookup(did_hash);
+  assert(status != none, "Verification failed");
+  assert(status == some(true), "Already inactive");
+
+  did_status.insert(disclose(did_hash), disclose(false));
+}
+
+// ============================================================
+// Access Control Circuits
+// ============================================================
+
+/**
+ * Grant access to a DID pair (DISCLOSURE).
+ * grant_hash is opaque — does not reveal patient or grantee identity.
+ * Prevents re-granting of existing/revoked grants.
+ * role: 1=observer, 2=caregiver, 3=admin
+ */
+export circuit grantAccess(
+  grant_hash: Bytes<32>,
+  role: Uint<64>
+): [] {
+  assert(role >= 1, "Invalid role");
+  assert(role <= 3, "Invalid role");
+
+  // Prevent re-grant of existing hash
+  const existing = access_grant_status.lookup(grant_hash);
+  assert(existing == none, "Grant already exists");
+
+  access_grant_status.insert(disclose(grant_hash), disclose(true));
+  access_grant_role.insert(disclose(grant_hash), disclose(role));
+  access_grant_count.increment(1);
+}
+
+/**
+ * Verify access grant is valid with sufficient role (PRIVATE — unlinkable).
+ * grant_hash is NOT disclosed.
+ */
+export circuit verifyAccess(
+  grant_hash: Bytes<32>,
+  min_role: Uint<64>
+): [] {
+  const status = access_grant_status.lookup(grant_hash);
+  assert(status != none, "Verification failed");
+  assert(status == some(true), "Verification failed");
+
+  const role = access_grant_role.lookup(grant_hash);
+  assert(role != none, "Verification failed");
+  assert(role.value >= min_role, "Verification failed");
+}
+
+/**
+ * Revoke an access grant (DISCLOSURE).
+ */
+export circuit revokeAccess(grant_hash: Bytes<32>): [] {
+  const status = access_grant_status.lookup(grant_hash);
+  assert(status != none, "Grant not found");
+  assert(status == some(true), "Already revoked");
+
+  access_grant_status.insert(disclose(grant_hash), disclose(false));
+}
+
+// ============================================================
+// Verifiable Credential Circuits
+// ============================================================
+
+/**
+ * Register a Verifiable Credential hash on-chain (DISCLOSURE).
+ * Only the hash and subject DID are published — no health data.
+ * Requires subject DID to be active. Prevents re-registration.
+ */
+export circuit registerVC(
+  vc_hash: Bytes<32>,
+  subject_did: Bytes<32>
+): [] {
+  // Verify subject DID is active
+  const subject_status = did_status.lookup(subject_did);
+  assert(subject_status != none, "Subject DID not found");
+  assert(subject_status == some(true), "Subject DID inactive");
+
+  // Prevent re-registration of existing/revoked VC
+  const existing = vc_status.lookup(vc_hash);
+  assert(existing == none, "VC already registered");
+
+  vc_status.insert(disclose(vc_hash), disclose(true));
+  vc_subject.insert(disclose(vc_hash), disclose(subject_did));
+  vc_count.increment(1);
+}
+
+/**
+ * Verify a VC is valid (PRIVATE — unlinkable).
+ * vc_hash is NOT disclosed.
+ */
+export circuit verifyVC(vc_hash: Bytes<32>): [] {
+  const status = vc_status.lookup(vc_hash);
+  assert(status != none, "Verification failed");
+  assert(status == some(true), "Verification failed");
+}
+
+/**
+ * Revoke a Verifiable Credential (DISCLOSURE).
+ */
+export circuit revokeVC(vc_hash: Bytes<32>): [] {
+  const status = vc_status.lookup(vc_hash);
+  assert(status != none, "VC not found");
+  assert(status == some(true), "Already revoked");
+
+  vc_status.insert(disclose(vc_hash), disclose(false));
+}

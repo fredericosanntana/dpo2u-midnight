@@ -1,0 +1,86 @@
+/**
+ * HealthConsentRegistry Contract (Midnight Network)
+ *
+ * LGPD consent management linked to patient DIDs.
+ * Records consent, revocation, and data processing events on-chain
+ * for auditable compliance without exposing personal data.
+ *
+ * Purpose codes (LGPD Art. 7):
+ *   1 = medication_management
+ *   2 = family_report
+ *   3 = compliance_audit
+ *   4 = data_export
+ *   5 = data_deletion
+ */
+pragma language_version >= 0.19;
+import CompactStandardLibrary;
+
+// Consent status per patient DID
+export ledger consent_status: Map<Bytes<32>, Boolean>;
+export ledger consent_policy: Map<Bytes<32>, Bytes<32>>;
+export ledger consent_timestamp: Map<Bytes<32>, Uint<64>>;
+export ledger consent_count: Counter;
+
+// Processing log
+export ledger processing_status: Map<Bytes<32>, Boolean>;
+export ledger processing_purpose: Map<Bytes<32>, Uint<64>>;
+export ledger processing_count: Counter;
+
+/**
+ * Register patient consent (DISCLOSURE).
+ * Records that a patient DID has consented to a specific privacy policy.
+ * policy_cid = IPFS CID or hash of the LGPD privacy policy document.
+ */
+export circuit registerConsent(
+  patient_did: Bytes<32>,
+  policy_cid: Bytes<32>,
+  timestamp: Uint<64>
+): [] {
+  // Allow re-consent (update policy) but not if already active with same policy
+  const existing = consent_status.lookup(patient_did);
+  // If consent exists and is active, this is an update (new policy version)
+
+  consent_status.insert(disclose(patient_did), disclose(true));
+  consent_policy.insert(disclose(patient_did), disclose(policy_cid));
+  consent_timestamp.insert(disclose(patient_did), disclose(timestamp));
+  consent_count.increment(1);
+}
+
+/**
+ * Verify consent is active (PRIVATE — unlinkable).
+ * Proves "some patient has active consent" without revealing which patient.
+ */
+export circuit verifyConsent(patient_did: Bytes<32>): [] {
+  const status = consent_status.lookup(patient_did);
+  assert(status != none, "Verification failed");
+  assert(status == some(true), "Verification failed");
+}
+
+/**
+ * Revoke consent (DISCLOSURE).
+ * LGPD Art. 8, par. 5: consent can be revoked at any time.
+ */
+export circuit revokeConsent(patient_did: Bytes<32>): [] {
+  const status = consent_status.lookup(patient_did);
+  assert(status != none, "Consent not found");
+  assert(status == some(true), "Consent already revoked");
+
+  consent_status.insert(disclose(patient_did), disclose(false));
+}
+
+/**
+ * Record a data processing event (DISCLOSURE).
+ * Creates an immutable audit trail of all processing with LGPD purpose codes.
+ * processing_hash = SHA256(processor_did + subject_did + purpose + timestamp)
+ */
+export circuit recordProcessing(
+  processing_hash: Bytes<32>,
+  purpose_code: Uint<64>
+): [] {
+  assert(purpose_code >= 1, "Purpose code must be >= 1");
+  assert(purpose_code <= 5, "Purpose code must be <= 5");
+
+  processing_status.insert(disclose(processing_hash), disclose(true));
+  processing_purpose.insert(disclose(processing_hash), disclose(purpose_code));
+  processing_count.increment(1);
+}

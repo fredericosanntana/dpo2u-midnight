@@ -1,0 +1,60 @@
+/**
+ * CuidaBotCompliance Contract (Midnight Network)
+ *
+ * Aggregated compliance attestation for ANPD auditing.
+ * A CuidaBot instance periodically attests its compliance posture:
+ * - How many patients have active consent
+ * - Encryption coverage score
+ * - Number of ZK proofs generated
+ * - Overall compliance score (0-100)
+ *
+ * Auditors can verify minimum compliance without seeing individual patient data.
+ */
+pragma language_version >= 0.19;
+import CompactStandardLibrary;
+
+// Latest attestation per CuidaBot instance
+export ledger compliance_score: Map<Bytes<32>, Uint<64>>;
+export ledger compliance_patient_count: Map<Bytes<32>, Uint<64>>;
+export ledger compliance_consent_count: Map<Bytes<32>, Uint<64>>;
+export ledger compliance_encryption_score: Map<Bytes<32>, Uint<64>>;
+export ledger compliance_zk_count: Map<Bytes<32>, Uint<64>>;
+export ledger attestation_count: Counter;
+
+// Global latest score for quick queries
+export ledger latest_score: Uint<64>;
+
+/**
+ * Attest compliance metrics (DISCLOSURE).
+ * Called periodically (e.g., weekly cron) by a CuidaBot instance.
+ */
+export circuit attestCompliance(
+  instance_id: Bytes<32>,
+  patient_count: Uint<64>,
+  consent_count: Uint<64>,
+  encryption_score: Uint<64>,
+  zk_proof_count: Uint<64>,
+  overall_score: Uint<64>
+): [] {
+  assert(overall_score <= 100, "Score must be 0-100");
+  assert(encryption_score <= 100, "Encryption score must be 0-100");
+  assert(consent_count <= patient_count, "Consent count cannot exceed patient count");
+
+  compliance_score.insert(disclose(instance_id), disclose(overall_score));
+  compliance_patient_count.insert(disclose(instance_id), disclose(patient_count));
+  compliance_consent_count.insert(disclose(instance_id), disclose(consent_count));
+  compliance_encryption_score.insert(disclose(instance_id), disclose(encryption_score));
+  compliance_zk_count.insert(disclose(instance_id), disclose(zk_proof_count));
+
+  latest_score = disclose(overall_score);
+  attestation_count.increment(1);
+}
+
+/**
+ * Verify minimum compliance (PRIVATE — unlinkable).
+ * Proves "this instance has compliance >= min_score"
+ * without revealing the actual score or patient count.
+ */
+export circuit verifyMinCompliance(min_score: Uint<64>): [] {
+  assert(latest_score >= min_score, "Verification failed");
+}
