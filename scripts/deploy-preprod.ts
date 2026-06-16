@@ -38,6 +38,10 @@ import * as AgentWalletFactory from '../build/AgentWalletFactory/contract/index.
 import * as ComplianceRegistry from '../build/ComplianceRegistry/contract/index.js';
 import * as FeeDistributor from '../build/FeeDistributor/contract/index.js';
 import * as PaymentGateway from '../build/PaymentGateway/contract/index.js';
+import * as LgpdKitRegistry from '../build/LgpdKitRegistry/contract/index.js';
+import * as ConsentRegistry from '../build/ConsentRegistry/contract/index.js';
+import * as DataAuditLog from '../build/DataAuditLog/contract/index.js';
+import * as DataSubjectRights from '../build/DataSubjectRights/contract/index.js';
 
 // @ts-expect-error WebSocket polyfill required for wallet sync (graphql-ws) in Node
 globalThis.WebSocket = WebSocket;
@@ -48,6 +52,10 @@ const ALL_CONTRACTS: Array<{ name: string; mod: any }> = [
   { name: 'ComplianceRegistry', mod: ComplianceRegistry },
   { name: 'FeeDistributor', mod: FeeDistributor },
   { name: 'PaymentGateway', mod: PaymentGateway },
+  { name: 'LgpdKitRegistry', mod: LgpdKitRegistry },
+  { name: 'ConsentRegistry', mod: ConsentRegistry },
+  { name: 'DataAuditLog', mod: DataAuditLog },
+  { name: 'DataSubjectRights', mod: DataSubjectRights },
 ];
 
 type NetCfg = { indexer: string; indexerWS: string; node: string; proofServer: string; faucetUrl?: string };
