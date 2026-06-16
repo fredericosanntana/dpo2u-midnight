@@ -148,11 +148,26 @@ function signTransactionIntents(
   }
 }
 
+// Render a per-domain sync progress as applied/highest so we can SEE convergence
+// (is the gap shrinking?) instead of an opaque "syncing". Defensive: field names vary
+// across the shielded/unshielded/dust wallets, so probe the common ones.
+function progStr(p: any): string {
+  if (!p || typeof p !== 'object') return '?';
+  const applied = p.appliedIndex ?? p.applied ?? p.synced ?? p.processedIndex;
+  const highest = p.highestIndex ?? p.highestRelevantIndex ?? p.targetIndex ?? p.total;
+  if (applied !== undefined || highest !== undefined) return `${applied ?? '?'}/${highest ?? '?'}`;
+  const gap = p.applyGap ?? p.sourceGap ?? p.lag;
+  return gap !== undefined ? `gap:${gap}` : 'syncing';
+}
+
 async function waitForSync(wallet: any) {
   console.log('[sync] full sync incl. shielded history (memory-heavy — give it RAM + time)...');
   const nt = ledger.unshieldedToken().raw;
   const sub = wallet.state().pipe(Rx.throttleTime(10_000)).subscribe((s: any) => {
-    console.log(`  [${new Date().toISOString().slice(11, 19)}] ${s.isSynced ? 'SYNCED' : 'syncing'} | unshielded:${s.unshielded?.balances?.[nt] ?? 0n} | dustCoins:${s.dust?.availableCoins?.length ?? 0}`);
+    const sh = s.shielded?.state?.progress ?? s.shielded?.progress;
+    const un = s.unshielded?.progress ?? s.unshielded?.state?.progress;
+    const du = s.dust?.state?.progress ?? s.dust?.progress;
+    console.log(`  [${new Date().toISOString().slice(11, 19)}] synced=${s.isSynced} | shielded ${progStr(sh)} | unshielded ${progStr(un)} | dust ${progStr(du)} | NIGHT:${s.unshielded?.balances?.[nt] ?? 0n} dust:${s.dust?.availableCoins?.length ?? 0}`);
   });
   const state = await Rx.firstValueFrom(wallet.state().pipe(Rx.filter((s: any) => s.isSynced)));
   sub.unsubscribe();
