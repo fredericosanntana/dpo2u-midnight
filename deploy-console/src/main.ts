@@ -20,6 +20,7 @@ import { Buffer } from 'buffer';
 
 import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import { deployContract } from '@midnight-ntwrk/midnight-js-contracts';
+import { CompiledContract } from '@midnight-ntwrk/compact-js';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
 import { FetchZkConfigProvider } from '@midnight-ntwrk/midnight-js-fetch-zk-config-provider';
@@ -50,6 +51,12 @@ const CONTRACTS: Array<{ name: string; mod: any }> = [
 
 // Local proof-server (override with ?proof=http://host:port). Lace does NOT prove here.
 const PROOF_SERVER = new URLSearchParams(location.search).get('proof') ?? 'http://127.0.0.1:6300';
+
+// connect() must be called with the SAME network id Lace is configured for, else "Network ID
+// mismatch". Lace labels the preprod testnet differently from midnight-js — try candidates until
+// one matches. Override/extend with ?net=testnet,preprod
+const NET_CANDIDATES = (new URLSearchParams(location.search).get('net')?.split(',').filter(Boolean))
+  ?? ['testnet', 'preprod', 'preview', 'undeployed', 'mainnet'];
 
 // ── tiny DOM helpers ────────────────────────────────────────────────────────
 const $ = (id: string) => document.getElementById(id)!;
@@ -92,10 +99,23 @@ async function connect() {
   if (!found) { pill('wallet', 'Lace not found — install the extension', 'err'); log('window.midnight is empty. Is the Midnight Lace extension installed + unlocked?'); return; }
   log(`found wallet: ${found.key} (apiVersion ${found.api.apiVersion})`);
 
-  // connect() hints the network; Lace's own selected network governs. We read the real one back.
-  connected = await found.api.connect('preprod');
+  // Try candidate network ids until Lace accepts one (matches its configured network).
+  let lastErr: any = null;
+  for (const net of NET_CANDIDATES) {
+    try {
+      log(`connect(networkId="${net}")…`);
+      connected = await found.api.connect(net);
+      log(`✓ connected with networkId="${net}"`);
+      lastErr = null; break;
+    } catch (e: any) {
+      connected = null; lastErr = e;
+      log(`  "${net}" rejected: ${e?.message ?? e}`);
+    }
+  }
+  if (!connected) { pill('wallet', 'connect failed (network)', 'err'); throw lastErr; }
+
   const cfg = await connected.getConfiguration();
-  log(`connected. network=${cfg.networkId} indexer=${cfg.indexerUri}`);
+  log(`network=${cfg.networkId} indexer=${cfg.indexerUri}`);
   setNetworkId(cfg.networkId as any);
 
   const sh = await connected.getShieldedAddresses();
@@ -140,8 +160,11 @@ async function deployOne(name: string, mod: any) {
     const proofProvider = httpClientProofProvider(PROOF_SERVER, zkConfigProvider);
     const providers = { privateStateProvider, publicDataProvider, zkConfigProvider, proofProvider, walletProvider, midnightProvider };
     log(`[${name}] proving (local proof-server) + balancing (Lace) + submitting…`);
+    // 4.1.1 wants a branded CompiledContract (compact-js), NOT a raw `new Contract()`.
+    // ZK assets come from the zkConfigProvider, so we skip the Node-only withCompiledFileAssets.
+    const compiled = CompiledContract.make(name, mod.Contract).pipe(CompiledContract.withVacantWitnesses);
     const deployed: any = await deployContract(providers as any, {
-      contract: new mod.Contract({}),
+      compiledContract: compiled,
       privateStateId: `${name}PrivateState`,
       initialPrivateState: {},
     });
