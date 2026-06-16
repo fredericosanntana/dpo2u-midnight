@@ -13,8 +13,8 @@
     "allowImportingTsExtensions": false
   },
   "include": [
+    "./scripts/**/*.ts",
     "./src/**/*.ts",
     "./build/*/contract/*.d.ts"
-  ],
-  "//": "scripts/deploy-preprod.ts (gated testnet path) is run via tsx, not tsc-gated. It carries known midnight-js 4.1.1 API drift (LevelPrivateStateProvider config, deployContract/findDeployedContract signatures, WalletFacade.close) to be migrated together with the gated preprod deploy — see README 'Follow-ups'."
+  ]
 }

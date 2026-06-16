@@ -39,9 +39,18 @@ npm test            # 53 tests / 10 suites
 npm run build       # tsc --noEmit over src/ + contract types
 ```
 
+### Deploying to preprod
+
+The deploy harness (`scripts/deploy-preprod.ts`, midnight-js 4.1.1) is type-clean and in the `tsc` gate. The preprod wallet (derived from `MIDNIGHT_SEED`) **is already funded with tNIGHT** — `mn_addr_preprod1jelp33c…px5g`. Remaining prerequisite: a running proof-server.
+
+```bash
+npm run start-proof-server          # docker, port 6300 (generates the ZK proofs)
+npm run address -- --network preprod # confirm the funded address
+npm run balance                      # read-only tNIGHT check via the preprod indexer
+npm run deploy:preprod:all           # generates tDUST from tNIGHT, then deploys the 9 contracts
+```
+
 ### Follow-ups (out of scope for this consolidation)
-- **Deploy harness (`scripts/deploy-preprod.ts`)** carries `midnight-js 4.1.1` API drift (LevelPrivateStateProvider config, `deployContract`/`findDeployedContract` signatures, `WalletFacade.close`) — migrate together with the gated preprod deploy (runs via `tsx`, excluded from the `tsc` gate).
-- **Testnet/preprod deployment** — gated on faucet tokens + a running `proof-server`.
 - **PoR `seal_solvency` → `SolvencyRegistry.compact`** — port the Stellar `por-filing` solvency proof (public solvency, private positions).
 - **`feat/health-contracts-cuidabot`** health vertical — rebase onto this consolidated `main` (its `HealthConsentRegistry` overlaps the new `ConsentRegistry`).
 

@@ -157,7 +157,7 @@ async function waitForSync(wallet: any) {
 //   register → finalizeRecipe → submitTransaction → wait until dust.balance(now) > 0n.
 async function ensureDust(ctx: any) {
   const dustOf = (s: any) => { try { return s.dust.balance(new Date()) as bigint; } catch { return 0n; } };
-  let state = await Rx.firstValueFrom(ctx.wallet.state());
+  let state: any = await Rx.firstValueFrom(ctx.wallet.state());
   if (dustOf(state) > 0n) { console.log(`[dust] already have dust: ${dustOf(state)}`); return; }
 
   const nightUtxos = (state.unshielded.availableCoins ?? []).filter((u: any) => !u.meta?.registeredForDustGeneration);
@@ -203,8 +203,9 @@ function makeProviders(walletProvider: any, cfg: NetCfg, zkPath: string, storeNa
   return {
     privateStateProvider: levelPrivateStateProvider({
       privateStateStoreName: storeName,
-      walletProvider,
-      // midnight-js 4.x: private-state store needs a password provider (>=16 chars) + an accountId
+      // midnight-js 4.1.1: the private-state store takes a password provider (>=16 chars) + accountId
+      // (the config union is passwordProvider-XOR-walletProvider; walletProvider is supplied at the
+      // providers top level below, not here).
       privateStoragePasswordProvider: () => process.env.PRIVATE_STATE_PASSWORD ?? 'dpo2u-local-dev-private-state-pw-2026',
       accountId,
     }),
@@ -224,7 +225,7 @@ async function deployOne(walletProvider: any, cfg: NetCfg, entry: { name: string
   );
   const providers = makeProviders(walletProvider, cfg, zkPath, `${entry.name}-state`, accountId);
   console.log(`\n[deploy] ${entry.name} — proving + submitting...`);
-  const contract = await deployContract(providers as any, {
+  const contract = await (deployContract as any)(providers as any, {
     compiledContract: compiled,
     privateStateId: `${entry.name}PrivateState`,
     initialPrivateState: {},
@@ -262,7 +263,7 @@ async function runAttest(walletProvider: any, cfg: NetCfg, accountId: string, a:
     CompiledContract.withVacantWitnesses, CompiledContract.withCompiledFileAssets(zkPath),
   );
   const providers = makeProviders(walletProvider, cfg, zkPath, 'ComplianceRegistry-state', accountId);
-  const cr: any = await findDeployedContract(providers as any, {
+  const cr: any = await (findDeployedContract as any)(providers as any, {
     contractAddress: addr, compiledContract: compiled,
     privateStateId: 'ComplianceRegistryPrivateState', initialPrivateState: {},
   });
