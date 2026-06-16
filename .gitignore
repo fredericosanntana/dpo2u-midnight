@@ -7,3 +7,9 @@ dist/
 .DS_Store
 ui/node_modules/
 ui/dist/
+
+# Compiled Compact artifacts — regenerate with `npm run compile` (compactc 0.31.0)
+build/
+compact/build/
+deployment-*.json
+midnight-level-db/

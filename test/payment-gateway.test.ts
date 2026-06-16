@@ -1,7 +1,11 @@
+/**
+ * PaymentGateway — treasury deposits + $NIGHT staking (Counter pools).
+ * API unchanged from canonical; import path updated to the consolidated build layout.
+ */
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
 import { createCircuitContext, dummyContractAddress } from '@midnight-ntwrk/compact-runtime';
-import { Contract, ledger } from '../compact/build/payment-gateway/contract/index.js';
+import { Contract, ledger } from '../build/PaymentGateway/contract/index.js';
 
 function setup() {
   const contract = new Contract({});
@@ -20,48 +24,31 @@ function setup() {
 }
 
 describe('PaymentGateway', () => {
-  it('should deposit to treasury', () => {
+  it('deposits to treasury', () => {
     const { contract, ctx } = setup();
-
     const { context } = contract.circuits.depositToTreasury(ctx, 1000n);
-
-    const postLedger = ledger(context.currentQueryContext.state);
-    assert.equal(postLedger.protocol_treasury, 1000n);
+    assert.equal(ledger(context.currentQueryContext.state).protocol_treasury, 1000n);
   });
 
-  it('should reject deposit of 0', () => {
+  it('rejects a zero deposit', () => {
     const { contract, ctx } = setup();
-
-    assert.throws(
-      () => { contract.circuits.depositToTreasury(ctx, 0n); },
-      /Deposit must be greater than zero/,
-    );
+    assert.throws(() => contract.circuits.depositToTreasury(ctx, 0n), /Deposit must be greater than zero/);
   });
 
-  it('should stake tokens', () => {
+  it('stakes $NIGHT', () => {
     const { contract, ctx } = setup();
-
     const { context } = contract.circuits.stakeTokens(ctx, 500n);
-
-    const postLedger = ledger(context.currentQueryContext.state);
-    assert.equal(postLedger.total_staked_night, 500n);
+    assert.equal(ledger(context.currentQueryContext.state).total_staked_night, 500n);
   });
 
-  it('should reject stake of 0', () => {
+  it('rejects a zero stake', () => {
     const { contract, ctx } = setup();
-
-    assert.throws(
-      () => { contract.circuits.stakeTokens(ctx, 0n); },
-      /Stake must be greater than zero/,
-    );
+    assert.throws(() => contract.circuits.stakeTokens(ctx, 0n), /Stake must be greater than zero/);
   });
 
-  it('should return treasury balance', () => {
+  it('reads treasury balance back', () => {
     const { contract, ctx } = setup();
-
     const { context } = contract.circuits.depositToTreasury(ctx, 750n);
-
-    const balanceResult = contract.circuits.getTreasuryBalance(context);
-    assert.equal(balanceResult.result, 750n);
+    assert.equal(contract.circuits.getTreasuryBalance(context).result, 750n);
   });
 });

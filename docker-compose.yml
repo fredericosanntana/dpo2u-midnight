@@ -1,41 +1,25 @@
 services:
-  node:
-    image: midnightntwrk/midnight-node:0.21.0
-    container_name: midnight-node-local
+  midnight-node:
+    image: midnightntwrk/midnight-node:0.22.5
     ports:
       - "9944:9944"
-      - "30333:30333"
     environment:
-      CFG_PRESET: testnet-02
-    command:
-      - "--rpc-methods=Safe"
-      - "--rpc-cors=all"
-      - "--rpc-external"
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9944/health"]
-      interval: 10s
-      timeout: 10s
-      retries: 10
-      start_period: 30s
+      CFG_PRESET: "dev"
     restart: unless-stopped
-    volumes:
-      - node-data:/data
 
   indexer:
-    image: midnightntwrk/indexer-standalone:3.0.0
-    container_name: midnight-indexer-local
+    image: midnightntwrk/indexer-standalone:4.0.1
     ports:
       - "8088:8088"
-    environment:
-      APP__INFRA__SECRET: "303132333435363738393031323334353637383930313233343536373839303132"
-      APP__INFRA__NODE__URL: "ws://node:9944"
     volumes:
-      - indexer-data:/data
+      - ./indexer-config.yaml:/opt/indexer-standalone/config.yaml:ro
     depends_on:
-      node:
-        condition: service_started
+      - midnight-node
     restart: unless-stopped
 
-volumes:
-  node-data:
-  indexer-data:
+  proof-server:
+    image: midnightntwrk/proof-server:8.0.3
+    ports:
+      - "6300:6300"
+    command: ["midnight-proof-server", "-v"]
+    restart: unless-stopped

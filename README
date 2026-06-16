@@ -10,6 +10,45 @@ Regulatory obligations — LGPD, GDPR, PIPEDA, FINTRAC, AIDA — expressed as ZK
 
 ---
 
+## Status — consolidated 2026-06-16
+
+This is now the **single source of truth** for the DPO2U Midnight stack (previously split across `dpo2u-midnight-agents` and `dpo2u-midnight-lab`). Toolchain modernized to the state of the art proven on Stellar/Solana.
+
+**Toolchain:** `compactc 0.31.0` · `compact-runtime 0.16.0` · `midnight-js 4.1.1` · `ledger-v8`.
+
+**Nine Compact contracts** (`compact/`, all `pragma >= 0.21.0`):
+
+| Contract | Purpose |
+|---|---|
+| `ComplianceRegistry` | **Score-private / proof-public** attestation (ported from the Stellar ZK reference): proves `score >= threshold` without revealing the score, anti-replay context `H(org‖jurisdiction‖nonce)`, generic `attestUseCase` for all jurisdictions |
+| `AgentRegistry` | Agent DID + role registry |
+| `AgentWalletFactory` | Agent DID → wallet-address registry |
+| `FeeDistributor` | 40/60 expert/auditor fee split (validated on-chain) |
+| `PaymentGateway` | Treasury deposits + `$NIGHT` staking |
+| `LgpdKitRegistry` | Anti-fraud registry for generated LGPD documents (DPIA/policy hashes) |
+| `ConsentRegistry` | LGPD/GDPR consent grant/revoke/update (Art. 7-8) |
+| `DataAuditLog` | LGPD Art. 37 processing audit trail |
+| `DataSubjectRights` | LGPD Art. 18 rights requests + Art. 19 deadline tracking |
+
+The single `ComplianceRegistry.attestUseCase` circuit delivers **all 25 DPO2U jurisdiction codes** through one audited contract — see `src/jurisdictions.ts` (mirrors the MCP server's `JURISDICTION_CODES`).
+
+```bash
+npm install
+npm run compile     # compactc 0.31.0 → build/<Contract>/  (9 contracts)
+npm test            # 53 tests / 10 suites
+npm run build       # tsc --noEmit over src/ + contract types
+```
+
+### Follow-ups (out of scope for this consolidation)
+- **Deploy harness (`scripts/deploy-preprod.ts`)** carries `midnight-js 4.1.1` API drift (LevelPrivateStateProvider config, `deployContract`/`findDeployedContract` signatures, `WalletFacade.close`) — migrate together with the gated preprod deploy (runs via `tsx`, excluded from the `tsc` gate).
+- **Testnet/preprod deployment** — gated on faucet tokens + a running `proof-server`.
+- **PoR `seal_solvency` → `SolvencyRegistry.compact`** — port the Stellar `por-filing` solvency proof (public solvency, private positions).
+- **`feat/health-contracts-cuidabot`** health vertical — rebase onto this consolidated `main` (its `HealthConsentRegistry` overlaps the new `ConsentRegistry`).
+
+> Note: `midnight-doctor` flags the `wallet-sdk` subpackages as "spanning majors 3 and 4." This is inherent to the official `@midnight-ntwrk/wallet-sdk@1.1.0` barrel (it depends on `facade ^4.x` + `shielded ^3.x`) for this SDK generation — a known false-positive, identical in the proven `dpo2u-midnight-agents` deploy.
+
+---
+
 ## The Problem
 
 Every dApp that builds its own ZK compliance stack from scratch introduces seven independent trust layers (setup, circuit, witness, arithmetization, proof system, primitives, verification). With `n` independent implementations and per-layer failure probability `p`:

@@ -1,0 +1,21 @@
+pragma language_version >= 0.21.0;
+import CompactStandardLibrary;
+
+export ledger agent_wallets: Map<Bytes<32>, Bytes<32>>;
+export ledger wallet_count: Counter;
+
+export circuit registerAgent(
+  agent_did: Bytes<32>,
+  wallet_address: Bytes<32>
+): [] {
+  agent_wallets.insert(disclose(agent_did), disclose(wallet_address));
+  wallet_count.increment(1);
+}
+
+export circuit getAgentWallet(agent_did: Bytes<32>): Bytes<32> {
+  return agent_wallets.lookup(disclose(agent_did));
+}
+
+export circuit getWalletCount(): Uint<64> {
+  return wallet_count;
+}

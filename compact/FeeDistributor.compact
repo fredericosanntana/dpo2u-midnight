@@ -1,44 +1,32 @@
-/**
- * Fee Distributor DPO2U (Arquitetura Compact/Midnight)
- * Responsavel por orquestrar repasses de valores do Protocolo B2B para $NIGHT (Self-Funding).
- * Split 40/60: expert_share + auditor_share sao computados off-chain e validados on-chain.
- * O contrato verifica que expert_share + auditor_share == total_amount (constraint ZK).
- */
-pragma language_version >= 0.19;
+pragma language_version >= 0.21.0;
 import CompactStandardLibrary;
 
-export ledger expert_fee_pool: Uint<64>;
-export ledger auditor_fee_pool: Uint<64>;
+export ledger expert_fee_pool: Counter;
+export ledger auditor_fee_pool: Counter;
+export ledger total_distributed: Counter;
 
-// Historico de distribuicoes por empresa
-export ledger company_expert_fees: Map<Bytes<32>, Uint<64>>;
-export ledger company_auditor_fees: Map<Bytes<32>, Uint<64>>;
-
+// Caller computes the 40/60 split off-chain, contract validates
 export circuit distributeComplianceFee(
-  company_id: Bytes<32>,
-  expert_agent_did: Bytes<32>,
-  auditor_agent_did: Bytes<32>,
-  total_amount: Uint<64>,
-  expert_share: Uint<64>,
-  auditor_share: Uint<64>
+  expert_share: Uint<16>,
+  auditor_share: Uint<16>
 ): [] {
-  assert(total_amount > 0, "Fee must be greater than zero");
-  // ZK constraint: shares must sum to total (40/60 split enforced off-chain)
-  assert(expert_share + auditor_share == total_amount, "Shares must sum to total amount");
-
-  // Acumular nos pools globais (nao sobrescrever)
-  expert_fee_pool = disclose((expert_fee_pool + expert_share) as Uint<64>);
-  auditor_fee_pool = disclose((auditor_fee_pool + auditor_share) as Uint<64>);
-
-  // Rastrear fees por empresa
-  company_expert_fees.insert(disclose(company_id), disclose(expert_share));
-  company_auditor_fees.insert(disclose(company_id), disclose(auditor_share));
+  assert(expert_share > 0 as Uint<16>, "Expert share must be > 0");
+  assert(auditor_share > 0 as Uint<16>, "Auditor share must be > 0");
+  // Enforce 40/60 ratio: expert * 3 == auditor * 2
+  assert(disclose(expert_share) * 3 == disclose(auditor_share) * 2, "Must be 40/60 split");
+  expert_fee_pool.increment(disclose(expert_share));
+  auditor_fee_pool.increment(disclose(auditor_share));
+  total_distributed.increment(disclose(expert_share + auditor_share as Uint<16>));
 }
 
-export circuit getAuditorPools(): Uint<64> {
+export circuit getExpertPool(): Uint<64> {
+  return expert_fee_pool;
+}
+
+export circuit getAuditorPool(): Uint<64> {
   return auditor_fee_pool;
 }
 
-export circuit getExpertPools(): Uint<64> {
-  return expert_fee_pool;
+export circuit getTotalDistributed(): Uint<64> {
+  return total_distributed;
 }

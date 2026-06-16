@@ -1,22 +1,22 @@
 {
-  "name": "dpo2u-midnight-self-funding",
-  "version": "1.0.0",
-  "description": "DPO2U Self-Funding Protocol on Midnight Network — autonomous fee distribution with ZK proofs for compliance agents",
+  "name": "dpo2u-midnight",
+  "version": "2.0.0",
+  "description": "DPO2U Self-Funding Protocol on Midnight Network — score-private/proof-public ZK compliance attestation for autonomous agents",
   "type": "module",
   "scripts": {
+    "compile": "bash scripts/compile.sh",
     "build": "tsc --noEmit",
-    "deploy:local": "tsx scripts/deploy-all.ts --network local",
-    "deploy:preprod": "tsx scripts/deploy-all.ts --network preprod",
-    "demo": "tsx scripts/demo-flow.ts",
-    "balance": "tsx scripts/check-balance.ts",
-    "call:registerAttestation": "tsx scripts/call-register-attestation.ts",
     "test": "node --import tsx --test test/*.test.ts",
-    "devnet:up": "docker compose up -d",
-    "devnet:down": "docker compose down",
-    "ui:data": "tsx scripts/generate-ui-data.ts",
+    "deploy:preprod": "tsx scripts/deploy-preprod.ts --network preprod",
+    "deploy:preprod:all": "tsx scripts/deploy-preprod.ts --network preprod --all",
+    "deploy:standalone": "tsx scripts/deploy-preprod.ts --network standalone --all",
+    "balance": "tsx scripts/check-balance.ts",
+    "address": "tsx scripts/print-address.ts",
+    "start-proof-server": "docker run -d --name midnight-proof-server -p 6300:6300 midnightntwrk/proof-server:8.0.3 -- midnight-proof-server -v",
+    "devnet:up": "docker-compose up -d",
+    "devnet:down": "docker-compose down",
     "ui:dev": "cd ui && npm run dev",
-    "ui:build": "cd ui && npm run build",
-    "ui:preview": "cd ui && npm run preview"
+    "ui:build": "cd ui && npm run build"
   },
   "keywords": [
     "midnightntwrk",
@@ -25,32 +25,42 @@
     "self-funding",
     "autonomous-agents",
     "privacy",
-    "compliance"
+    "compliance",
+    "lgpd",
+    "gdpr"
   ],
   "author": "DPO2U <contact@dpo2u.com>",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/fredericosanntana/dpo2u-midnight.git"
+  },
   "dependencies": {
-    "@midnight-ntwrk/compact-runtime": "0.14.0",
-    "@midnight-ntwrk/compact-js": "2.4.3",
-    "@midnight-ntwrk/ledger-v7": "7.0.3",
-    "@midnight-ntwrk/midnight-js-contracts": "3.2.0",
-    "@midnight-ntwrk/midnight-js-fetch-zk-config-provider": "3.2.0",
-    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "3.2.0",
-    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "3.2.0",
-    "@midnight-ntwrk/midnight-js-network-id": "3.2.0",
-    "@midnight-ntwrk/midnight-js-types": "3.2.0",
-    "@midnight-ntwrk/wallet-sdk-dust-wallet": "2.0.0",
-    "@midnight-ntwrk/wallet-sdk-facade": "2.0.0",
-    "@midnight-ntwrk/wallet-sdk-hd": "3.0.1",
-    "@midnight-ntwrk/wallet-sdk-shielded": "2.0.0",
-    "@midnight-ntwrk/wallet-sdk-unshielded-wallet": "2.0.0",
-    "@scure/bip39": "^2.0.1",
-    "bech32": "^2.0.0",
-    "effect": "^3.0.0",
-    "rxjs": "^7.8.2"
+    "@midnight-ntwrk/compact-runtime": "0.16.0",
+    "@midnight-ntwrk/compact-js": "2.5.1",
+    "@midnight-ntwrk/ledger-v8": "8.1.0",
+    "@midnight-ntwrk/midnight-js-contracts": "4.1.1",
+    "@midnight-ntwrk/midnight-js-types": "4.1.1",
+    "@midnight-ntwrk/midnight-js-utils": "4.1.1",
+    "@midnight-ntwrk/midnight-js-network-id": "4.1.1",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "4.1.1",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "4.1.1",
+    "@midnight-ntwrk/midnight-js-node-zk-config-provider": "4.1.1",
+    "@midnight-ntwrk/midnight-js-level-private-state-provider": "4.1.1",
+    "@midnight-ntwrk/wallet-sdk": "1.1.0",
+    "dotenv": "^16.4.0",
+    "ws": "^8.19.0",
+    "rxjs": "^7.8.2",
+    "pino": "^9.0.0",
+    "level": "^8.0.0"
   },
   "devDependencies": {
-    "tsx": "^4.7.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "tsx": "^4.21.0",
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.1"
+  },
+  "overrides": {
+    "@midnight-ntwrk/ledger-v8": "8.1.0"
   }
 }
