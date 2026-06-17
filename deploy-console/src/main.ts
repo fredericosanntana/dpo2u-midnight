@@ -55,8 +55,9 @@ const PROOF_SERVER = new URLSearchParams(location.search).get('proof') ?? 'http:
 // connect() must be called with the SAME network id Lace is configured for, else "Network ID
 // mismatch". Lace labels the preprod testnet differently from midnight-js — try candidates until
 // one matches. Override/extend with ?net=testnet,preprod
+// Lace supports: mainnet, preprod, preview, qanet, undeployed. Preprod first.
 const NET_CANDIDATES = (new URLSearchParams(location.search).get('net')?.split(',').filter(Boolean))
-  ?? ['testnet', 'preprod', 'preview', 'undeployed', 'mainnet'];
+  ?? ['preprod', 'preview', 'qanet', 'undeployed', 'mainnet'];
 
 // ── tiny DOM helpers ────────────────────────────────────────────────────────
 const $ = (id: string) => document.getElementById(id)!;
@@ -121,9 +122,11 @@ async function connect() {
   const sh = await connected.getShieldedAddresses();
   const un = await connected.getUnshieldedAddress();
   const night = await connected.getUnshieldedBalances().catch(() => ({}));
+  const dust = await connected.getDustBalance().catch(() => ({ balance: 0n, cap: 0n }));
   pill('wallet', `${un.unshieldedAddress.slice(0, 16)}…`, 'ok');
   pill('net', cfg.networkId, cfg.networkId === 'preprod' ? 'ok' : 'warn');
-  pill('bal', `tNIGHT: ${Object.values(night)[0] ?? 0}`, 'ok');
+  pill('bal', `tNIGHT ${Object.values(night)[0] ?? 0} · tDUST ${dust.balance}`, (dust.balance ?? 0n) > 0n ? 'ok' : 'warn');
+  if (!((dust.balance ?? 0n) > 0n)) log('⚠ tDUST is 0 — fees cannot be paid. In Lace: Tokens → Generate tDUST, wait ~1-2 min, then reconnect.');
   if (cfg.networkId !== 'preprod') log(`WARNING: Lace is on "${cfg.networkId}", not preprod. Switch the network in Lace settings.`);
 
   publicDataProvider = indexerPublicDataProvider(cfg.indexerUri, cfg.indexerWsUri, (window as any).WebSocket);
@@ -172,8 +175,14 @@ async function deployOne(name: string, mod: any) {
     results[name] = { status: 'done', address: d.contractAddress, block: d.blockHeight, tx: d.txId };
     log(`[${name}] DEPLOYED → ${d.contractAddress} (block ${d.blockHeight})`);
   } catch (e: any) {
-    results[name] = { status: 'fail', error: String(e?.message ?? e) };
-    log(`[${name}] FAILED: ${e?.stack ?? e}`);
+    // Lace/ledger errors often surface as a bare "Error" — dig out name/code/info + own props.
+    const parts = [e?.name, e?.message].filter(Boolean).join(': ') || String(e);
+    let extra = '';
+    try { const o = JSON.stringify(e, Object.getOwnPropertyNames(e || {})); if (o && o !== '{}') extra = ' | ' + o; } catch {}
+    const cause = e?.cause ? ` | cause: ${e.cause?.message ?? e.cause}` : '';
+    results[name] = { status: 'fail', error: parts };
+    log(`[${name}] FAILED: ${parts}${cause}${extra}`);
+    if (/insufficient|dust|fee|balance/i.test(parts + extra)) log(`  → looks fee/dust related: confirm the tDUST pill is > 0 (Lace → Generate tDUST).`);
   }
   renderRows();
   ($('export') as HTMLButtonElement).disabled = false;
