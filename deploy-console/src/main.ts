@@ -72,7 +72,8 @@ function renderRows() {
     const cell = r?.address
       ? `<span class="addr">${r.address}</span><br><small>block ${r.block} · tx ${r.tx}</small>`
       : r?.error ? `<span class="err">${r.error}</span>` : '';
-    return `<tr><td>${c.name}</td><td class="status-${st}">${st}</td><td>${cell}</td></tr>`;
+    const btn = st === 'run' ? '' : `<button class="rowdeploy" data-name="${c.name}">deploy &#9656;</button>`;
+    return `<tr><td>${c.name}</td><td class="status-${st}">${st}</td><td>${cell} ${btn}</td></tr>`;
   }).join('');
 }
 
@@ -220,6 +221,14 @@ function makeInMemoryPrivateStateProvider() {
   } as any;
 }
 
+$('rows').addEventListener('click', (ev) => {
+  const t = ev.target as HTMLElement;
+  if (!t.classList.contains('rowdeploy')) return;
+  if (!walletProvider) { log('Connect Lace first.'); return; }
+  const name = t.getAttribute('data-name')!;
+  const c = CONTRACTS.find((x) => x.name === name);
+  if (c) deployOne(c.name, c.mod).catch((e) => log('deploy error: ' + e));
+});
 $('connect').addEventListener('click', () => connect().catch((e) => { log('connect error: ' + (e?.stack ?? e)); pill('wallet', 'connect failed', 'err'); }));
 $('deployAll').addEventListener('click', () => deployAll().catch((e) => log('deploy error: ' + e)));
 $('export').addEventListener('click', exportJson);
