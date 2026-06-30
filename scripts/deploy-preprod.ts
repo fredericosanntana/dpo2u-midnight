@@ -45,6 +45,7 @@ import * as DataSubjectRights from '../build/DataSubjectRights/contract/index.js
 import * as ComplianceEscrow from '../build/ComplianceEscrow/contract/index.js';
 import * as TrustStackRegistry from '../build/TrustStackRegistry/contract/index.js';
 import * as LegalSourceManifest from '../build/LegalSourceManifest/contract/index.js';
+import * as SolvencyRegistry from '../build/SolvencyRegistry/contract/index.js';
 
 // @ts-expect-error WebSocket polyfill required for wallet sync (graphql-ws) in Node
 globalThis.WebSocket = WebSocket;
@@ -62,6 +63,7 @@ const ALL_CONTRACTS: Array<{ name: string; mod: any }> = [
   { name: 'ComplianceEscrow', mod: ComplianceEscrow },
   { name: 'TrustStackRegistry', mod: TrustStackRegistry },
   { name: 'LegalSourceManifest', mod: LegalSourceManifest },
+  { name: 'SolvencyRegistry', mod: SolvencyRegistry },
 ];
 
 type NetCfg = { indexer: string; indexerWS: string; node: string; proofServer: string; faucetUrl?: string };

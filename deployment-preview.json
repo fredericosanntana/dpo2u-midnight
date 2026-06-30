@@ -2,7 +2,7 @@
   "network": "preview",
   "networkId": "preview",
   "walletAddress": "mn_addr_preview1jelp33c5gftpr9gl62yynuccsgny8e9cvgh89rfguct7pcmdcjzqlylk84",
-  "deployedAt": "2026-06-30T03:21:38.332Z",
+  "deployedAt": "2026-06-30T15:16:27.847Z",
   "contracts": [
     {
       "name": "AgentRegistry",
@@ -75,6 +75,12 @@
       "contractAddress": "8563c3c24009d6535b0a085e813dbef56667683cac3c2d9d0e372b6ee7267460",
       "blockHeight": 1395507,
       "txId": "001a601d73b55121acc298bd9eba829e93adf84d7045ebddbd7a96be0278c507cc"
+    },
+    {
+      "name": "SolvencyRegistry",
+      "contractAddress": "60cf8711d756255da7bb324314f1904a3705a329f518d139944f118ff2577d4a",
+      "blockHeight": 1402645,
+      "txId": "00c85301a42db8362eb39063965248acd224f07067d36eb9fd44fd3cf896c4dc8e"
     }
   ]
 }

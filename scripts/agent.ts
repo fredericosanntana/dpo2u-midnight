@@ -50,6 +50,7 @@ import * as PaymentGateway from '../build/PaymentGateway/contract/index.js';
 import * as FeeDistributor from '../build/FeeDistributor/contract/index.js';
 import * as TrustStackRegistry from '../build/TrustStackRegistry/contract/index.js';
 import * as LegalSourceManifest from '../build/LegalSourceManifest/contract/index.js';
+import * as SolvencyRegistry from '../build/SolvencyRegistry/contract/index.js';
 
 // @ts-expect-error WebSocket polyfill required for wallet sync (graphql-ws) in Node
 globalThis.WebSocket = WebSocket;
@@ -342,7 +343,7 @@ async function joinContract(walletProvider: any, cfg: NetCfg, accountId: string,
 }
 
 type QueueItem = {
-  type?: 'use_case' | 'compliance' | 'escrow_create' | 'escrow_release' | 'escrow_refund' | 'trust_register' | 'legal_anchor';
+  type?: 'use_case' | 'compliance' | 'escrow_create' | 'escrow_release' | 'escrow_refund' | 'trust_register' | 'legal_anchor' | 'solvency_seal';
   // use_case
   use_case_id?: string; verdict?: number; evidence_hash?: string; metadata_hash?: string;
   // compliance (score-private)
@@ -354,9 +355,11 @@ type QueueItem = {
   beneficiary_address?: string; transfer_amount?: number | string;
   // (5) shared ZK trust stack + legal corpus
   stack_id?: string; stack_hash?: string; version?: number; citation_id?: string; source_hash?: string;
+  // (PoR) solvency seal — reserves/liabilities are PRIVATE inputs (proven, NEVER written on-chain)
+  entity_id?: string; report_cid?: string; period?: number; reserves?: number | string; liabilities?: number | string;
 };
 
-type Contracts = { cr: any; escrow: any; pg: any; fd: any; trust: any; legal: any };
+type Contracts = { cr: any; escrow: any; pg: any; fd: any; trust: any; legal: any; solvency: any };
 
 // (2b) revenue recognition: book the per-attestation fee on-chain (PaymentGateway treasury = the
 // public revenue ledger) + the 40/60 expert/auditor split (FeeDistributor). Real value-in is EARN
@@ -407,6 +410,19 @@ async function attestItem(c: Contracts, item: QueueItem) {
   if (type === 'legal_anchor') {
     const r = await c.legal.callTx.anchorSource(b32(item.citation_id!), hexToBytes32(item.source_hash!), b32(item.jurisdiction ?? 'NA'));
     return { kind: 'legal_anchor', key: item.citation_id, public: r?.public ?? {} };
+  }
+
+  // ── (PoR) SolvencyRegistry: prove reserves >= liabilities WITHOUT disclosing either amount ──
+  if (type === 'solvency_seal') {
+    const entity = item.entity_id ?? item.org ?? 'entity';
+    const ctxBytes = deriveContext(entity, `solvency:${item.period ?? 0}`);
+    const rcClean = (item.report_cid ?? '').replace(/^0x/, '');
+    const reportCid = /^[0-9a-fA-F]{64}$/.test(rcClean) ? hexToBytes32(item.report_cid!) : b32(item.report_cid ?? 'reserve-report-cid');
+    const r = await c.solvency.callTx.sealSolvency(
+      b32(entity), reportCid, ctxBytes, BigInt(item.period ?? 0),
+      BigInt(item.reserves ?? 0), BigInt(item.liabilities ?? 0),
+    );
+    return { kind: 'solvency_seal', key: entity, context: toHex(ctxBytes), public: r?.public ?? {} };
   }
 
   // ── ComplianceRegistry: attestation ──
@@ -538,7 +554,8 @@ async function main() {
   const fd = await joinContract(walletProvider, cfg, accountId, 'FeeDistributor', FeeDistributor, deploymentAddress(net, 'FeeDistributor'));
   const trust = await joinContract(walletProvider, cfg, accountId, 'TrustStackRegistry', TrustStackRegistry, deploymentAddress(net, 'TrustStackRegistry'));
   const legal = await joinContract(walletProvider, cfg, accountId, 'LegalSourceManifest', LegalSourceManifest, deploymentAddress(net, 'LegalSourceManifest'));
-  const contracts: Contracts = { cr, escrow, pg, fd, trust, legal };
+  const solvency = await joinContract(walletProvider, cfg, accountId, 'SolvencyRegistry', SolvencyRegistry, deploymentAddress(net, 'SolvencyRegistry'));
+  const contracts: Contracts = { cr, escrow, pg, fd, trust, legal, solvency };
   const fee = Number(values.fee);
 
   do {
