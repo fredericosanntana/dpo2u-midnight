@@ -38,6 +38,32 @@ const writeJSON = (p, v) => fs.writeFileSync(p, JSON.stringify(v, null, 2));
 const VLABEL = { 1: 'PASS', 0: 'FAIL', 2: 'REVIEW' };
 const VNUM = { PASS: 1, FAIL: 0, REVIEW: 2 }; // verdict string -> ledger numeric
 
+// ── agent self-funding status: DUST health + address + faucet (powers the SPA "fuel the agent" widget) ──
+const DEPLOY = path.join(REPO, 'deployment-preview.json');
+const DUST_FLOOR = BigInt(process.env.AGENT_DUST_FLOOR || '1000000000000000'); // 1e15, matches the daemon --dust-floor
+const LOW_FUEL_MULT = BigInt(process.env.AGENT_LOW_FUEL_MULT || '5');           // warn below floor*5
+const QUEUE_CAP = Number(process.env.AGENT_QUEUE_CAP || '50');                  // back-pressure so an open alpha can't drain DUST
+const FAUCET_URL = process.env.MIDNIGHT_FAUCET_URL || 'https://midnight-tmnight-preview.nethermind.dev/';
+function agentStatus() {
+  const dep = readJSON(DEPLOY, {});
+  const led = readJSON(LEDGER, []);
+  const withBal = led.filter((e) => e && e.dustAfter);
+  const dust = withBal.length ? BigInt(withBal[withBal.length - 1].dustAfter) : 0n;
+  const queue = readJSON(QUEUE, []).length;
+  const today = new Date().toISOString().slice(0, 10);
+  const sealsToday = led.filter((e) => e && String(e.ts || '').slice(0, 10) === today).length;
+  return {
+    address: dep.walletAddress || null,
+    network: dep.networkId || dep.network || 'preview',
+    dust: dust.toString(),
+    dustHuman: (Number(dust) / 1e18).toFixed(4), // cosmetic; healthy/lowFuel use raw bigint
+    floor: DUST_FLOOR.toString(),
+    healthy: dust >= DUST_FLOOR && queue < QUEUE_CAP,
+    lowFuel: dust < DUST_FLOOR * LOW_FUEL_MULT,
+    sealsToday, queue, faucetUrl: FAUCET_URL,
+  };
+}
+
 function verifySig(body, sig) {
   if (!SECRET) return true; // dev: no secret configured
   try {
@@ -105,8 +131,9 @@ async function handleWebhook(req, res, body) {
   const { verdict, score, engine } = await evaluate(repoFull, headSha);
   console.log(`[eval] ${repoFull}@${headSha.slice(0, 7)} → ${VLABEL[verdict]}${score != null ? ` (score ${score})` : ''} via ${engine}`);
 
-  // enqueue for the warm daemon to seal on Midnight
+  // enqueue for the warm daemon to seal on Midnight (back-pressure cap so an open alpha can't drain DUST)
   const q = readJSON(QUEUE, []);
+  if (q.length >= QUEUE_CAP) { res.writeHead(429, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: 'queue full, retry later', cap: QUEUE_CAP })); }
   q.push({ type: 'use_case', use_case_id: USE_CASE, verdict, evidence_hash, metadata_hash, org: repoFull, jurisdiction: 'GLOBAL' });
   writeJSON(QUEUE, q);
 
@@ -185,6 +212,7 @@ function handleEnqueue(req, res, body) {
   const jurisdiction = ev.jurisdiction || 'GLOBAL';
 
   const q = readJSON(QUEUE, []);
+  if (q.length >= QUEUE_CAP) { res.writeHead(429, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: 'queue full, retry later', cap: QUEUE_CAP })); }
   q.push({ type: 'use_case', use_case_id, verdict, evidence_hash, metadata_hash, org, jurisdiction });
   writeJSON(QUEUE, q);
   const recs = readJSON(RECORDS, []);
@@ -210,6 +238,10 @@ const server = http.createServer((req, res) => {
     const parts = req.url.split('?')[0].split('/'); // ['', 'verify', uc, hash]
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     return res.end(renderVerify(parts[2] || USE_CASE, parts[3] || ''));
+  }
+  if (req.method === 'GET' && req.url.split('?')[0] === '/agent/status') {
+    res.writeHead(200, { 'content-type': 'application/json', 'access-control-allow-origin': '*' });
+    return res.end(JSON.stringify(agentStatus()));
   }
   if (req.method === 'GET' && (req.url === '/' || req.url === '/health')) {
     res.writeHead(200, { 'content-type': 'application/json' });
