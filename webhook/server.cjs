@@ -227,7 +227,43 @@ function handleEnqueue(req, res, body) {
   res.end(JSON.stringify({ enqueued: true, evidence_hash, verify: verifyUrl }));
 }
 
+// JSON view of a Midnight attestation — powers the SAME SPA /verify UI as Stellar
+// (dpo2u.com/verify/uc/:uc/hash/:hash). Joins the local record (repo/commit/verdict) with the
+// on-chain seal (tx/block) + the deploy provenance (agent address + ComplianceRegistry).
+function attestationJson(uc, hash) {
+  const rec = readJSON(RECORDS, []).find((r) => r.evidence_hash === hash);
+  const led = readJSON(LEDGER, []).find((e) => e.key === hash && e.txId);
+  const dep = readJSON(DEPLOY, {});
+  const cr = (dep.contracts || []).find((c) => c.name === 'ComplianceRegistry');
+  const sealed = !!led;
+  const tsMs = (sealed && led.ts) ? Date.parse(led.ts) : (rec && rec.at ? Date.parse(rec.at) : NaN);
+  return {
+    found: !!rec || sealed,
+    chain: 'midnight',
+    network: dep.networkId || dep.network || 'preview',
+    use_case_id: uc,
+    evidence_hash: hash,
+    verdict: rec ? (VLABEL[rec.verdict] ?? null) : null,
+    repo: rec ? `${rec.owner}/${rec.repo}` : null,
+    sha: rec ? rec.sha : null,
+    score_private: true,
+    sealed,
+    tx: sealed ? led.txId : null,
+    block: sealed ? led.blockHeight : null,
+    submitted_by: dep.walletAddress || null,
+    contract_id: cr ? cr.contractAddress : null,
+    metadata_hash: hash,
+    timestamp: Number.isFinite(tsMs) ? Math.floor(tsMs / 1000) : null,
+    indexer: 'https://indexer.preview.midnight.network/api/v4/graphql',
+  };
+}
+
 const server = http.createServer((req, res) => {
+  if (req.method === 'GET' && req.url.split('?')[0].startsWith('/api/attestation/')) {
+    const p = req.url.split('?')[0].split('/'); // ['', 'api', 'attestation', uc, hash]
+    res.writeHead(200, { 'content-type': 'application/json', 'access-control-allow-origin': '*' });
+    return res.end(JSON.stringify(attestationJson(p[3] || '', (p[4] || '').toLowerCase())));
+  }
   if (req.method === 'POST' && req.url === '/webhook/github') {
     let body = ''; req.on('data', (c) => (body += c)); req.on('end', () => handleWebhook(req, res, body)); return;
   }
