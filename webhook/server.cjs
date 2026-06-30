@@ -49,18 +49,21 @@ function postStatus(owner, repo, ref, state, targetUrl, desc) {
   r.on('error', (e) => console.log('[gh] status error', e.message)); r.write(data); r.end();
 }
 
-// (B) REAL evaluation via the live DPO2U MCP/gateway (check_compliance). Gateway runs locally
-// (dpo2u-pilot-gateway, 127.0.0.1:3051) + remote (mcp.dpo2u.com), auth-gated by x-api-key. Set
-// DPO2U_API_KEY to enable; without it (or if unreachable) it falls back to PASS so the pipeline never
-// breaks. Verdict: score>=70 PASS / 40-69 REVIEW / <40 FAIL.
+// (B) REAL evaluation via the live DPO2U MCP server (check_compliance). REST tool endpoint is
+// POST /tools/<name> on the mcp-server (dpo2u-mcp-server, 127.0.0.1:3050; NOT the pilot-gateway on
+// 3051, which lacks /tools), auth-gated by x-api-key (a JWT minted via the mcp-server key store —
+// the pilot-gateway demo key does NOT validate here). Mint with scripts/mint-mcp-api-key.sh →
+// webhook/.key. Without a valid key (or if unreachable) it falls back to PASS so the pipeline never
+// breaks. The score is embedded in the tool's markdown result; we parse "Score Geral N/100".
+// Verdict: score>=70 PASS / 40-69 REVIEW / <40 FAIL.
 function callTool(toolName, args) {
   return new Promise((resolve) => {
     const kf = path.join(__dirname, '.key');
     const key = (process.env.DPO2U_API_KEY || (fs.existsSync(kf) ? fs.readFileSync(kf, 'utf8') : '')).trim();
     if (!key) return resolve(null);
     const data = JSON.stringify(args);
-    const r = http.request({ host: '127.0.0.1', port: Number(process.env.DPO2U_GATEWAY_PORT || 3051),
-      path: `${process.env.DPO2U_TOOLS_PATH || '/api/v1/tools'}/${toolName}`, method: 'POST',
+    const r = http.request({ host: '127.0.0.1', port: Number(process.env.DPO2U_GATEWAY_PORT || 3050),
+      path: `${process.env.DPO2U_TOOLS_PATH || '/tools'}/${toolName}`, method: 'POST',
       headers: { 'x-api-key': key, 'content-type': 'application/json', 'content-length': Buffer.byteLength(data) }, timeout: 20000 },
       (res) => { let b = ''; res.on('data', (c) => (b += c)); res.on('end', () => { try { resolve(JSON.parse(b)); } catch { resolve(null); } }); });
     r.on('error', () => resolve(null)); r.on('timeout', () => { r.destroy(); resolve(null); });
@@ -69,7 +72,14 @@ function callTool(toolName, args) {
 }
 async function evaluate(repoFull, headSha) {
   const r = await callTool('check_compliance', { company: repoFull, auditScope: `repo change ${headSha.slice(0, 12)}`, jurisdiction: 'GDPR' });
-  const score = r && (r.score ?? (r.aggregate && r.aggregate.score) ?? (r.result && r.result.score));
+  let score = r && (r.score ?? (r.aggregate && r.aggregate.score) ?? (r.result && r.result.score));
+  // MCP tool result shape: { success, result: { content: [{ type:'text', text:'# CHECKLIST… Score Geral | N/100 …' }] } }.
+  // The score is embedded in the markdown report, not a structured field — extract it.
+  if (score == null && r && r.result && Array.isArray(r.result.content)) {
+    const text = r.result.content.map((c) => (c && c.text) ? c.text : '').join('\n');
+    const m = text.match(/Score\s+Geral[^\d]*(\d{1,3})\s*\/\s*100/i) || text.match(/\b(\d{1,3})\s*\/\s*100\b/);
+    if (m) score = Number(m[1]);
+  }
   if (r && score != null) return { verdict: score >= 70 ? 1 : score >= 40 ? 2 : 0, score, engine: 'dpo2u-mcp' };
   return { verdict: 1, score: null, engine: 'default' };   // graceful fallback (no key / unreachable)
 }
@@ -95,7 +105,7 @@ async function handleWebhook(req, res, body) {
   writeJSON(QUEUE, q);
 
   const recs = readJSON(RECORDS, []);
-  recs.push({ owner, repo, sha: headSha, pr, event, evidence_hash, use_case_id: USE_CASE, verdict, score, at: new Date().toISOString(), state: 'pending' });
+  recs.push({ owner, repo, sha: headSha, pr, event, evidence_hash, use_case_id: USE_CASE, verdict, score, engine, at: new Date().toISOString(), state: 'pending' });
   writeJSON(RECORDS, recs);
 
   const verifyUrl = `${BASE}/verify/${USE_CASE}/${evidence_hash}`;
