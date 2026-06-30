@@ -42,6 +42,9 @@ import * as LgpdKitRegistry from '../build/LgpdKitRegistry/contract/index.js';
 import * as ConsentRegistry from '../build/ConsentRegistry/contract/index.js';
 import * as DataAuditLog from '../build/DataAuditLog/contract/index.js';
 import * as DataSubjectRights from '../build/DataSubjectRights/contract/index.js';
+import * as ComplianceEscrow from '../build/ComplianceEscrow/contract/index.js';
+import * as TrustStackRegistry from '../build/TrustStackRegistry/contract/index.js';
+import * as LegalSourceManifest from '../build/LegalSourceManifest/contract/index.js';
 
 // @ts-expect-error WebSocket polyfill required for wallet sync (graphql-ws) in Node
 globalThis.WebSocket = WebSocket;
@@ -56,6 +59,9 @@ const ALL_CONTRACTS: Array<{ name: string; mod: any }> = [
   { name: 'ConsentRegistry', mod: ConsentRegistry },
   { name: 'DataAuditLog', mod: DataAuditLog },
   { name: 'DataSubjectRights', mod: DataSubjectRights },
+  { name: 'ComplianceEscrow', mod: ComplianceEscrow },
+  { name: 'TrustStackRegistry', mod: TrustStackRegistry },
+  { name: 'LegalSourceManifest', mod: LegalSourceManifest },
 ];
 
 type NetCfg = { indexer: string; indexerWS: string; node: string; proofServer: string; faucetUrl?: string };
@@ -68,6 +74,16 @@ const NETWORKS: Record<string, { networkId: string; cfg: NetCfg }> = {
       node: 'https://rpc.preprod.midnight.network',
       proofServer: process.env.PROOF_SERVER_URL ?? 'http://127.0.0.1:6300',
       faucetUrl: 'https://faucet.preprod.midnight.network/api/request-tokens',
+    },
+  },
+  preview: {
+    networkId: 'preview',
+    cfg: {
+      indexer: 'https://indexer.preview.midnight.network/api/v4/graphql',
+      indexerWS: 'wss://indexer.preview.midnight.network/api/v4/graphql/ws',
+      node: 'https://rpc.preview.midnight.network',
+      proofServer: process.env.PROOF_SERVER_URL ?? 'http://127.0.0.1:6300',
+      faucetUrl: 'https://faucet.preview.midnight.network/api/request-tokens',
     },
   },
   standalone: {
@@ -95,6 +111,12 @@ function deriveKeys(seed: string) {
   return result.keys;
 }
 
+// Reuse the daemon's persistent wallet checkpoint (SOTA #3) so deploys skip the ~13min cold sync too.
+// Read-only: the agent daemon owns/updates the checkpoint; deploy just restores from it.
+function ckptPaths() { const d = path.resolve(__dirname, '..', `wallet-checkpoint/${getNetworkId()}`); return { shielded: path.join(d, 'shielded.json'), unshielded: path.join(d, 'unshielded.json'), dust: path.join(d, 'dust.json') }; }
+function hasCheckpoint() { const p = ckptPaths(); return fs.existsSync(p.shielded) && fs.existsSync(p.unshielded) && fs.existsSync(p.dust); }
+const readBlob = (p: string) => fs.readFileSync(p, 'utf8');   // serializeState() is a JSON STRING — pass raw to restore()
+
 async function createWallet(cfg: NetCfg, seed: string) {
   const keys = deriveKeys(seed);
   const networkId = getNetworkId();
@@ -102,7 +124,6 @@ async function createWallet(cfg: NetCfg, seed: string) {
   const dustSecretKey = ledger.DustSecretKey.fromSeed(keys[Roles.Dust]);
   const unshieldedKeystore = createKeystore(keys[Roles.NightExternal], networkId);
 
-  // facade 3.0.0: private constructor → build via WalletFacade.init({...callbacks}), then start().
   const walletConfig = {
     networkId,
     indexerClientConnection: { indexerHttpUrl: cfg.indexer, indexerWsUrl: cfg.indexerWS },
@@ -111,11 +132,14 @@ async function createWallet(cfg: NetCfg, seed: string) {
     costParameters: { additionalFeeOverhead: 300_000_000_000_000n, feeBlocksMargin: 5 },
   };
 
+  const restoring = hasCheckpoint();
+  const p = ckptPaths();
+  if (restoring) console.log('[wallet] checkpoint found — restoring (delta sync only)');
   const wallet = await WalletFacade.init({
     configuration: walletConfig as any,
-    shielded: (c: any) => ShieldedWallet(c).startWithSecretKeys(shieldedSecretKeys),
-    unshielded: (c: any) => UnshieldedWallet(c).startWithPublicKey(PublicKey.fromKeyStore(unshieldedKeystore)),
-    dust: (c: any) => DustWallet(c).startWithSecretKey(dustSecretKey, ledger.LedgerParameters.initialParameters().dust),
+    shielded: (c: any) => restoring ? ShieldedWallet(c).restore(readBlob(p.shielded)) : ShieldedWallet(c).startWithSecretKeys(shieldedSecretKeys),
+    unshielded: (c: any) => restoring ? UnshieldedWallet(c).restore(readBlob(p.unshielded)) : UnshieldedWallet(c).startWithPublicKey(PublicKey.fromKeyStore(unshieldedKeystore)),
+    dust: (c: any) => restoring ? DustWallet(c).restore(readBlob(p.dust)) : DustWallet(c).startWithSecretKey(dustSecretKey, ledger.LedgerParameters.initialParameters().dust),
   });
   await wallet.start(shieldedSecretKeys, dustSecretKey);
   return { wallet, shieldedSecretKeys, dustSecretKey, unshieldedKeystore };
@@ -180,26 +204,42 @@ async function waitForSync(wallet: any) {
 //   register → finalizeRecipe → submitTransaction → wait until dust.balance(now) > 0n.
 async function ensureDust(ctx: any) {
   const dustOf = (s: any) => { try { return s.dust.balance(new Date()) as bigint; } catch { return 0n; } };
-  let state: any = await Rx.firstValueFrom(ctx.wallet.state());
-  if (dustOf(state) > 0n) { console.log(`[dust] already have dust: ${dustOf(state)}`); return; }
+  const state: any = await Rx.firstValueFrom(ctx.wallet.state());
 
+  // Register any NIGHT UTxOs not yet generating dust (idempotent — safe across re-runs).
   const nightUtxos = (state.unshielded.availableCoins ?? []).filter((u: any) => !u.meta?.registeredForDustGeneration);
-  console.log(`[dust] balance 0 — registering ${nightUtxos.length} NIGHT UTxO(s) for dust generation...`);
-  if (nightUtxos.length === 0) { console.log('[dust] no unregistered NIGHT UTxOs; cannot generate dust'); return; }
+  if (nightUtxos.length > 0) {
+    console.log(`[dust] registering ${nightUtxos.length} NIGHT UTxO(s) for dust generation...`);
+    const vk = ctx.unshieldedKeystore.getPublicKey();
+    const signFn = (payload: Uint8Array) => ctx.unshieldedKeystore.signData(payload);
+    const recipe = await ctx.wallet.registerNightUtxosForDustGeneration(nightUtxos, vk, signFn);
+    const tx = await ctx.wallet.finalizeRecipe(recipe);
+    const txId = await ctx.wallet.submitTransaction(tx);
+    console.log(`[dust] registration tx submitted: ${txId}`);
+  } else {
+    console.log(`[dust] NIGHT already registered for dust generation (current balance ${dustOf(state)}).`);
+  }
 
-  const vk = ctx.unshieldedKeystore.getPublicKey();
-  const signFn = (payload: Uint8Array) => ctx.unshieldedKeystore.signData(payload);
-  const recipe = await ctx.wallet.registerNightUtxosForDustGeneration(nightUtxos, vk, signFn);
-  const tx = await ctx.wallet.finalizeRecipe(recipe);
-  const txId = await ctx.wallet.submitTransaction(tx);
-  console.log(`[dust] registration tx submitted: ${txId} — waiting for dust to accrue (~1-2 min)...`);
-
-  const sub = ctx.wallet.state().pipe(Rx.throttleTime(15_000)).subscribe((s: any) => {
-    console.log(`  [dust ${new Date().toISOString().slice(11, 19)}] balance: ${dustOf(s)}`);
+  // Dust accrues GRADUALLY toward a cap proportional to registered NIGHT. Deploying at the first
+  // wei of dust (old `> 0n` gate) starves the 2nd+ tx → "Insufficient Funds: could not balance
+  // dust". Wait until the balance PLATEAUS (≈cap) so all 9 deploys are covered. Bounded by maxWait.
+  console.log('[dust] waiting for dust to build toward cap (plateau detection)...');
+  const maxWaitMs = 8 * 60_000;
+  const start = Date.now();
+  let prev = -1n, stable = 0;
+  await new Promise<void>((resolve) => {
+    const sub = ctx.wallet.state().pipe(Rx.throttleTime(15_000)).subscribe((s: any) => {
+      const bal = dustOf(s);
+      const elapsed = Date.now() - start;
+      console.log(`  [dust ${new Date().toISOString().slice(11, 19)}] balance: ${bal} (elapsed ${Math.round(elapsed / 1000)}s)`);
+      // plateau = balance > 0 and grew < ~0.5% since the previous sample, twice consecutively.
+      if (prev > 0n && bal > 0n && (bal - prev) * 200n < prev) stable++; else stable = 0;
+      prev = bal;
+      if ((bal > 0n && stable >= 2) || elapsed >= maxWaitMs) { sub.unsubscribe(); resolve(); }
+    });
   });
-  await Rx.firstValueFrom(ctx.wallet.state().pipe(Rx.filter((s: any) => dustOf(s) > 0n)));
-  sub.unsubscribe();
-  console.log('[dust] dust available — proceeding to deploy.');
+  const finalState: any = await Rx.firstValueFrom(ctx.wallet.state());
+  console.log(`[dust] dust settled at ${dustOf(finalState)} — proceeding to deploy.`);
 }
 
 function makeWalletProvider(ctx: Awaited<ReturnType<typeof createWallet>>, state: any) {
@@ -365,6 +405,7 @@ async function main() {
       join: { type: 'string' },
       faucet: { type: 'boolean', default: false },
       all: { type: 'boolean', default: false },
+      only: { type: 'string' },
       loop: { type: 'boolean', default: false },
       attest: { type: 'boolean', default: false },
       'use-case-id': { type: 'string' },
@@ -415,7 +456,11 @@ async function main() {
     process.exit(0);
   }
 
-  const contracts = values.all ? ALL_CONTRACTS : [ALL_CONTRACTS[0]];
+  const onlyNames = values.only ? String(values.only).split(',').map((s) => s.trim()).filter(Boolean) : null;
+  const contracts = onlyNames
+    ? ALL_CONTRACTS.filter((c) => onlyNames.includes(c.name))
+    : values.all ? ALL_CONTRACTS : [ALL_CONTRACTS[0]];
+  if (contracts.length === 0) { console.error(`--only: unknown contract(s) "${values.only}"`); process.exit(1); }
   const results: any[] = [];
   for (const c of contracts) {
     try { results.push(await deployOne(walletProvider, cfg, c, addr)); }
@@ -429,11 +474,16 @@ async function main() {
   console.log('='.repeat(64));
 
   const outPath = path.resolve(__dirname, '..', `deployment-${net}.json`);
+  // Merge with any existing deployment so a partial deploy (--only) does not clobber the rest.
+  let existing: any = { contracts: [] };
+  try { existing = JSON.parse(fs.readFileSync(outPath, 'utf8')); } catch { /* no prior file */ }
+  const byName = new Map<string, any>((existing.contracts ?? []).map((c: any) => [c.name, c]));
+  for (const r of results) byName.set(r.name, r);
   fs.writeFileSync(outPath, JSON.stringify({
     network: net, networkId: entry.networkId, walletAddress: addr,
-    deployedAt: new Date().toISOString(), contracts: results,
+    deployedAt: new Date().toISOString(), contracts: Array.from(byName.values()),
   }, null, 2));
-  console.log(`  saved: ${outPath}`);
+  console.log(`  saved: ${outPath} (${byName.size} contracts total)`);
 
   try { await (ctx.wallet as any).close?.(); } catch { /* ignore */ }
   process.exit(ok.length === contracts.length ? 0 : 2);

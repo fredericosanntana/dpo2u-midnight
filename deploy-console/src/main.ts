@@ -49,21 +49,55 @@ const CONTRACTS: Array<{ name: string; mod: any }> = [
   { name: 'DataSubjectRights', mod: DataSubjectRights },
 ];
 
-// Local proof-server (override with ?proof=http://host:port). Lace does NOT prove here.
-const PROOF_SERVER = new URLSearchParams(location.search).get('proof') ?? 'http://127.0.0.1:6300';
+// Proof-server. Default routes through the vite same-origin /proof proxy (no CORS, works over
+// Tailscale). Override with ?proof=http://host:port to hit a proof-server directly. Lace does NOT prove.
+const PROOF_SERVER = new URLSearchParams(location.search).get('proof') ?? (location.origin + '/proof');
 
 // connect() must be called with the SAME network id Lace is configured for, else "Network ID
-// mismatch". Lace labels the preprod testnet differently from midnight-js — try candidates until
-// one matches. Override/extend with ?net=testnet,preprod
-// Lace supports: mainnet, preprod, preview, qanet, undeployed. Preprod first.
+// mismatch". Lace labels networks differently from midnight-js — try candidates until one matches.
+// Override/extend with ?net=preview,undeployed
+// Lace supports: mainnet, preprod, preview, qanet, undeployed.
+// Foundation guidance (2026-06-29): use PREVIEW or UNDEPLOYED for now — preprod's huge shielded+dust
+// history is the sync wall. Preview (public, lighter) first, then undeployed (local), then preprod.
 const NET_CANDIDATES = (new URLSearchParams(location.search).get('net')?.split(',').filter(Boolean))
-  ?? ['preprod', 'preview', 'qanet', 'undeployed', 'mainnet'];
+  ?? ['preview', 'undeployed', 'preprod', 'qanet', 'mainnet'];
 
 // ── tiny DOM helpers ────────────────────────────────────────────────────────
 const $ = (id: string) => document.getElementById(id)!;
 const log = (m: string) => { const el = $('log'); el.textContent += `[${new Date().toISOString().slice(11, 19)}] ${m}\n`; el.scrollTop = el.scrollHeight; };
 function pill(id: string, text: string, cls = '') { const el = $(id); el.textContent = text; el.className = `pill ${cls}`; }
 const results: Record<string, any> = {};
+
+// Effect/midnight-js wrap real errors in an opaque FiberFailure (message ""). The node's real
+// rejection reason hides inside the Cause's `failure` (a tagged SubmissionError), often in
+// non-enumerable fields. Walk the WHOLE error graph via getOwnPropertyNames to surface it.
+function deepProps(o: any, depth = 0, seen = new WeakSet()): any {
+  if (o == null) return o;
+  const t = typeof o;
+  if (t === 'bigint') return o.toString();
+  if (t === 'function') return `[fn ${o.name || ''}]`;
+  if (t !== 'object') return o;
+  if (seen.has(o)) return '[circular]';
+  seen.add(o);
+  if (depth > 5) return '[…]';
+  if (Array.isArray(o)) return o.slice(0, 20).map((v) => deepProps(v, depth + 1, seen));
+  const out: any = {};
+  for (const k of Object.getOwnPropertyNames(o)) {
+    try { out[k] = deepProps((o as any)[k], depth + 1, seen); } catch { out[k] = '<unreadable>'; }
+  }
+  // Effect Cause symbols (failure/defect) are non-string keys — pull them too.
+  for (const s of Object.getOwnPropertySymbols(o)) {
+    try { out[String(s)] = deepProps((o as any)[s], depth + 1, seen); } catch {}
+  }
+  return out;
+}
+function safeErr(e: any): string {
+  const bits: string[] = [];
+  try { const s = String(e); if (s && s !== '[object Object]') bits.push('str=' + s.slice(0, 1500)); } catch {}
+  try { if (e?.stack) bits.push('stack=' + String(e.stack).slice(0, 400)); } catch {}
+  try { bits.push('deep=' + JSON.stringify(deepProps(e)).slice(0, 3000)); } catch (err) { bits.push('deep-failed:' + String(err)); }
+  return bits.join(' | ') || '(no detail)';
+}
 
 function renderRows() {
   $('rows').innerHTML = CONTRACTS.map((c) => {
@@ -126,8 +160,14 @@ async function connect() {
   const dust = await connected.getDustBalance().catch(() => ({ balance: 0n, cap: 0n }));
   pill('wallet', `${un.unshieldedAddress.slice(0, 16)}…`, 'ok');
   pill('net', cfg.networkId, cfg.networkId === 'preprod' ? 'ok' : 'warn');
-  pill('bal', `tNIGHT ${Object.values(night)[0] ?? 0} · tDUST ${dust.balance}`, (dust.balance ?? 0n) > 0n ? 'ok' : 'warn');
-  if (!((dust.balance ?? 0n) > 0n)) log('⚠ tDUST is 0 — fees cannot be paid. In Lace: Tokens → Generate tDUST, wait ~1-2 min, then reconnect.');
+  pill('bal', `tNIGHT ${Object.values(night)[0] ?? 0} · tDUST ${dust.balance}/${dust.cap}`, (dust.balance ?? 0n) > 0n ? 'ok' : 'warn');
+  log(`dust: balance=${dust.balance} cap=${dust.cap} (balance = generated/available now; cap = max generatable from your NIGHT)`);
+  if (!((dust.balance ?? 0n) > 0n)) {
+    if ((dust.cap ?? 0n) > 0n)
+      log('⚠ tDUST balance is 0 but cap>0 — your NIGHT IS registered and Dust is still GENERATING. Wait a few minutes, then click Connect again; balance climbs toward the cap.');
+    else
+      log('⚠ tDUST balance AND cap are 0 — your NIGHT is not generating Dust yet. In Lace, register/enable Dust generation for your NIGHT, then wait and reconnect.');
+  }
   if (cfg.networkId !== 'preprod') log(`WARNING: Lace is on "${cfg.networkId}", not preprod. Switch the network in Lace settings.`);
 
   publicDataProvider = indexerPublicDataProvider(cfg.indexerUri, cfg.indexerWsUri, (window as any).WebSocket);
@@ -139,16 +179,35 @@ async function connect() {
     async balanceTx(tx: any /* UnboundTransaction */): Promise<any /* FinalizedTransaction */> {
       const serialized = toHex(tx.serialize());
       log(`balanceTx → Lace.balanceUnsealedTransaction (${serialized.length / 2} bytes)`);
-      const { tx: balancedHex } = await connected.balanceUnsealedTransaction(serialized, { payFees: true });
+      let res: any;
+      try {
+        res = await connected.balanceUnsealedTransaction(serialized, { payFees: true });
+      } catch (e: any) {
+        log(`  ✗ balanceUnsealedTransaction THREW: ${safeErr(e)}`);
+        throw e;
+      }
+      const balancedHex = res?.tx;
+      log(`  balanceUnsealedTransaction returned: ${balancedHex ? (balancedHex.length / 2) + ' bytes' : 'NO .tx field — keys=' + JSON.stringify(Object.keys(res ?? {}))}`);
       // Lace returns a sealed, ready-to-submit tx = Transaction<SignatureEnabled, Proof, Binding>.
-      return Transaction.deserialize('signature', 'proof', 'binding', fromHex(balancedHex));
+      try {
+        return Transaction.deserialize('signature', 'proof', 'binding', fromHex(balancedHex));
+      } catch (e: any) {
+        log(`  ✗ Transaction.deserialize(balanced) THREW: ${safeErr(e)}`);
+        throw e;
+      }
     },
   };
   midnightProvider = {
     async submitTx(tx: any /* FinalizedTransaction */): Promise<string> {
       const txId = tx.identifiers()[0] ?? tx.transactionHash();
-      await connected.submitTransaction(toHex(tx.serialize()));
-      log(`submitTx → Lace.submitTransaction ok (id ${String(txId).slice(0, 16)}…)`);
+      log(`submitTx → Lace.submitTransaction (id ${String(txId).slice(0, 16)}…)`);
+      try {
+        await connected.submitTransaction(toHex(tx.serialize()));
+      } catch (e: any) {
+        log(`  ✗ submitTransaction THREW: ${safeErr(e)}`);
+        throw e;
+      }
+      log(`  submitTransaction ok`);
       return txId;
     },
   };
@@ -177,13 +236,11 @@ async function deployOne(name: string, mod: any) {
     log(`[${name}] DEPLOYED → ${d.contractAddress} (block ${d.blockHeight})`);
   } catch (e: any) {
     // Lace/ledger errors often surface as a bare "Error" — dig out name/code/info + own props.
-    const parts = [e?.name, e?.message].filter(Boolean).join(': ') || String(e);
-    let extra = '';
-    try { const o = JSON.stringify(e, Object.getOwnPropertyNames(e || {})); if (o && o !== '{}') extra = ' | ' + o; } catch {}
-    const cause = e?.cause ? ` | cause: ${e.cause?.message ?? e.cause}` : '';
+    const parts = [e?.name, e?.message].filter(Boolean).join(': ') || 'Error';
+    const detail = safeErr(e);
     results[name] = { status: 'fail', error: parts };
-    log(`[${name}] FAILED: ${parts}${cause}${extra}`);
-    if (/insufficient|dust|fee|balance/i.test(parts + extra)) log(`  → looks fee/dust related: confirm the tDUST pill is > 0 (Lace → Generate tDUST).`);
+    log(`[${name}] FAILED: ${parts} | ${detail}`);
+    if (/insufficient|dust|fee|balance/i.test(detail)) log(`  → looks fee/dust related: confirm the tDUST pill is > 0 (Lace → Generate tDUST).`);
   }
   renderRows();
   ($('export') as HTMLButtonElement).disabled = false;

@@ -15,9 +15,13 @@ const NETWORK_IDS: Record<string, string> = {
 };
 
 const { values } = parseArgs({
-  options: { network: { type: 'string', default: process.env.MIDNIGHT_NETWORK ?? 'preprod' } },
+  options: {
+    network: { type: 'string', default: process.env.MIDNIGHT_NETWORK ?? 'preprod' },
+    account: { type: 'string', default: '0' },
+  },
 });
 const net = String(values.network);
+const account = Number(values.account);
 const networkId = NETWORK_IDS[net] ?? net;
 
 const seed = process.env.MIDNIGHT_SEED;
@@ -26,7 +30,7 @@ if (!seed) throw new Error('MIDNIGHT_SEED not set in .env');
 const hd = HDWallet.fromSeed(Buffer.from(seed, 'hex'));
 if (hd.type !== 'seedOk') throw new Error('Bad HD seed');
 const result = hd.hdWallet
-  .selectAccount(0)
+  .selectAccount(account)
   .selectRoles([Roles.Zswap, Roles.NightExternal, Roles.Dust])
   .deriveKeysAt(0);
 if (result.type !== 'keysDerived') throw new Error('Key derivation failed');

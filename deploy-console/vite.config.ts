@@ -62,7 +62,14 @@ export default defineConfig({
     include: ['buffer', 'object-inspect'],
     esbuildOptions: { define: { global: 'globalThis' } },
   },
-  server: { port: 5173, host: '127.0.0.1', fs: { allow: ['..'] } },
+  server: {
+    port: 5173, host: '127.0.0.1', fs: { allow: ['..'] },
+    // Browser → same-origin /proof → local proof-server. Dodges CORS entirely and means only ONE
+    // port (5173) needs to be reachable over Tailscale (the proof-server stays loopback-only).
+    proxy: {
+      '/proof': { target: 'http://127.0.0.1:6300', changeOrigin: true, rewrite: (p) => p.replace(/^\/proof/, '') },
+    },
+  },
   // unminified + sourcemaps so runtime errors show real function/module names (debugging the seam)
   build: { target: 'esnext', minify: false, sourcemap: true },
 });

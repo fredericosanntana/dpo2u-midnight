@@ -13,3 +13,18 @@ build/
 compact/build/
 deployment-*.json
 midnight-level-db/
+
+# Runtime state (agent daemon + webhook) — regenerated at runtime, NEVER commit
+agent-queue.json
+agent-ledger.json
+agent-revenue.json
+webhook-attestations.json
+client-payment.json
+escrow-b-result.json
+wallet-checkpoint/
+evaluations/
+# webhook eval API key (secret)
+webhook/.key
+
+# Provenance: keep the live preview deploy record (public addrs, not secret)
+!deployment-preview.json

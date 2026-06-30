@@ -1,0 +1,107 @@
+pragma language_version >= 0.21.0;
+import CompactStandardLibrary;
+
+// DPO2U ComplianceEscrow — conditional compliance payment, gated on a real ZK attestation.
+//
+// Midnight-native port of the Stellar `attest_and_execute` / `deposit_funds` pattern
+// (anticorruption-attestation), which the Stellar `/app` ships only as a MOCK. Here it is a
+// LIVE on-chain state machine:
+//   createEscrow      — a payer locks an amount for a beneficiary, tied to a required use case.
+//   attestAndRelease  — ATOMIC: prove `score >= threshold` (score PRIVATE, ZK) AND release the
+//                       escrow to the beneficiary in one transaction. A failing score cannot be
+//                       proven, so the tx reverts and the escrow stays PENDING (no release).
+//   refundEscrow      — the payer reclaims a still-PENDING escrow (failed/abandoned attestation).
+//
+// SCORE PRIVACY: identical to ComplianceRegistry — `score` is never disclosed/written; only the
+// PASS verdict (status), the public threshold, the anti-replay context, and the settling
+// evidence_hash hit the ledger. Anti-replay context = H(org || jurisdiction || nonce), sealed once.
+//
+// HONEST SCOPE: `amount` is tracked as on-chain bookkeeping (like PaymentGateway/FeeDistributor),
+// NOT yet custodied as native NIGHT/DUST coins. The conditional LOGIC and the verdict gating are
+// real and on-chain; moving real token value in/out via Midnight contract-owned (Zswap) coins is
+// a follow-up (C2). Even so this exceeds the Stellar `/app` escrow, which is sample data with no
+// on-chain state at all.
+
+// status: 0 = PENDING, 1 = RELEASED (to beneficiary), 2 = REFUNDED (to payer)
+export ledger escrow_payers: Map<Bytes<32>, Bytes<32>>;        // escrow_id -> payer id
+export ledger escrow_beneficiaries: Map<Bytes<32>, Bytes<32>>; // escrow_id -> beneficiary id
+export ledger escrow_amounts: Map<Bytes<32>, Uint<16>>;        // escrow_id -> locked amount (bookkeeping; Uint<16> to match Counter.increment)
+export ledger escrow_use_cases: Map<Bytes<32>, Bytes<32>>;     // escrow_id -> required use_case_id
+export ledger escrow_status: Map<Bytes<32>, Uint<8>>;          // escrow_id -> status
+export ledger escrow_evidence: Map<Bytes<32>, Bytes<32>>;      // escrow_id -> settling evidence_hash
+export ledger used_contexts: Map<Bytes<32>, Uint<8>>;          // anti-replay (Set semantics; no Set type)
+export ledger escrow_count: Counter;
+export ledger released_count: Counter;
+export ledger refunded_count: Counter;
+export ledger total_released_amount: Counter;
+
+export circuit createEscrow(
+  escrow_id: Bytes<32>,
+  payer_id: Bytes<32>,
+  beneficiary_id: Bytes<32>,
+  amount: Uint<16>,
+  use_case_id: Bytes<32>
+): [] {
+  assert(!escrow_payers.member(disclose(escrow_id)), "Escrow already exists");
+  assert(amount > 0 as Uint<16>, "Amount must be greater than zero");
+  escrow_payers.insert(disclose(escrow_id), disclose(payer_id));
+  escrow_beneficiaries.insert(disclose(escrow_id), disclose(beneficiary_id));
+  escrow_amounts.insert(disclose(escrow_id), disclose(amount));
+  escrow_use_cases.insert(disclose(escrow_id), disclose(use_case_id));
+  escrow_status.insert(disclose(escrow_id), disclose(0 as Uint<8>));
+  escrow_count.increment(1);
+}
+
+// Atomic: ZK-prove the compliance predicate AND settle the escrow in one transaction.
+// `score` is a PRIVATE input — never disclosed, never written. A score below threshold cannot
+// satisfy the proof, so the whole tx reverts and the escrow stays PENDING (refundable).
+export circuit attestAndRelease(
+  escrow_id: Bytes<32>,
+  evidence_hash: Bytes<32>,
+  threshold: Uint<8>,
+  context: Bytes<32>,
+  score: Uint<8>
+): [] {
+  assert(escrow_payers.member(disclose(escrow_id)), "Unknown escrow");
+  assert(escrow_status.lookup(disclose(escrow_id)) == 0 as Uint<8>, "Escrow not pending");
+  assert(!used_contexts.member(disclose(context)), "Replay: context already used");
+  assert(score <= 100 as Uint<8>, "Invalid score, must be bounded 0-100%");
+  assert(score >= threshold, "Score below threshold");
+  used_contexts.insert(disclose(context), disclose(1 as Uint<8>));
+  escrow_status.insert(disclose(escrow_id), disclose(1 as Uint<8>));
+  escrow_evidence.insert(disclose(escrow_id), disclose(evidence_hash));
+  released_count.increment(1);
+  total_released_amount.increment(escrow_amounts.lookup(disclose(escrow_id)));
+}
+
+export circuit refundEscrow(escrow_id: Bytes<32>): [] {
+  assert(escrow_payers.member(disclose(escrow_id)), "Unknown escrow");
+  assert(escrow_status.lookup(disclose(escrow_id)) == 0 as Uint<8>, "Escrow not pending (already settled)");
+  escrow_status.insert(disclose(escrow_id), disclose(2 as Uint<8>));
+  refunded_count.increment(1);
+}
+
+export circuit getEscrowStatus(escrow_id: Bytes<32>): Uint<8> {
+  return escrow_status.lookup(disclose(escrow_id));
+}
+export circuit getEscrowAmount(escrow_id: Bytes<32>): Uint<16> {
+  return escrow_amounts.lookup(disclose(escrow_id));
+}
+export circuit getEscrowBeneficiary(escrow_id: Bytes<32>): Bytes<32> {
+  return escrow_beneficiaries.lookup(disclose(escrow_id));
+}
+export circuit getEscrowEvidence(escrow_id: Bytes<32>): Bytes<32> {
+  return escrow_evidence.lookup(disclose(escrow_id));
+}
+export circuit getEscrowCount(): Uint<64> {
+  return escrow_count;
+}
+export circuit getReleasedCount(): Uint<64> {
+  return released_count;
+}
+export circuit getRefundedCount(): Uint<64> {
+  return refunded_count;
+}
+export circuit getTotalReleased(): Uint<64> {
+  return total_released_amount;
+}
