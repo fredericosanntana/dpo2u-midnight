@@ -27,10 +27,16 @@ const BIND = process.env.WEBHOOK_BIND || '127.0.0.1'; // set to the proxy-net ga
 const BASE = process.env.WEBHOOK_BASE_URL || `http://localhost:${PORT}`;
 const USE_CASE = 'github_compliance_v1';
 
+// Shared token for the internal POST /enqueue bridge (e.g. the Stellar pilot-gateway's midnight
+// driver enqueuing a managed-pipeline seal). Optional: if unset, /enqueue is accepted from the
+// private proxy-net interface without a token (the bind is 172.18.0.1, not public).
+const ENQUEUE_TOKEN = process.env.MIDNIGHT_ENQUEUE_TOKEN || '';
+
 const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
 const readJSON = (p, d) => { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return d; } };
 const writeJSON = (p, v) => fs.writeFileSync(p, JSON.stringify(v, null, 2));
 const VLABEL = { 1: 'PASS', 0: 'FAIL', 2: 'REVIEW' };
+const VNUM = { PASS: 1, FAIL: 0, REVIEW: 2 }; // verdict string -> ledger numeric
 
 function verifySig(body, sig) {
   if (!SECRET) return true; // dev: no secret configured
@@ -158,9 +164,47 @@ setInterval(() => {
   if (changed) writeJSON(RECORDS, recs);
 }, 20000);
 
+// Internal bridge: enqueue a managed/use-case seal for the warm daemon WITHOUT a GitHub payload.
+// Used by the Stellar pilot-gateway's midnight driver (chain=midnight) so a repo bound to Midnight
+// gets sealed via the existing GitHub App + this same queue + public /verify surface.
+// Body: { use_case_id?, verdict (PASS|FAIL|REVIEW|0|1|2), evidence_hash, metadata_hash?, org?,
+// jurisdiction?, commit?, score?, engine? }. Auth: Bearer MIDNIGHT_ENQUEUE_TOKEN if configured.
+function handleEnqueue(req, res, body) {
+  if (ENQUEUE_TOKEN) {
+    const auth = String(req.headers['authorization'] || '').replace(/^Bearer\s+/i, '');
+    if (auth !== ENQUEUE_TOKEN) { res.writeHead(401); return res.end('bad token'); }
+  }
+  let ev; try { ev = JSON.parse(body); } catch { res.writeHead(400); return res.end('bad json'); }
+  const evidence_hash = String(ev.evidence_hash || '').toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(evidence_hash)) { res.writeHead(400); return res.end('evidence_hash must be 64-hex'); }
+  const use_case_id = ev.use_case_id || 'managed_compliance_v1';
+  const verdict = typeof ev.verdict === 'number' ? ev.verdict : (VNUM[String(ev.verdict).toUpperCase()] ?? 1);
+  const mh = String(ev.metadata_hash || '').toLowerCase();
+  const metadata_hash = /^[0-9a-f]{64}$/.test(mh) ? mh : evidence_hash;
+  const org = ev.org || 'managed';
+  const jurisdiction = ev.jurisdiction || 'GLOBAL';
+
+  const q = readJSON(QUEUE, []);
+  q.push({ type: 'use_case', use_case_id, verdict, evidence_hash, metadata_hash, org, jurisdiction });
+  writeJSON(QUEUE, q);
+  const recs = readJSON(RECORDS, []);
+  recs.push({ owner: (org.split('/')[0] || org), repo: (org.split('/')[1] || ''), sha: ev.commit || '', pr: ev.pr || null,
+    event: 'enqueue', evidence_hash, use_case_id, verdict, score: ev.score ?? null, engine: ev.engine || 'pilot-gateway',
+    at: new Date().toISOString(), state: 'pending' });
+  writeJSON(RECORDS, recs);
+
+  const verifyUrl = `${BASE}/verify/${use_case_id}/${evidence_hash}`;
+  console.log(`[enqueue] ${org}@${String(ev.commit || '').slice(0, 7)} ${use_case_id} verdict ${VLABEL[verdict]} → ${evidence_hash.slice(0, 12)}…`);
+  res.writeHead(202, { 'content-type': 'application/json' });
+  res.end(JSON.stringify({ enqueued: true, evidence_hash, verify: verifyUrl }));
+}
+
 const server = http.createServer((req, res) => {
   if (req.method === 'POST' && req.url === '/webhook/github') {
     let body = ''; req.on('data', (c) => (body += c)); req.on('end', () => handleWebhook(req, res, body)); return;
+  }
+  if (req.method === 'POST' && req.url === '/enqueue') {
+    let body = ''; req.on('data', (c) => (body += c)); req.on('end', () => handleEnqueue(req, res, body)); return;
   }
   if (req.method === 'GET' && req.url.startsWith('/verify/')) {
     const parts = req.url.split('?')[0].split('/'); // ['', 'verify', uc, hash]
