@@ -93,3 +93,33 @@ export circuit getUseCaseVerdict(evidence_hash: Bytes<32>): Uint<8> {
 export circuit getUseCaseAttestationCount(): Uint<64> {
   return usecase_attestation_count;
 }
+
+// ── DPO2U Paymaster (increment): sponsored-attestation metering ──
+// When the controller sponsors a big-player's attestation (pays the DUST fee via
+// balanceUnboundTransaction on the controller's own dust key — see scripts/dust-relay.ts),
+// this meters the usage against the big-player ("sponsor" = the paying customer) so the
+// service can bill for capacity. No PII on-chain — only opaque ids + counts.
+export ledger sponsored_usage: Map<Bytes<32>, Uint<64>>;   // sponsor_id -> count of sponsored txs
+export ledger sponsor_agent: Map<Bytes<32>, Bytes<32>>;    // sponsor_id -> DID of the agent that served it
+export ledger sponsored_total: Counter;                    // total sponsored attestations
+
+export circuit recordSponsoredAttestation(agent_did: Bytes<32>, sponsor: Bytes<32>): [] {
+  const prev = sponsored_usage.member(disclose(sponsor))
+    ? sponsored_usage.lookup(disclose(sponsor))
+    : 0 as Uint<64>;
+  sponsored_usage.insert(disclose(sponsor), disclose(prev + 1 as Uint<64>));
+  sponsor_agent.insert(disclose(sponsor), disclose(agent_did));
+  sponsored_total.increment(1);
+}
+
+export circuit getSponsoredUsage(sponsor: Bytes<32>): Uint<64> {
+  if (sponsored_usage.member(disclose(sponsor))) {
+    return sponsored_usage.lookup(disclose(sponsor));
+  } else {
+    return 0 as Uint<64>;
+  }
+}
+
+export circuit getSponsoredTotal(): Uint<64> {
+  return sponsored_total;
+}

@@ -21,3 +21,38 @@ export circuit getTreasuryBalance(): Uint<64> {
 export circuit getTotalStaked(): Uint<64> {
   return total_staked_night;
 }
+
+// ── DPO2U Paymaster (increment): non-custodial DUST-generation delegation ──
+// A NIGHT holder redirects the DUST their NIGHT generates to the controller's dust
+// address (registerNightUtxosForDustGeneration(..., controllerDustAddress) at the wallet
+// layer). The NIGHT NEVER leaves the holder's custody and delegation is revocable — this
+// ledger only records the delegated capacity so LP revenue shares are auditable on-chain.
+export ledger delegated_night: Map<Bytes<32>, Uint<64>>;   // holder_id -> NIGHT delegated (STAR units)
+export ledger delegator_count: Counter;                    // distinct holders currently delegating
+
+export circuit registerDustDelegation(holder: Bytes<32>, night_amount: Uint<64>): [] {
+  assert(night_amount > 0 as Uint<64>, "Delegation must be greater than zero");
+  if (!delegated_night.member(disclose(holder))) {
+    delegator_count.increment(1);
+  }
+  delegated_night.insert(disclose(holder), disclose(night_amount));
+}
+
+// Revocation (mirrors deregisterFromDustGeneration at the wallet layer). Sets the recorded
+// capacity to zero; the holder keeps their NIGHT throughout.
+export circuit revokeDustDelegation(holder: Bytes<32>): [] {
+  assert(delegated_night.member(disclose(holder)), "No active delegation for holder");
+  delegated_night.insert(disclose(holder), disclose(0 as Uint<64>));
+}
+
+export circuit getDelegatedNight(holder: Bytes<32>): Uint<64> {
+  if (delegated_night.member(disclose(holder))) {
+    return delegated_night.lookup(disclose(holder));
+  } else {
+    return 0 as Uint<64>;
+  }
+}
+
+export circuit getDelegatorCount(): Uint<64> {
+  return delegator_count;
+}

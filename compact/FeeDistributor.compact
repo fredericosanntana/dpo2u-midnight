@@ -30,3 +30,40 @@ export circuit getAuditorPool(): Uint<64> {
 export circuit getTotalDistributed(): Uint<64> {
   return total_distributed;
 }
+
+// ── DPO2U Paymaster (increment): LP revenue-share accounting ──
+// Big-players pay for sponsored capacity (NIGHT/USDC — the value-in / EARN leg is proven
+// separately, off this contract). This books the paymaster revenue into an LP pool and
+// accrues each delegating holder's (LP's) share so payouts are auditable. Structured as a
+// service revenue-share, NOT an investment return (see docs/PAYMASTER-DESIGN.md legal note).
+export ledger lp_pool: Counter;                            // total paymaster revenue booked for LPs
+export ledger lp_shares: Map<Bytes<32>, Uint<64>>;         // lp_id -> accrued revenue share
+export ledger lp_count: Counter;                           // distinct LPs that have accrued a share
+
+export circuit recordLpRevenue(lp_address: Bytes<32>, amount: Uint<16>): [] {
+  assert(amount > 0 as Uint<16>, "LP revenue must be greater than zero");
+  const prev = lp_shares.member(disclose(lp_address))
+    ? lp_shares.lookup(disclose(lp_address))
+    : 0 as Uint<64>;
+  if (prev == 0 as Uint<64>) {
+    lp_count.increment(1);
+  }
+  lp_shares.insert(disclose(lp_address), disclose((prev + (amount as Uint<64>)) as Uint<64>));
+  lp_pool.increment(disclose(amount));
+}
+
+export circuit getLpShare(lp_address: Bytes<32>): Uint<64> {
+  if (lp_shares.member(disclose(lp_address))) {
+    return lp_shares.lookup(disclose(lp_address));
+  } else {
+    return 0 as Uint<64>;
+  }
+}
+
+export circuit getLpPool(): Uint<64> {
+  return lp_pool;
+}
+
+export circuit getLpCount(): Uint<64> {
+  return lp_count;
+}
