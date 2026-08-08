@@ -1,44 +1,30 @@
-/**
- * Registro de Agentes DPO2U (Arquitetura Compact/Midnight)
- * Gerencia ciclo de vida de agentes: registro, desativacao, rastreamento de tarefas.
- * Ownership via comparacao de hash da secret_key com agent_owner_hash armazenado.
- * A secret_key NUNCA e exposta no ledger publico — apenas seu hash.
- */
-pragma language_version >= 0.19;
+pragma language_version >= 0.21.0;
 import CompactStandardLibrary;
 
-export ledger agent_owner_hash: Bytes<32>;
-export ledger agent_did: Bytes<32>;
-export ledger agent_active: Uint<64>;
-export ledger registered_at: Uint<64>;
-export ledger task_count: Uint<64>;
+export ledger agent_count: Counter;
+export ledger agent_statuses: Map<Bytes<32>, Uint<8>>;
+export ledger agent_roles: Map<Bytes<32>, Bytes<32>>;
 
-// Funcao interna para derivar o hash da chave
-circuit hash_key(secret_key: Bytes<32>): Bytes<32> {
-  return persistentHash<Bytes<32>>(secret_key);
+export circuit registerAgent(
+  agent_did: Bytes<32>,
+  role: Bytes<32>
+): [] {
+  agent_statuses.insert(disclose(agent_did), disclose(1 as Uint<8>));
+  agent_roles.insert(disclose(agent_did), disclose(role));
+  agent_count.increment(1);
 }
 
-export circuit registerAgent(secret_key: Bytes<32>, did: Bytes<32>, block_height: Uint<64>): [] {
-  // Armazenar apenas o HASH da chave secreta, nunca a chave em si
-  agent_owner_hash = disclose(hash_key(secret_key));
-  agent_did = disclose(did);
-  agent_active = disclose(1);
-  registered_at = disclose(block_height);
-  task_count = disclose(0);
+export circuit deactivateAgent(
+  agent_did: Bytes<32>
+): [] {
+  assert(agent_statuses.member(disclose(agent_did)), "Agent not registered");
+  agent_statuses.insert(disclose(agent_did), disclose(0 as Uint<8>));
 }
 
-export circuit deactivateAgent(secret_key: Bytes<32>): [] {
-  assert(hash_key(secret_key) == agent_owner_hash, "Only owner can deactivate agent");
-  assert(agent_active == 1, "Agent must be active");
-  agent_active = disclose(0);
+export circuit isActive(agent_did: Bytes<32>): Uint<8> {
+  return agent_statuses.lookup(disclose(agent_did));
 }
 
-export circuit recordTask(secret_key: Bytes<32>): [] {
-  assert(hash_key(secret_key) == agent_owner_hash, "Only owner can record tasks");
-  assert(agent_active == 1, "Agent must be active");
-  task_count = disclose((task_count + 1) as Uint<64>);
-}
-
-export circuit verifyAgent(): Uint<64> {
-  return agent_active;
+export circuit getAgentCount(): Uint<64> {
+  return agent_count;
 }

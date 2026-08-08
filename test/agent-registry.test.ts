@@ -1,7 +1,14 @@
+/**
+ * AgentRegistry — DID + role registry (Map/role API).
+ *
+ * Rewritten for the consolidated contract (was a single-agent owner_secret_key model
+ * with agent_active/registered_at/task_count). The new contract is a multi-agent
+ * Map<did,status> + Map<did,role> registry.
+ */
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
 import { createCircuitContext, dummyContractAddress } from '@midnight-ntwrk/compact-runtime';
-import { Contract, ledger } from '../compact/build/agent-registry/contract/index.js';
+import { Contract, ledger } from '../build/AgentRegistry/contract/index.js';
 
 function padTo32Bytes(str: string): Uint8Array {
   const buf = Buffer.alloc(32);
@@ -25,70 +32,43 @@ function setup() {
   return { contract, ctx };
 }
 
-describe('AgentRegistry', () => {
-  it('should register an agent and update ledger state', () => {
+const DID = padTo32Bytes('did:midnight:agent:42');
+const ROLE = padTo32Bytes('role:compliance-attestor');
+
+describe('AgentRegistry (DID + role)', () => {
+  it('registers an agent active with role and increments count', () => {
     const { contract, ctx } = setup();
-    const secretKey = padTo32Bytes('owner_secret_key_001');
-    const did = padTo32Bytes('did:midnight:agent:42');
-
-    const { context } = contract.circuits.registerAgent(ctx, secretKey, did, 100n);
-
-    const postLedger = ledger(context.currentQueryContext.state);
-    assert.equal(postLedger.agent_active, 1n);
-    assert.equal(postLedger.registered_at, 100n);
-    assert.equal(postLedger.task_count, 0n);
+    const { context } = contract.circuits.registerAgent(ctx, DID, ROLE);
+    const L = ledger(context.currentQueryContext.state);
+    assert.equal(L.agent_statuses.lookup(DID), 1n);
+    assert.equal(L.agent_count, 1n);
   });
 
-  it('should reject deactivation with wrong key', () => {
+  it('isActive returns 1 for a registered agent', () => {
     const { contract, ctx } = setup();
-    const secretKey = padTo32Bytes('owner_secret_key_001');
-    const wrongKey = padTo32Bytes('wrong_key_999');
-    const did = padTo32Bytes('did:midnight:agent:42');
+    const { context } = contract.circuits.registerAgent(ctx, DID, ROLE);
+    assert.equal(contract.circuits.isActive(context, DID).result, 1n);
+  });
 
-    const { context } = contract.circuits.registerAgent(ctx, secretKey, did, 100n);
+  it('deactivateAgent sets status to 0', () => {
+    const { contract, ctx } = setup();
+    const { context: c2 } = contract.circuits.registerAgent(ctx, DID, ROLE);
+    const { context: c3 } = contract.circuits.deactivateAgent(c2, DID);
+    assert.equal(ledger(c3.currentQueryContext.state).agent_statuses.lookup(DID), 0n);
+  });
 
+  it('rejects deactivating an unregistered agent', () => {
+    const { contract, ctx } = setup();
     assert.throws(
-      () => { contract.circuits.deactivateAgent(context, wrongKey); },
-      /Only owner/,
+      () => contract.circuits.deactivateAgent(ctx, padTo32Bytes('did:unknown')),
+      /Agent not registered/,
     );
   });
 
-  it('should deactivate agent with correct key', () => {
+  it('counts multiple distinct agents', () => {
     const { contract, ctx } = setup();
-    const secretKey = padTo32Bytes('owner_secret_key_001');
-    const did = padTo32Bytes('did:midnight:agent:42');
-
-    const { context: ctx2 } = contract.circuits.registerAgent(ctx, secretKey, did, 100n);
-    const { context: ctx3 } = contract.circuits.deactivateAgent(ctx2, secretKey);
-
-    const postLedger = ledger(ctx3.currentQueryContext.state);
-    assert.equal(postLedger.agent_active, 0n);
-  });
-
-  it('should record tasks and increment task_count', () => {
-    const { contract, ctx } = setup();
-    const secretKey = padTo32Bytes('owner_secret_key_001');
-    const did = padTo32Bytes('did:midnight:agent:42');
-
-    const { context: ctx2 } = contract.circuits.registerAgent(ctx, secretKey, did, 50n);
-    const { context: ctx3 } = contract.circuits.recordTask(ctx2, secretKey);
-    const { context: ctx4 } = contract.circuits.recordTask(ctx3, secretKey);
-
-    const postLedger = ledger(ctx4.currentQueryContext.state);
-    assert.equal(postLedger.task_count, 2n);
-  });
-
-  it('should reject recordTask on inactive agent', () => {
-    const { contract, ctx } = setup();
-    const secretKey = padTo32Bytes('owner_secret_key_001');
-    const did = padTo32Bytes('did:midnight:agent:42');
-
-    const { context: ctx2 } = contract.circuits.registerAgent(ctx, secretKey, did, 50n);
-    const { context: ctx3 } = contract.circuits.deactivateAgent(ctx2, secretKey);
-
-    assert.throws(
-      () => { contract.circuits.recordTask(ctx3, secretKey); },
-      /Agent must be active/,
-    );
+    const { context: c2 } = contract.circuits.registerAgent(ctx, DID, ROLE);
+    const { context: c3 } = contract.circuits.registerAgent(c2, padTo32Bytes('did:midnight:agent:43'), ROLE);
+    assert.equal(contract.circuits.getAgentCount(c3).result, 2n);
   });
 });

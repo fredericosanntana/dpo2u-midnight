@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DPO2U — Pitch (Dust Comply)</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,900;1,9..144,500;1,9..144,900&family=Inter+Tight:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+    :root {
+      --ink: #0c0d10;
+      --ink-soft: #2a2722;
+      --paper: #f1ece3;
+      --paper2: #e8e1d4;
+      --terracotta: #c85c3b;
+      --terracotta-deep: #b34e30;
+      --gold: #b08a3e;
+      --verdigris: #4a7c74;
+      --concrete: #5e5e55;
+      --indigo: #1e3a8f;
+      --rule: rgba(12,13,16,0.14);
+      --rule-strong: rgba(12,13,16,0.30);
+      --rule-ink: rgba(241,236,227,0.16);
+
+      --font-display: 'Fraunces', Georgia, 'Times New Roman', serif;
+      --font-body: 'Inter Tight', system-ui, -apple-system, sans-serif;
+      --font-mono: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; background: var(--paper); color: var(--ink); }
+    .deck { width: 100vw; height: 100vh; position: relative; overflow: hidden; }
+
+    .slide {
+      position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center;
+      padding: 70px 96px; opacity: 0; pointer-events: none;
+      transition: opacity 0.5s var(--ease-out); font-family: var(--font-body);
+      background: var(--paper); color: var(--ink);
+    }
+    .slide.paper2 { background: var(--paper2); }
+    .slide.ink { background: var(--ink); color: var(--paper); }
+    .slide.active { opacity: 1; pointer-events: auto; }
+    .slide.active .a { animation: rise 0.6s var(--ease-out) both; }
+    .slide.active .a:nth-child(1){animation-delay:0s}
+    .slide.active .a:nth-child(2){animation-delay:.08s}
+    .slide.active .a:nth-child(3){animation-delay:.16s}
+    .slide.active .a:nth-child(4){animation-delay:.24s}
+    .slide.active .a:nth-child(5){animation-delay:.32s}
+    .slide.active .a:nth-child(6){animation-delay:.40s}
+    @keyframes rise { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+
+    /* Typography — Fraunces display, Inter Tight body */
+    .kicker { font-family: var(--font-mono); font-size: 16px; letter-spacing: 3px; text-transform: uppercase; color: var(--terracotta); font-weight: 500; }
+    .ink .kicker { color: var(--gold); }
+    .display { font-family: var(--font-display); font-weight: 900; letter-spacing: -1.5px; line-height: 1.02; }
+    .hero { font-size: 108px; }
+    .h1 { font-size: 62px; }
+    .h2 { font-size: 44px; }
+    .num { font-family: var(--font-display); font-weight: 900; font-size: 168px; line-height: 0.9; letter-spacing: -4px; color: var(--terracotta); }
+    .em { font-style: italic; color: var(--terracotta); font-weight: 900; }
+    .ink .em { color: var(--gold); }
+    .body { font-family: var(--font-body); font-size: 27px; line-height: 1.5; color: var(--ink-soft); font-weight: 400; }
+    .ink .body { color: rgba(241,236,227,0.82); }
+    .small { font-family: var(--font-body); font-size: 21px; line-height: 1.5; color: var(--concrete); }
+    .ink .small { color: rgba(241,236,227,0.6); }
+    .mono { font-family: var(--font-mono); }
+    .lede { max-width: 1020px; }
+
+    .rule { width: 72px; height: 3px; background: var(--terracotta); margin: 26px 0; border-radius: 2px; }
+    .ink .rule { background: var(--gold); }
+
+    /* Wax seal motif */
+    .wax { width: 118px; height: 118px; border-radius: 50%; position: relative;
+      background: radial-gradient(circle at 38% 34%, #db7a54 0%, #c85c3b 46%, #b34e30 100%);
+      box-shadow: 0 10px 26px rgba(179,78,48,0.38), inset 0 3px 9px rgba(255,255,255,0.28), inset 0 -8px 14px rgba(0,0,0,0.28);
+      display: flex; align-items: center; justify-content: center; }
+    .wax::before { content: ''; position: absolute; inset: 11px; border: 2px solid rgba(241,236,227,0.4); border-radius: 50%; }
+    .wax span { font-family: var(--font-display); font-weight: 900; font-size: 34px; color: #f4ecdf; }
+
+    .owl { width: 74px; height: 74px; }
+    .owl-sm { width: 52px; height: 52px; }
+
+    .row { display: flex; align-items: center; }
+    .between { justify-content: space-between; }
+    .gap-lg { gap: 40px; } .gap-md { gap: 24px; } .gap-xl { gap: 64px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 26px; }
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; }
+
+    .metric { font-family: var(--font-display); font-weight: 900; font-size: 60px; line-height: 1; color: var(--ink); letter-spacing: -2px; }
+    .ink .metric { color: var(--paper); }
+    .metric.terra { color: var(--terracotta); }
+    .metric.verd { color: var(--verdigris); }
+    .metric-l { font-family: var(--font-mono); font-size: 15px; letter-spacing: 2px; text-transform: uppercase; color: var(--concrete); margin-top: 8px; }
+
+    .card { border: 1px solid var(--rule); border-radius: 4px; padding: 30px; background: rgba(255,255,255,0.35); }
+    .paper2 .card { background: rgba(255,255,255,0.4); }
+    .ink .card { border-color: var(--rule-ink); background: rgba(241,236,227,0.05); }
+    .tag { font-family: var(--font-mono); font-size: 14px; letter-spacing: 2px; text-transform: uppercase; padding: 4px 12px; border-radius: 3px; display: inline-block; }
+    .tag-free { background: rgba(74,124,116,0.16); color: var(--verdigris); }
+    .tag-paid { background: rgba(200,92,59,0.14); color: var(--terracotta); }
+
+    .seal-list { list-style: none; }
+    .seal-list li { position: relative; padding: 12px 0 12px 40px; font-size: 26px; color: var(--ink-soft); border-bottom: 1px solid var(--rule); }
+    .ink .seal-list li { color: rgba(241,236,227,0.82); border-color: var(--rule-ink); }
+    .seal-list li:last-child { border-bottom: none; }
+    .seal-list li::before { content: ''; position: absolute; left: 0; top: 50%; transform: translateY(-50%);
+      width: 16px; height: 16px; border-radius: 50%;
+      background: radial-gradient(circle at 38% 34%, #db7a54, #c85c3b 60%, #b34e30); }
+
+    /* footer wordmark */
+    .foot { font-family: var(--font-mono); font-size: 15px; letter-spacing: 2px; color: var(--concrete); }
+    .ink .foot { color: rgba(241,236,227,0.5); }
+
+    /* nav + notes */
+    .nav-bar { position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 14px 36px; z-index: 100; opacity: 0; transition: opacity 0.3s; }
+    .deck:hover .nav-bar { opacity: 1; }
+    .nav-counter { font-family: var(--font-mono); font-size: 14px; color: var(--concrete); }
+    .nav-progress { flex: 1; max-width: 180px; height: 2px; background: var(--rule); margin: 0 20px; }
+    .nav-progress-fill { height: 100%; background: var(--terracotta); transition: width 0.3s var(--ease-out); }
+    .nav-btn { background: none; border: 1px solid var(--rule-strong); color: var(--ink-soft); padding: 7px 14px; border-radius: 3px; cursor: pointer; font-family: var(--font-mono); font-size: 13px; }
+    .notes { display: none; position: fixed; bottom: 54px; left: 36px; right: 36px; background: rgba(12,13,16,0.94); color: #e8e1d4; border-radius: 8px; padding: 18px 22px; font-family: var(--font-body); font-size: 16px; line-height: 1.6; z-index: 200; max-height: 220px; overflow-y: auto; }
+    .notes.visible { display: block; }
+    .notes b { color: var(--gold); font-weight: 600; letter-spacing: 1px; text-transform: uppercase; font-size: 12px; }
+
+    @media print {
+      @page { size: 1280px 720px; margin: 0; }
+      html, body { height: auto !important; overflow: visible !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      .deck { height: auto !important; overflow: visible !important; }
+      .slide { position: relative !important; inset: auto !important; opacity: 1 !important; pointer-events: auto; page-break-after: always; break-inside: avoid; width: 1280px; height: 720px; }
+      .slide:last-of-type { page-break-after: auto; }
+      .nav-bar, .notes { display: none !important; }
+      .a { animation: none !important; opacity: 1 !important; transform: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="deck" id="deck">
+
+    <!-- 1 · INK · title -->
+    <div class="slide ink">
+      <div class="row between a" style="align-items:flex-start;">
+        <img class="owl" src="assets/strix-owl-dark.png" alt="Strix owl">
+        <span class="kicker">Academic research → live protocol</span>
+      </div>
+      <div class="a" style="margin-top:auto;">
+        <div class="kicker" style="margin-bottom:18px;">DPO2U</div>
+        <h1 class="display hero">This is <span class="em">DPO2U.</span></h1>
+        <div class="body lede" style="margin-top:22px;">The HTTPS of compliance — for Web2, Web3, and the agent economy.</div>
+      </div>
+      <div class="row between a" style="margin-top:auto; align-items:flex-end;">
+        <span class="foot">Frederico Santana · DPO2U</span>
+        <div class="wax"><span>✦</span></div>
+      </div>
+      <div class="notes"><b>Beat 1</b> Hello everyone. The research behind what you're about to see started as an academic study and is now a live protocol. This is DPO2U.</div>
+    </div>
+
+    <!-- 2 · PAPER · founder -->
+    <div class="slide">
+      <span class="kicker a">Founder</span>
+      <h1 class="display h1 a" style="margin-top:16px;">Frederico Santana.</h1>
+      <div class="rule a"></div>
+      <div class="body lede a">Specialist in Compliance &amp; Data Protection. Master's in Law, Technology &amp; Innovation, <span class="em">FGV.</span> A decade studying the technological mechanisms of cooperation — DPO2U is the practical outcome.</div>
+      <div class="notes"><b>Beat 2</b> I'm Frederico Santana, a specialist in Compliance and Data Protection with a Master's in Law, Technology, and Innovation from FGV. For a decade I've studied technological mechanisms for cooperation — DPO2U is the practical outcome of that research.</div>
+    </div>
+
+    <!-- 3 · INK · the fine -->
+    <div class="slide ink">
+      <span class="kicker a">The cost of theater</span>
+      <div class="num a" style="margin-top:20px;">€1.2B</div>
+      <div class="body lede a" style="margin-top:24px;">Meta's 2023 privacy fines — with a full compliance program, a named DPO, and a mountain of PDFs. <span class="em">The PDF stopped nothing.</span></div>
+      <div class="small a" style="margin-top:18px;">Compliance today is theater: documents nobody reads, proving nothing.</div>
+      <div class="notes"><b>Beat 3</b> One point two billion euros — what Meta paid in privacy fines in 2023, with a full program, a named DPO, a mountain of PDFs. The PDF stopped nothing. Compliance today is theater: documents nobody reads, proving nothing.</div>
+    </div>
+
+    <!-- 4 · PAPER · wax seal origin -->
+    <div class="slide">
+      <div class="row between gap-xl" style="align-items:center;">
+        <div style="flex:1;">
+          <span class="kicker a">Origin</span>
+          <h1 class="display h1 a" style="margin-top:16px;">Compliance was born<br>as a <span class="em">wax seal.</span></h1>
+          <div class="rule a"></div>
+          <div class="body a" style="max-width:640px;">A thousand years binding, the moment hot wax met paper. Demonstrable. Unforgeable. Verifiable by anyone. We digitized everything — and lost the seal.</div>
+        </div>
+        <div class="a"><div class="wax" style="width:200px;height:200px;"><span style="font-size:56px;">✦</span></div></div>
+      </div>
+      <div class="notes"><b>Beat 4</b> Compliance was born as a wax seal. For a thousand years an act became binding the moment hot wax met paper — demonstrable, unforgeable, verifiable by anyone who could see it. We digitized everything, and we lost the seal.</div>
+    </div>
+
+    <!-- 5 · PAPER2 · theater today -->
+    <div class="slide paper2">
+      <span class="kicker a">Today</span>
+      <h1 class="display h1 a" style="margin-top:16px;">Compliance is <span class="em">theater.</span></h1>
+      <div class="rule a"></div>
+      <div class="body lede a">PDFs no one reads. Spreadsheets no one opens. And when proof is required, companies are forced to hand sensitive data to third parties.</div>
+      <div class="notes"><b>Beat 5</b> Today, compliance is theater. PDFs no one reads, spreadsheets no one accesses. And when proof is required, companies are forced to share sensitive data with third parties.</div>
+    </div>
+
+    <!-- 6 · INK · the trap -->
+    <div class="slide ink">
+      <span class="kicker a">The trap</span>
+      <h1 class="display h1 a" style="margin-top:18px; font-size:70px;">Prove, and you <span class="em">violate.</span><br>Protect, and you <span class="em">can't prove.</span></h1>
+      <div class="rule a"></div>
+      <div class="body lede a">Proving means exposing customer data — and that collides head-on with LGPD.</div>
+      <div class="notes"><b>Beat 6</b> Proving means exposing customer data — and that collides head-on with LGPD. Prove, and you violate. Protect, and you can't prove.</div>
+    </div>
+
+    <!-- 7 · PAPER · the break -->
+    <div class="slide">
+      <span class="kicker a">The break</span>
+      <h1 class="display h1 a" style="margin-top:16px;">The score stays <span class="em">private.</span><br>The proof is <span style="font-style:italic;color:var(--verdigris);font-weight:900;">public.</span></h1>
+      <div class="rule a"></div>
+      <div class="body lede a">DPO2U breaks the trap. One API call generates a zero-knowledge attestation, sealed on Stellar. <span class="em">The regulator doesn't believe — it verifies.</span></div>
+      <div class="notes"><b>Beat 7</b> DPO2U breaks the trap. The score stays private. The proof is public. One API call generates a zero-knowledge attestation, sealed on Stellar. The regulator doesn't believe — it verifies.</div>
+    </div>
+
+    <!-- 8 · INK · law into code + Dust Comply (adapted) -->
+    <div class="slide ink">
+      <span class="kicker a">Law into code · Dust Comply</span>
+      <h1 class="display h1 a" style="margin-top:16px;">Rules become circuits.<br>The seal <span class="em">funds itself.</span></h1>
+      <div class="rule a"></div>
+      <div class="body lede a">An MCP that turns law into code. On Midnight, our self-funding agent is live — and now a paymaster: holders delegate idle DUST, <span class="em">keeping custody</span>, and DPO2U seals compliance for any dApp, free. We call it <span class="em">Dust Comply</span> — the ecosystem's accumulated DUST, managed to confer compliance.</div>
+      <div class="notes"><b>Beat 8 · adapted</b> We are an MCP that transforms law into code. Rules become circuits, evidence becomes on-chain attestations, audits become real-time cryptographic verification. On Midnight, DPO2U's self-funding agent is live: it stakes NIGHT, consumes DUST, seals with selective disclosure. We turned it into a paymaster — Dust Comply. NIGHT holders delegate idle DUST, keeping custody, and DPO2U seals compliance for any dApp, free. The ecosystem's accumulated DUST, managed by DPO2U to confer compliance.</div>
+    </div>
+
+    <!-- 9 · PAPER · coverage -->
+    <div class="slide">
+      <span class="kicker a">Coverage</span>
+      <div class="grid-3 a" style="margin-top:22px;">
+        <div><div class="metric terra">24</div><div class="metric-l">jurisdictions</div></div>
+        <div><div class="metric">67</div><div class="metric-l">countries</div></div>
+        <div><div class="metric verd">both</div><div class="metric-l">regimes sealed</div></div>
+      </div>
+      <div class="rule a" style="margin-top:34px;"></div>
+      <div class="body lede a">Privacy regimes and AI governance. Accessible via any wallet, smart contract, or AI agent. The only protocol that seals both — <span class="em">enabling regulated, institutional real-world assets.</span></div>
+      <div class="notes"><b>Beat 9</b> We operate across 24 jurisdictions, serving 67 countries, spanning privacy regimes and AI governance frameworks. Accessible via any wallet, smart contract, or AI agent. We are the only protocol that seals both regimes, enabling regulated, institutional real-world assets.</div>
+    </div>
+
+    <!-- 10 · PAPER2 · model (adapted) -->
+    <div class="slide paper2">
+      <span class="kicker a">The model</span>
+      <h1 class="display h1 a" style="margin-top:14px;">Free to adopt. <span class="em">Paid at scale.</span></h1>
+      <div class="grid-2 a" style="margin-top:26px;">
+        <div class="card"><span class="tag tag-free">Free · dApps</span><div class="h2 display" style="font-size:30px;margin-top:14px;">The adoption moat.</div><div class="small" style="margin-top:8px;">Any dApp seals compliance at zero cost — that's how a protocol wins.</div></div>
+        <div class="card"><span class="tag tag-paid">Paid · big players</span><div class="h2 display" style="font-size:30px;margin-top:14px;">Compliant DUST capacity.</div><div class="small" style="margin-top:8px;">Institutions, RWA issuers, high-volume agents pay to tap the pool — gated by the seal.</div></div>
+      </div>
+      <div class="small a" style="margin-top:22px;">$23B market today → <span class="em" style="font-style:normal;">$105B by 2034</span> · three tiers · software margins &gt;80% · a fraction of consulting cost.</div>
+      <div class="notes"><b>Beat 10 · adapted</b> Compliance at the speed of software, not the speed of legal. A $23B market today, $105B by 2034. The model is freemium: compliance is free for dApps — how a protocol wins adoption. The revenue is the big players — institutions, RWA issuers, high-volume agents — who pay to tap DPO2U's compliant DUST capacity, with the seal as the gate. Three tiers, software margins above 80%, a fraction of consulting cost.</div>
+    </div>
+
+    <!-- 11 · INK · both regimes / capacity layer (adapted) -->
+    <div class="slide ink">
+      <span class="kicker a">One protocol, both regimes</span>
+      <h1 class="display h1 a" style="margin-top:16px;">The trust <span class="em">and capacity</span> layer.</h1>
+      <div class="rule a"></div>
+      <div class="body lede a">Today's regulated markets; tomorrow's machine economy. With Dust Comply, the same seal becomes the <span class="em">compliant gas</span> that lets regulated players operate on-chain.</div>
+      <div class="notes"><b>Beat 11 · adapted</b> One protocol, both regimes: today's regulated markets, tomorrow's machine economy. And the same seal reaches further than compliance — with Dust Comply it becomes the trust and capacity layer of the ecosystem: the compliant gas that lets regulated players operate on-chain.</div>
+    </div>
+
+    <!-- 12 · PAPER · traction (adapted) -->
+    <div class="slide">
+      <span class="kicker a">Traction</span>
+      <h1 class="display h1 a" style="margin-top:16px;">Already <span class="em">sealed.</span></h1>
+      <div class="grid-3 a" style="margin-top:26px;">
+        <div class="card"><div class="display" style="font-size:28px;">Health</div><div class="small" style="margin-top:6px;">live client</div></div>
+        <div class="card"><div class="display" style="font-size:28px;">Energy</div><div class="small" style="margin-top:6px;">live client</div></div>
+        <div class="card"><div class="display" style="font-size:28px;">DePIN</div><div class="small" style="margin-top:6px;">live client</div></div>
+      </div>
+      <div class="body a" style="margin-top:24px; max-width:1040px;">Sensitive data never moves — only the proof that the rule was met. And the paymaster is <span class="em">live on Midnight preview</span>: delegate → seal → confer.</div>
+      <div class="notes"><b>Beat 12 · adapted</b> Already sealed: three live clients across three regulated worlds — health, energy, and DePIN. The sensitive data never moves, only the proof that the rule was met. And the paymaster is live on Midnight preview — delegate, seal, confer — proven end to end.</div>
+    </div>
+
+    <!-- 13 · PAPER · ask -->
+    <div class="slide">
+      <div class="row between gap-xl" style="align-items:center;">
+        <div style="flex:1;">
+          <span class="kicker a">The ask</span>
+          <h1 class="display h1 a" style="margin-top:16px;">Capital for the seal.</h1>
+          <div class="rule a"></div>
+          <div class="a" style="margin-top:6px;"><span class="display" style="font-size:40px;">SAFE · $3M post-money · 18 months</span></div>
+          <div class="body a" style="margin-top:16px; max-width:600px;">To land the regulatory wave.</div>
+        </div>
+        <div class="a"><div class="wax" style="width:180px;height:180px;"><span style="font-size:50px;">✦</span></div></div>
+      </div>
+      <div class="notes"><b>Beat 13</b> Capital for the seal: we're in a SAFE round with a $3 million post-money valuation, 18 months to land the regulatory wave.</div>
+    </div>
+
+    <!-- 14 · INK · inevitability -->
+    <div class="slide ink">
+      <span class="kicker a">The inevitability</span>
+      <h1 class="display h1 a" style="margin-top:18px; font-size:58px;">Regulation <span class="em">will</span> move on-chain.<br>The question is <span class="em">who builds the protocol.</span></h1>
+      <div class="rule a"></div>
+      <div class="body lede a">That's us. DPO2U — the HTTPS of compliance for Web2, Web3, and the agent economy.</div>
+      <div class="notes"><b>Beat 14</b> The question isn't whether regulation will move on-chain. It's who will build the protocol it runs on. That's us. We are DPO2U — the HTTPS of compliance for Web2 and Web3, and for the agent economy.</div>
+    </div>
+
+    <!-- 15 · INK · close -->
+    <div class="slide ink">
+      <img class="owl a" src="assets/strix-owl-dark.png" alt="Strix owl" style="width:90px;height:90px;">
+      <h1 class="display hero a" style="margin-top:26px;">Seal <span class="em">with us.</span></h1>
+      <div class="body a" style="margin-top:20px;">Thank you.</div>
+      <div class="row between a" style="margin-top:auto; align-items:flex-end;">
+        <span class="foot">Frederico Santana · DPO2U · Dust Comply</span>
+        <div class="wax"><span>✦</span></div>
+      </div>
+      <div class="notes"><b>Beat 15</b> Seal with us. Thank you.</div>
+    </div>
+
+    <div class="nav-bar">
+      <button class="nav-btn" onclick="prev()">← Prev</button>
+      <span class="nav-counter"><span id="current">1</span> / <span id="total"></span></span>
+      <div class="nav-progress"><div class="nav-progress-fill" id="progress"></div></div>
+      <button class="nav-btn" onclick="next()">Next →</button>
+    </div>
+  </div>
+
+  <script>
+    let current = 0;
+    const slides = document.querySelectorAll('.slide');
+    const total = slides.length;
+    let notesVisible = false;
+    document.getElementById('total').textContent = total;
+    function show(i) {
+      slides.forEach(s => s.classList.remove('active'));
+      current = Math.max(0, Math.min(i, total - 1));
+      slides[current].classList.add('active');
+      document.getElementById('current').textContent = current + 1;
+      document.getElementById('progress').style.width = ((current + 1) / total * 100) + '%';
+      document.querySelectorAll('.notes').forEach(n => n.classList.remove('visible'));
+      const note = slides[current].querySelector('.notes');
+      if (note && notesVisible) note.classList.add('visible');
+    }
+    function next(){ show(current+1); } function prev(){ show(current-1); }
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); next(); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); prev(); }
+      if (e.key === 'n' || e.key === 'N') { notesVisible = !notesVisible; document.querySelectorAll('.notes').forEach(n => n.classList.toggle('visible', notesVisible && n.closest('.slide').classList.contains('active'))); }
+    });
+    document.getElementById('deck').addEventListener('click', (e) => {
+      if (e.target.closest('.nav-bar') || e.target.closest('.nav-btn')) return;
+      if (e.clientX > window.innerWidth / 2) next(); else prev();
+    });
+    show(0);
+  </script>
+</body>
+</html>

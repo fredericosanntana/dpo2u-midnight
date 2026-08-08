@@ -1,0 +1,158 @@
+pragma language_version >= 0.21.0;
+import CompactStandardLibrary;
+
+// DataAuditLog — LGPD Art. 37 data processing audit trail on Midnight Network
+//
+// LGPD Art. 37 requires controllers and operators to maintain records of
+// personal data processing activities. This contract provides an immutable,
+// verifiable on-chain audit trail without storing the actual data being processed.
+//
+// DESIGN CHOICES:
+//   - controller_id: Bytes<32> hash of the data controller's DID or registration number.
+//   - actor_id: Bytes<32> hash of the actor (employee, system, third-party) performing the action.
+//     Both IDs are hashed — no PII on-chain.
+//   - block_number: Uint<16> block height at time of event (external timestamp reference).
+//     Use Uint<16> for Compact arithmetic safety; supports blocks up to 65535 (≈ 45 days at 1 block/min).
+//     For longer-lived deployments, pass modular block chunks or use a separate time oracle.
+//
+// EVENT TYPE CODES (Uint<8>):
+//   1 = data_collection          (new personal data received)
+//   2 = data_access              (read/query of existing data)
+//   3 = data_modification        (update of personal data record)
+//   4 = data_transfer_third_party (shared with a third party — Art. 7 VIII requires legal basis)
+//   5 = deletion_request_received (data subject requested erasure — LGPD Art. 18 VI)
+//   6 = deletion_confirmed        (erasure completed — response to Art. 18 VI request)
+//   7 = data_portability_export   (data provided to subject or third party — LGPD Art. 18 V)
+//   8 = consent_change            (consent status updated — triggers ConsentRegistry call)
+//   9 = breach_notification       (security incident logged — LGPD Art. 48)
+
+export ledger event_count: Counter;
+export ledger events_by_controller: Map<Bytes<32>, Uint<64>>;
+export ledger last_event_type: Map<Bytes<32>, Uint<8>>;
+export ledger last_event_block: Map<Bytes<32>, Uint<64>>;
+export ledger deletion_requests: Counter;
+export ledger deletions_confirmed: Counter;
+export ledger breach_events: Counter;
+
+// Log a general data processing event.
+// event_type must be 1–9. block_number serves as tamper-evident timestamp reference.
+export circuit logEvent(
+  controller_id: Bytes<32>,
+  event_type: Uint<8>,
+  block_number: Uint<16>
+): [] {
+  assert(event_type > 0 as Uint<8>, "Invalid event type: must be 1-9");
+  assert(event_type <= 9 as Uint<8>, "Unknown event type: must be 1-9");
+  assert(block_number > 0 as Uint<16>, "Block number required for audit timestamp");
+
+  const prev = events_by_controller.member(disclose(controller_id))
+    ? events_by_controller.lookup(disclose(controller_id))
+    : 0 as Uint<64>;
+  events_by_controller.insert(disclose(controller_id), disclose(prev + 1 as Uint<64>));
+  last_event_type.insert(disclose(controller_id), disclose(event_type));
+  last_event_block.insert(disclose(controller_id), disclose(block_number as Uint<64>));
+  event_count.increment(1);
+}
+
+// Log a deletion request (LGPD Art. 18 VI right to erasure).
+// Separate circuit for explicit tracking and counter — regulators may query this.
+export circuit logDeletionRequest(
+  controller_id: Bytes<32>,
+  actor_id: Bytes<32>,
+  block_number: Uint<16>
+): [] {
+  assert(block_number > 0 as Uint<16>, "Block number required");
+
+  const prev = events_by_controller.member(disclose(controller_id))
+    ? events_by_controller.lookup(disclose(controller_id))
+    : 0 as Uint<64>;
+  events_by_controller.insert(disclose(controller_id), disclose(prev + 1 as Uint<64>));
+  last_event_type.insert(disclose(controller_id), disclose(5 as Uint<8>));
+  last_event_block.insert(disclose(controller_id), disclose(block_number as Uint<64>));
+  event_count.increment(1);
+  deletion_requests.increment(1);
+}
+
+// Confirm erasure was completed (LGPD requires response within 15 days).
+// Records event_type=6. Allows auditors to verify request→completion lifecycle.
+export circuit confirmDeletion(
+  controller_id: Bytes<32>,
+  actor_id: Bytes<32>,
+  block_number: Uint<16>
+): [] {
+  assert(block_number > 0 as Uint<16>, "Block number required");
+
+  const prev = events_by_controller.member(disclose(controller_id))
+    ? events_by_controller.lookup(disclose(controller_id))
+    : 0 as Uint<64>;
+  events_by_controller.insert(disclose(controller_id), disclose(prev + 1 as Uint<64>));
+  last_event_type.insert(disclose(controller_id), disclose(6 as Uint<8>));
+  last_event_block.insert(disclose(controller_id), disclose(block_number as Uint<64>));
+  event_count.increment(1);
+  deletions_confirmed.increment(1);
+}
+
+// Log a security breach notification (LGPD Art. 48 — notify ANPD within 2 business days).
+// Records event_type=9 and increments dedicated breach counter.
+export circuit logBreachEvent(
+  controller_id: Bytes<32>,
+  block_number: Uint<16>
+): [] {
+  assert(block_number > 0 as Uint<16>, "Block number required");
+
+  const prev = events_by_controller.member(disclose(controller_id))
+    ? events_by_controller.lookup(disclose(controller_id))
+    : 0 as Uint<64>;
+  events_by_controller.insert(disclose(controller_id), disclose(prev + 1 as Uint<64>));
+  last_event_type.insert(disclose(controller_id), disclose(9 as Uint<8>));
+  last_event_block.insert(disclose(controller_id), disclose(block_number as Uint<64>));
+  event_count.increment(1);
+  breach_events.increment(1);
+}
+
+// Query: total events logged for a specific controller. Returns 0 if unknown.
+export circuit getControllerEventCount(controller_id: Bytes<32>): Uint<64> {
+  if (events_by_controller.member(disclose(controller_id))) {
+    return events_by_controller.lookup(disclose(controller_id));
+  } else {
+    return 0 as Uint<64>;
+  }
+}
+
+// Query: type code of the most recent event for a controller. Returns 0 if unknown.
+export circuit getLastEventType(controller_id: Bytes<32>): Uint<8> {
+  if (last_event_type.member(disclose(controller_id))) {
+    return last_event_type.lookup(disclose(controller_id));
+  } else {
+    return 0 as Uint<8>;
+  }
+}
+
+// Query: block number of the most recent event for a controller. Returns 0 if unknown.
+export circuit getLastEventBlock(controller_id: Bytes<32>): Uint<64> {
+  if (last_event_block.member(disclose(controller_id))) {
+    return last_event_block.lookup(disclose(controller_id));
+  } else {
+    return 0 as Uint<64>;
+  }
+}
+
+// Query: total events across all controllers.
+export circuit getTotalEvents(): Uint<64> {
+  return event_count;
+}
+
+// Query: total deletion requests received (ANPD audit readiness).
+export circuit getTotalDeletionRequests(): Uint<64> {
+  return deletion_requests;
+}
+
+// Query: total erasures confirmed (ANPD audit — shows response rate).
+export circuit getTotalDeletionsConfirmed(): Uint<64> {
+  return deletions_confirmed;
+}
+
+// Query: total breach events logged (ANPD regulatory reporting).
+export circuit getTotalBreachEvents(): Uint<64> {
+  return breach_events;
+}

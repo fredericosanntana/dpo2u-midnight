@@ -1,0 +1,86 @@
+{
+  "network": "preview",
+  "networkId": "preview",
+  "walletAddress": "mn_addr_preview1jelp33c5gftpr9gl62yynuccsgny8e9cvgh89rfguct7pcmdcjzqlylk84",
+  "deployedAt": "2026-06-30T15:16:27.847Z",
+  "contracts": [
+    {
+      "name": "AgentRegistry",
+      "contractAddress": "6d337d751447f45be5449521832674fa8a40a94db78fd69c8d13f417000df57d",
+      "blockHeight": 1389988,
+      "txId": "005eb1ab4df937966e9a16c841d29944e9092fe96d8630a017e93ac50ae30a4704"
+    },
+    {
+      "name": "AgentWalletFactory",
+      "contractAddress": "cde1ebb9c97d734d3e0485ecf50bae39ae3d828c5f40b789d4ac0322280fe71e",
+      "blockHeight": 1389992,
+      "txId": "0099f0d981d7c27da09d4601fa1458ed2966606168d6c53139aa21d2c010d98906"
+    },
+    {
+      "name": "ComplianceRegistry",
+      "contractAddress": "9bd5e10849b3db1eabe54b1f3c3d30f1de89ffa1d5e4ef66e1bff58b9b93fb6d",
+      "blockHeight": 1389996,
+      "txId": "00f5ca6f4cdc3ed88fc2e7ddd2a25c2278ee4ab3a97b450be67150f707b0881bdd"
+    },
+    {
+      "name": "FeeDistributor",
+      "contractAddress": "7c168b7f7ff718bed26306c2dece744bcd4cf42b393c2d07efdccf2eec9a3dc1",
+      "blockHeight": 1390000,
+      "txId": "009cb094379420fc1cb3f8c3005b2b6fddbe068dc938bbbc2527ff7a3cb8e81a6f"
+    },
+    {
+      "name": "PaymentGateway",
+      "contractAddress": "1d280b47bdfa6e25531acce369826d6c3bd641c5f5fa9afc93ebee9a0136f802",
+      "blockHeight": 1390003,
+      "txId": "007120762817fd045056fd51d77d74625f5411f9c2687cf5d03ccddb41ca91a8ea"
+    },
+    {
+      "name": "LgpdKitRegistry",
+      "contractAddress": "4c8407610c10d96d74f392e29fa3654924b5457ffb161ba5a2ac1f4b69069813",
+      "blockHeight": 1390007,
+      "txId": "00e2e64189eae90af5bbb72de5996a8955d05ed0a4c9f44adc7ceb1510fb43b86f"
+    },
+    {
+      "name": "ConsentRegistry",
+      "contractAddress": "ef5d18647830302de5964a20a7e2671d87f2b848aab9f11a2475463992ca7d9d",
+      "blockHeight": 1390011,
+      "txId": "00458c564382fed4e997a39db50a279384ab319a996ff0a5b70529cebbc461bacc"
+    },
+    {
+      "name": "DataAuditLog",
+      "contractAddress": "ffb194148d18d42930c46392a7581a55e180f48b59457661083c2216bcce32ce",
+      "blockHeight": 1390015,
+      "txId": "006ccb7229d78357c33cb7446aa36d9312c3968f25c2b429e0b7322db0e4965f6e"
+    },
+    {
+      "name": "DataSubjectRights",
+      "contractAddress": "edf477003648f2764625e6f8cce9c9f345677bce8aa8a109253906fde0eb1edd",
+      "blockHeight": 1390019,
+      "txId": "00c4f3e3c76c1909c857485dd130ada40fe1d6b33a52615f098ee6891b88ce7315"
+    },
+    {
+      "name": "ComplianceEscrow",
+      "contractAddress": "c7f6b2243c09454f270d95e23cde7ed01ed167e60675cab07449ea2d5436a6b9",
+      "blockHeight": 1391086,
+      "txId": "00d71ca70fea07102db5b83d76f796c5a510fa037b278d839cb43aafa0738402b3"
+    },
+    {
+      "name": "TrustStackRegistry",
+      "contractAddress": "83be7334a083cc48e8bec9bac7861920cfc794b56e4f0b7ffb6b39807afcd569",
+      "blockHeight": 1395503,
+      "txId": "00dc6a0321094f939c5776d5eecccc8b6abea34ec6f6dbe6c7b6e4248f44f3716a"
+    },
+    {
+      "name": "LegalSourceManifest",
+      "contractAddress": "8563c3c24009d6535b0a085e813dbef56667683cac3c2d9d0e372b6ee7267460",
+      "blockHeight": 1395507,
+      "txId": "001a601d73b55121acc298bd9eba829e93adf84d7045ebddbd7a96be0278c507cc"
+    },
+    {
+      "name": "SolvencyRegistry",
+      "contractAddress": "60cf8711d756255da7bb324314f1904a3705a329f518d139944f118ff2577d4a",
+      "blockHeight": 1402645,
+      "txId": "00c85301a42db8362eb39063965248acd224f07067d36eb9fd44fd3cf896c4dc8e"
+    }
+  ]
+}

@@ -1,0 +1,31 @@
+pragma language_version >= 0.21.0;
+import CompactStandardLibrary;
+
+// DPO2U Legal Source Manifest — anchors (citation -> canonical statute source hash) on-chain so the
+// compliance predicates trace back to REAL law. Midnight port of the Solana legal_source_manifest.
+// Makes "law -> circuit" auditable: a verdict's predicate cites an anchored statute, not an implicit
+// constraint. Keyed by citation_id (e.g. H("LGPD|Art.18") ).
+
+export ledger source_hashes: Map<Bytes<32>, Bytes<32>>;        // citation_id -> canonical source hash
+export ledger source_jurisdictions: Map<Bytes<32>, Bytes<32>>; // citation_id -> jurisdiction tag
+export ledger manifest_count: Counter;
+
+export circuit anchorSource(citation_id: Bytes<32>, source_hash: Bytes<32>, jurisdiction: Bytes<32>): [] {
+  assert(!source_hashes.member(disclose(citation_id)), "Citation already anchored");
+  source_hashes.insert(disclose(citation_id), disclose(source_hash));
+  source_jurisdictions.insert(disclose(citation_id), disclose(jurisdiction));
+  manifest_count.increment(1);
+}
+
+// Verify a predicate's cited statute resolves to the anchored canonical source.
+export circuit verifySource(citation_id: Bytes<32>, candidate_hash: Bytes<32>): Boolean {
+  assert(source_hashes.member(disclose(citation_id)), "Unknown citation");
+  return source_hashes.lookup(disclose(citation_id)) == disclose(candidate_hash);
+}
+
+export circuit getSourceHash(citation_id: Bytes<32>): Bytes<32> {
+  return source_hashes.lookup(disclose(citation_id));
+}
+export circuit getManifestCount(): Uint<64> {
+  return manifest_count;
+}
