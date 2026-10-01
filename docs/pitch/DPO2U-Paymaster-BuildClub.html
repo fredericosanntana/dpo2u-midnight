@@ -1,0 +1,346 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DPO2U Paymaster · Dust Comply — Pitch Deck</title>
+  <style>
+    :root {
+      --c-bg: #09090b;
+      --c-bg-alt: #0d1117;
+      --c-bg-card: #18181b;
+      --c-surface: #1e2a3a;
+      --c-border: rgba(255,255,255,0.08);
+
+      --c-primary: #38bdf8;              /* DPO2U cyan */
+      --c-primary-dim: rgba(56,189,248,0.12);
+      --c-accent: #4ade80;               /* positive green */
+      --c-accent-dim: rgba(74,222,128,0.10);
+      --c-seal: #f59e0b;                 /* wax-seal amber */
+      --c-seal-dim: rgba(245,158,11,0.12);
+      --c-danger: #ef4444;
+
+      --c-text: #f4f4f5;
+      --c-text-secondary: rgba(244,244,245,0.66);
+      --c-text-muted: rgba(244,244,245,0.42);
+
+      --f-hero: 88px; --f-h1: 58px; --f-h2: 44px; --f-h3: 32px;
+      --f-body: 27px; --f-small: 22px; --f-caption: 18px;
+      --font-display: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --font-mono: 'JetBrains Mono', 'SF Mono', 'Consolas', monospace;
+      --s-xs: 8px; --s-sm: 16px; --s-md: 32px; --s-lg: 48px; --s-xl: 64px; --s-2xl: 96px;
+      --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+      --duration-enter: 0.6s;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; overflow: hidden; background: var(--c-bg); color: var(--c-text); }
+    .deck { width: 100vw; height: 100vh; position: relative; overflow: hidden; }
+    .slide {
+      position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center;
+      padding: 66px 100px; opacity: 0; pointer-events: none;
+      transition: opacity 0.5s var(--ease-out); font-family: var(--font-display); background: var(--c-bg);
+    }
+    .slide.active { opacity: 1; pointer-events: auto; }
+    .slide.active .animate-in { animation: slideUp var(--duration-enter) var(--ease-out) both; }
+    .slide.active .animate-in:nth-child(1){animation-delay:0s}
+    .slide.active .animate-in:nth-child(2){animation-delay:.07s}
+    .slide.active .animate-in:nth-child(3){animation-delay:.14s}
+    .slide.active .animate-in:nth-child(4){animation-delay:.21s}
+    .slide.active .animate-in:nth-child(5){animation-delay:.28s}
+    .slide.active .animate-in:nth-child(6){animation-delay:.35s}
+    .slide.active .animate-in:nth-child(7){animation-delay:.42s}
+    @keyframes slideUp { from{opacity:0;transform:translateY(24px)} to{opacity:1;transform:translateY(0)} }
+
+    .hero { font-size: var(--f-hero); font-weight: 900; letter-spacing: -3px; line-height: 1.04; }
+    .h1 { font-size: var(--f-h1); font-weight: 800; letter-spacing: -2px; line-height: 1.1; }
+    .h2 { font-size: var(--f-h2); font-weight: 700; letter-spacing: -1px; line-height: 1.2; }
+    .h3 { font-size: var(--f-h3); font-weight: 600; line-height: 1.3; }
+    .body { font-size: var(--f-body); font-weight: 400; line-height: 1.5; color: var(--c-text-secondary); }
+    .small { font-size: var(--f-small); font-weight: 400; line-height: 1.5; color: var(--c-text-secondary); }
+    .caption { font-size: var(--f-caption); font-weight: 600; color: var(--c-primary); letter-spacing: 2px; text-transform: uppercase; }
+    .mono { font-family: var(--font-mono); }
+    .text-primary { color: var(--c-primary); }
+    .text-accent { color: var(--c-accent); }
+    .text-seal { color: var(--c-seal); }
+    .text-muted { color: var(--c-text-muted); }
+    .text-danger { color: var(--c-danger); }
+    .text-emphasis { color: var(--c-primary); font-weight: 800; }
+
+    .flex{display:flex} .flex-col{flex-direction:column} .items-center{align-items:center}
+    .justify-center{justify-content:center} .justify-between{justify-content:space-between}
+    .gap-sm{gap:var(--s-sm)} .gap-md{gap:var(--s-md)} .gap-lg{gap:var(--s-lg)} .gap-xl{gap:var(--s-xl)}
+    .flex-1{flex:1} .w-full{width:100%} .text-center{text-align:center}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s-lg)}
+    .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:var(--s-md)}
+    .grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--s-md)}
+
+    .card { background: var(--c-bg-card); border: 1px solid var(--c-border); border-radius: 16px; padding: var(--s-lg); }
+    .card-glow { background: var(--c-bg-card); border: 1px solid rgba(56,189,248,0.22); border-radius: 16px; padding: var(--s-lg); box-shadow: 0 0 40px rgba(56,189,248,0.07); }
+    .metric-card { text-align: center; padding: var(--s-md); }
+    .metric-value { font-size: 60px; font-weight: 900; color: var(--c-accent); letter-spacing: -2px; line-height: 1; }
+    .metric-label { font-size: var(--f-small); color: var(--c-text-muted); margin-top: var(--s-xs); font-weight: 500; }
+    .badge { display: inline-block; padding: 6px 16px; border-radius: 100px; font-size: var(--f-caption); font-weight: 600; letter-spacing: 1px; }
+    .badge-primary { background: var(--c-primary-dim); color: var(--c-primary); }
+    .badge-accent { background: var(--c-accent-dim); color: var(--c-accent); }
+    .badge-seal { background: var(--c-seal-dim); color: var(--c-seal); }
+    .badge-outline { border: 1px solid var(--c-border); color: var(--c-text-secondary); }
+    .divider { width: 64px; height: 3px; border-radius: 2px; background: var(--c-primary); opacity: 0.6; margin: var(--s-md) 0; }
+    .bullet-list { list-style: none; }
+    .bullet-list li { padding: 13px 0; padding-left: var(--s-md); position: relative; font-size: var(--f-body); color: var(--c-text-secondary); border-bottom: 1px solid var(--c-border); }
+    .bullet-list li:last-child { border-bottom: none; }
+    .bullet-list li::before { content: ''; position: absolute; left: 0; top: 50%; width: 8px; height: 8px; border-radius: 50%; background: var(--c-primary); transform: translateY(-50%); }
+    .quote { border-left: 3px solid var(--c-seal); background: var(--c-bg-card); border-radius: 0 12px 12px 0; padding: var(--s-md) var(--s-lg); font-size: var(--f-h3); font-weight: 600; color: var(--c-text); line-height: 1.3; }
+    .step { display:flex; align-items:flex-start; gap: var(--s-md); }
+    .step-num { flex:none; width:52px; height:52px; border-radius:12px; background:var(--c-primary-dim); color:var(--c-primary); font-weight:800; font-size:24px; display:flex; align-items:center; justify-content:center; }
+    .flywheel { display:flex; align-items:center; gap:14px; flex-wrap:wrap; }
+    .fw-node { background:var(--c-bg-card); border:1px solid var(--c-border); border-radius:12px; padding:14px 20px; font-size:20px; font-weight:600; color:var(--c-text); }
+    .fw-arrow { color:var(--c-seal); font-size:26px; font-weight:800; }
+    .bg-alt { background: var(--c-bg-alt); }
+
+    .nav-bar { position: fixed; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; padding: 16px 40px; background: linear-gradient(0deg, rgba(9,9,11,0.95) 0%, transparent 100%); z-index: 100; opacity: 0; transition: opacity 0.3s; }
+    .deck:hover .nav-bar { opacity: 1; }
+    .nav-counter { font-size: 16px; color: var(--c-text-muted); font-family: var(--font-mono); }
+    .nav-progress { flex: 1; max-width: 200px; height: 3px; border-radius: 2px; background: rgba(255,255,255,0.1); margin: 0 24px; }
+    .nav-progress-fill { height: 100%; border-radius: 2px; background: var(--c-primary); transition: width 0.3s var(--ease-out); }
+    .nav-btn { background: none; border: 1px solid var(--c-border); color: var(--c-text-secondary); padding: 8px 16px; border-radius: 8px; cursor: pointer; font-size: 14px; font-family: var(--font-display); }
+    .nav-btn:hover { border-color: var(--c-primary); color: var(--c-text); }
+    .notes { display: none; position: fixed; bottom: 60px; left: 40px; right: 40px; background: rgba(0,0,0,0.92); border: 1px solid var(--c-border); border-radius: 12px; padding: 20px 24px; font-size: 16px; color: var(--c-text-secondary); line-height: 1.6; z-index: 200; max-height: 220px; overflow-y: auto; }
+    .notes.visible { display: block; }
+    .notes-label { font-size: 12px; color: var(--c-text-muted); text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; }
+    @media print {
+      @page { size: 1280px 720px; margin: 0; }
+      html, body { height: auto !important; overflow: visible !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; background: var(--c-bg); }
+      .deck { height: auto !important; overflow: visible !important; }
+      .slide { position: relative !important; inset: auto !important; opacity: 1 !important; pointer-events: auto; page-break-after: always; break-inside: avoid; width: 1280px; height: 720px; }
+      .slide:last-of-type { page-break-after: auto; }
+      .nav-bar, .notes { display: none !important; }
+      .animate-in { animation: none !important; opacity: 1 !important; transform: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="deck" id="deck">
+
+    <!-- 1. TITLE -->
+    <div class="slide bg-alt">
+      <span class="badge badge-accent animate-in" style="align-self:flex-start;">● LIVE ON MIDNIGHT PREVIEW</span>
+      <h1 class="hero animate-in" style="margin-top:22px;">The self-funding seal —<br><span class="text-seal">free for every dApp.</span></h1>
+      <div class="h3 animate-in" style="margin-top:14px; color:var(--c-text-secondary); font-weight:500;">DPO2U Paymaster · <span class="text-primary">Dust Comply</span></div>
+      <div class="body animate-in" style="margin-top:24px; max-width:980px;">
+        To become the protocol, win adoption first — <span class="text-emphasis">give the compliance seal away</span>, paid for by the ecosystem's idle DUST. Then the big players who need <span class="text-emphasis">compliant capacity</span> pay to use it.
+      </div>
+      <div class="small animate-in mono" style="margin-top:32px; color:var(--c-text-muted);">Frederico Santana · DPO2U · Midnight Build Club</div>
+      <div class="notes"><div class="notes-label">Speaker</div>Lead with the thesis: protocols win on adoption, not invoices. Dust Comply = pooled DUST that confers compliance for free. This is the Midnight-native self-funding agent (pitch slide 8) grown into an adoption engine.</div>
+    </div>
+
+    <!-- 2. THE SEAL (canon recap) -->
+    <div class="slide">
+      <span class="caption animate-in" style="color:var(--c-seal);">The seal</span>
+      <h1 class="h1 animate-in" style="margin-top:16px;">Compliance was born as a wax seal.<br>We digitized everything — and <span class="text-seal">lost it.</span></h1>
+      <div class="divider animate-in" style="background:var(--c-seal);"></div>
+      <div class="body animate-in" style="max-width:1000px;">For a thousand years, hot wax on paper was binding. Demonstrable. Unforgeable. DPO2U restores it on-chain: <span class="text-emphasis">the score stays private, the proof is public.</span> The regulator doesn't believe — it verifies.</div>
+      <div class="notes"><div class="notes-label">Speaker</div>One breath of canon to orient the room, then pivot to what fuels the seal and how we spread it.</div>
+    </div>
+
+    <!-- 3. THE PROMISE (slide 8 callback) -->
+    <div class="slide bg-alt">
+      <span class="caption animate-in">What we already promised</span>
+      <h1 class="h1 animate-in" style="margin-top:16px;">A self-funding agent — native to Midnight.</h1>
+      <div class="quote animate-in" style="margin-top:8px; max-width:1040px;">"An autonomous agent that stakes NIGHT, consumes DUST, and performs attestation using selective disclosure."</div>
+      <div class="body animate-in" style="margin-top:24px; max-width:1000px;">That agent works today. The question was never <span class="text-muted">how to bill for it</span> — it's <span class="text-emphasis">how to get the whole ecosystem sealing with it.</span></div>
+      <div class="notes"><div class="notes-label">Speaker</div>Quote is verbatim from the DPO2U pitch. Reframe: the goal is adoption of the seal, not per-seal revenue.</div>
+    </div>
+
+    <!-- 4. PROBLEM (adoption barrier) -->
+    <div class="slide">
+      <span class="caption animate-in">The barrier to adoption</span>
+      <h1 class="h1 animate-in" style="margin-top:16px;">The seal costs DUST.<br>That's a <span class="text-primary">wall</span> in front of every dApp.</h1>
+      <div class="divider animate-in"></div>
+      <ul class="bullet-list animate-in" style="max-width:1020px;">
+        <li>DUST is <span class="text-emphasis">non-transferable</span> — only NIGHT holders generate it.</li>
+        <li>To prove compliance, a dApp must hold NIGHT and babysit DUST regeneration.</li>
+        <li>So most don't — compliance stays <span class="text-danger">theater</span>, and adoption stalls.</li>
+        <li>Meanwhile the ecosystem's NIGHT generates DUST that sits <span class="text-danger">idle</span>.</li>
+      </ul>
+      <div class="notes"><div class="notes-label">Speaker</div>Reframe the DUST constraint as an ADOPTION barrier, not a business problem. The wall is why the seal hasn't spread.</div>
+    </div>
+
+    <!-- 5. THE MOVE -->
+    <div class="slide bg-alt">
+      <span class="caption animate-in">The move</span>
+      <h1 class="h1 animate-in" style="margin-top:16px;">Don't sell the seal. <span class="text-primary">Give it away.</span></h1>
+      <div class="divider animate-in"></div>
+      <div class="grid-2 animate-in" style="margin-top:8px;">
+        <div class="card-glow">
+          <div class="badge badge-accent">FREE FOR dAPPS</div>
+          <div class="h3" style="margin-top:16px;">DPO2U pays the DUST.</div>
+          <div class="small" style="margin-top:12px;">Any dApp gets its compliance sealed at <b>zero cost</b> — no NIGHT to hold, no DUST to manage. Just adopt the seal.</div>
+        </div>
+        <div class="card-glow">
+          <div class="badge badge-primary">NON-CUSTODIAL POOL</div>
+          <div class="h3" style="margin-top:16px;">Idle DUST pays for it.</div>
+          <div class="small" style="margin-top:12px;">NIGHT holders <b>redirect their idle DUST</b> to the pool and <b>keep their NIGHT</b>. Revocable anytime. No cash changes hands.</div>
+        </div>
+      </div>
+      <div class="notes"><div class="notes-label">Speaker</div>The core reframe. Protocols are won by adoption. We remove the DUST wall entirely by sponsoring compliance for free, funded by pooled idle DUST — not by invoicing users.</div>
+    </div>
+
+    <!-- 6. DUST COMPLY (concept + endgame) -->
+    <div class="slide">
+      <span class="caption animate-in" style="color:var(--c-seal);">Dust Comply</span>
+      <h1 class="h1 animate-in" style="margin-top:16px;">Pooled DUST that <span class="text-seal">confers compliance.</span></h1>
+      <div class="divider animate-in" style="background:var(--c-seal);"></div>
+      <ul class="bullet-list animate-in" style="max-width:1040px;">
+        <li>Participants delegate idle DUST — and keep custody of their NIGHT.</li>
+        <li>The pool seals compliance for dApps <span class="text-emphasis">and</span> confers the seal to the participants themselves.</li>
+        <li>DPO2U becomes the <span class="text-emphasis">manager of the ecosystem's accumulated DUST</span> and its compliance layer.</li>
+        <li>The prize is the <span class="text-seal">protocol position</span> — not a per-transaction fee.</li>
+      </ul>
+      <div class="notes"><div class="notes-label">Speaker</div>Name the concept: Dust Comply. Holders don't get paid cash — they get compliance status and a healthier ecosystem they already hold NIGHT in. DPO2U's moat is being the DUST-management + compliance hub.</div>
+    </div>
+
+    <!-- 7. HOW IT WORKS -->
+    <div class="slide bg-alt">
+      <span class="caption animate-in">How it works</span>
+      <h1 class="h1 animate-in" style="margin-top:16px;">Three legs, one loop.</h1>
+      <div class="divider animate-in"></div>
+      <div class="flex flex-col gap-md animate-in" style="margin-top:8px; max-width:1080px;">
+        <div class="step"><div class="step-num">1</div><div><div class="h3">Delegate</div><div class="small mono" style="margin-top:6px;">registerNightUtxosForDustGeneration(…, poolDustAddress)</div><div class="small" style="margin-top:6px;">Holder cedes idle DUST — keeps NIGHT. → <span class="text-primary">PaymentGateway.registerDustDelegation</span></div></div></div>
+        <div class="step"><div class="step-num">2</div><div><div class="h3">Seal — free</div><div class="small mono" style="margin-top:6px;">balanceUnboundTransaction(tx, poolKeys, { tokenKindsToBalance: ['dust'] })</div><div class="small" style="margin-top:6px;">Pool pays the DUST fee to seal a dApp's attestation. → <span class="text-primary">ComplianceRegistry.recordSponsoredAttestation</span></div></div></div>
+        <div class="step"><div class="step-num">3</div><div><div class="h3">Confer &amp; monetize</div><div class="small" style="margin-top:6px;">dApps: sealed free. Big players: pay to tap the pooled DUST for their own tx — <b>compliance is the gate</b>. → <span class="text-primary">recordSponsoredAttestation + FeeDistributor.recordLpRevenue</span></div></div></div>
+      </div>
+      <div class="notes"><div class="notes-label">Speaker</div>Every arrow is an on-chain circuit we shipped this sprint. Leg 3 is conferral, not billing — the ledger records contribution + compliance, no money.</div>
+    </div>
+
+    <!-- 8. WHY MIDNIGHT -->
+    <div class="slide">
+      <span class="caption animate-in">Why it must be on-chain</span>
+      <h1 class="h1 animate-in" style="margin-top:16px;">Rip out Midnight and the seal breaks.</h1>
+      <div class="divider animate-in"></div>
+      <ul class="bullet-list animate-in" style="max-width:1040px;">
+        <li><b>DUST-generation redirect</b> is a Midnight ledger primitive — nothing else has it.</li>
+        <li><b>Non-custodial delegation</b>: holder keeps custody, only the fee resource flows.</li>
+        <li><b>Score-private seal</b>: prove <span class="mono">score ≥ threshold</span> without revealing the score.</li>
+        <li>It makes the seal <span class="text-emphasis">free and self-sustaining across the ecosystem</span>.</li>
+      </ul>
+      <div class="notes"><div class="notes-label">Speaker</div>Blockchain-necessity test in the seal's language. Midnight is the native half of DPO2U's dual-chain design (Stellar seals the public proof; Midnight fuels the free, self-funding seal).</div>
+    </div>
+
+    <!-- 9. STATUS / DEMO -->
+    <div class="slide bg-alt">
+      <span class="caption animate-in">Status — not slideware</span>
+      <h1 class="h1 animate-in" style="margin-top:16px;">Already live on preview.</h1>
+      <div class="divider animate-in"></div>
+      <div class="grid-4 animate-in" style="margin-top:8px;">
+        <div class="metric-card card"><div class="metric-value">9/9</div><div class="metric-label">contracts on preview</div></div>
+        <div class="metric-card card"><div class="metric-value">+3</div><div class="metric-label">Dust Comply circuits (compiled)</div></div>
+        <div class="metric-card card"><div class="metric-value">E2E</div><div class="metric-label">delegate → seal → confer</div></div>
+        <div class="metric-card card"><div class="metric-value">0</div><div class="metric-label">type errors (tsc clean)</div></div>
+      </div>
+      <div class="body animate-in" style="margin-top:26px; max-width:1000px;">
+        <span class="mono small text-primary">npm run deploy:paymaster && npm run paymaster:demo && npm run verify:paymaster</span>
+      </div>
+      <div class="small animate-in" style="margin-top:12px; color:var(--c-text-muted);">Honest scope: the MVP proves the loop on the pool-sealed path; pure customer self-sponsorship is confirmed at the API level and is the next hardening step.</div>
+      <div class="notes"><div class="notes-label">Speaker</div>Run it live if possible — the demo prints the real per-tx DUST cost, which sets how much free compliance a given pool can sustain.</div>
+    </div>
+
+    <!-- 10. ADOPTION FLYWHEEL -->
+    <div class="slide">
+      <span class="caption animate-in">The flywheel</span>
+      <h1 class="h1 animate-in" style="margin-top:16px;">Free seals compound into a moat.</h1>
+      <div class="divider animate-in"></div>
+      <div class="flywheel animate-in" style="margin-top:8px; max-width:1120px;">
+        <span class="fw-node">Free seal</span><span class="fw-arrow">→</span>
+        <span class="fw-node">dApps adopt DPO2U</span><span class="fw-arrow">→</span>
+        <span class="fw-node">more idle DUST delegated</span><span class="fw-arrow">→</span>
+        <span class="fw-node">more free capacity</span><span class="fw-arrow">↺</span>
+      </div>
+      <div class="body animate-in" style="margin-top:28px; max-width:1040px;">Capacity scales linearly with pooled NIGHT (cap <b>5 DUST/NIGHT</b>, <b>~0.71/day</b> sustained). Every new participant makes the free seal <span class="text-emphasis">cheaper to give</span> and DPO2U's position as the DUST-comply layer <span class="text-emphasis">harder to displace.</span></div>
+      <div class="notes"><div class="notes-label">Speaker</div>This replaces a revenue slide. The endgame value is the protocol position — the compliance layer + DUST manager for Midnight — not fees. Numbers from the ledger spec show the free capacity a pool sustains.</div>
+    </div>
+
+    <!-- 11. TWO TIERS / MODEL -->
+    <div class="slide">
+      <span class="caption animate-in">The model</span>
+      <h1 class="h1 animate-in" style="margin-top:16px;">Free to adopt. <span class="text-seal">Paid at scale.</span></h1>
+      <div class="divider animate-in"></div>
+      <div class="grid-2 animate-in" style="margin-top:8px;">
+        <div class="card">
+          <div class="badge badge-accent">FREE · dApps</div>
+          <div class="h3" style="margin-top:16px;">Adoption &amp; the moat.</div>
+          <div class="small" style="margin-top:12px;">Any dApp seals compliance at zero cost. This wins the ecosystem and the protocol position.</div>
+        </div>
+        <div class="card">
+          <div class="badge badge-seal">PAID · big players</div>
+          <div class="h3" style="margin-top:16px;">Compliant capacity, on tap.</div>
+          <div class="small" style="margin-top:12px;">Institutions, RWA issuers and high-volume dApps <b>pay to tap DPO2U's pooled DUST</b> to power their own transactions — access <b>gated by compliance</b>. Compliant gas at institutional scale.</div>
+        </div>
+      </div>
+      <div class="body animate-in" style="margin-top:24px; max-width:1040px;">Same pooled DUST serves both. The free tier builds the moat; <span class="text-emphasis">big players monetize it</span> — booked on-chain via <span class="mono small">FeeDistributor.recordLpRevenue</span>.</div>
+      <div class="notes"><div class="notes-label">Speaker</div>Freemium land-grab: free for the many dApps (adoption); paid for the few big players — institutions, RWA issuers, VASPs, high-volume — who need guaranteed capacity + SLA. Ties directly to DPO2U's institutional RWA positioning.</div>
+    </div>
+
+    <!-- 12. ASK -->
+    <div class="slide bg-alt">
+      <span class="caption animate-in">The ask</span>
+      <h1 class="h1 animate-in" style="margin-top:16px;">Grant funds the free tier.<br>Big players fund the rest.</h1>
+      <div class="divider animate-in"></div>
+      <div class="grid-3 animate-in" style="margin-top:8px;">
+        <div class="card"><div class="h3 text-primary">01</div><div class="small" style="margin-top:10px;">Harden <b>pure sponsorship</b> so any dApp self-builds and the pool attaches only DUST.</div></div>
+        <div class="card"><div class="h3 text-primary">02</div><div class="small" style="margin-top:10px;">Ship the <b>free public paymaster</b> to mainnet + open SDK for any dApp to source the seal.</div></div>
+        <div class="card"><div class="h3 text-primary">03</div><div class="small" style="margin-top:10px;">Onboard the <b>first cohort of dApps</b> sealed free + open holder delegation.</div></div>
+      </div>
+      <div class="body animate-in" style="margin-top:26px;">Amount: <span class="text-emphasis mono">[TBD — grant tier]</span> · Timeline: <span class="mono">~8 wks to mainnet</span> · Milestone: <span class="mono">N dApps sealed free + M holders delegating</span>.</div>
+      <div class="small animate-in" style="margin-top:12px; color:var(--c-text-muted);">Free public tier + B2B revenue from big players (a service, not holder yield) + non-custodial → strong grant fit, minimal securities exposure on the holder side.</div>
+      <div class="notes"><div class="notes-label">Speaker</div>The no-revenue model IS the grant fit: we're building public infrastructure for Midnight. Metrics are adoption (dApps sealed, holders delegating), not ARR. Fill the amount before presenting.</div>
+    </div>
+
+    <!-- 12. CLOSE -->
+    <div class="slide">
+      <h1 class="hero animate-in">Seal <span class="text-seal">with us.</span></h1>
+      <div class="body animate-in" style="margin-top:24px; max-width:940px;">Free compliance. Real adoption. <span class="text-emphasis">Dust Comply</span> — the DUST-management and compliance layer for Midnight. Live on preview today.</div>
+      <div class="flex gap-lg animate-in" style="margin-top:42px;">
+        <div><div class="caption">Repo</div><div class="small mono">github.com/fredericosanntana/dpo2u-midnight</div></div>
+        <div><div class="caption">Contact</div><div class="small mono">Frederico Santana · DPO2U</div></div>
+      </div>
+      <div class="notes"><div class="notes-label">Speaker</div>Close on the canon line. Invite them to run the demo — reproducibility is the proof, adoption is the ask.</div>
+    </div>
+
+    <div class="nav-bar">
+      <button class="nav-btn" onclick="prev()">← Prev</button>
+      <span class="nav-counter"><span id="current">1</span> / <span id="total"></span></span>
+      <div class="nav-progress"><div class="nav-progress-fill" id="progress"></div></div>
+      <button class="nav-btn" onclick="next()">Next →</button>
+    </div>
+  </div>
+
+  <script>
+    let current = 0;
+    const slides = document.querySelectorAll('.slide');
+    const total = slides.length;
+    let notesVisible = false;
+    document.getElementById('total').textContent = total;
+    function show(i) {
+      slides.forEach(s => s.classList.remove('active'));
+      current = Math.max(0, Math.min(i, total - 1));
+      slides[current].classList.add('active');
+      document.getElementById('current').textContent = current + 1;
+      document.getElementById('progress').style.width = ((current + 1) / total * 100) + '%';
+      document.querySelectorAll('.notes').forEach(n => n.classList.remove('visible'));
+      const note = slides[current].querySelector('.notes');
+      if (note && notesVisible) note.classList.add('visible');
+    }
+    function next(){ show(current+1); } function prev(){ show(current-1); }
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ') { e.preventDefault(); next(); }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); prev(); }
+      if (e.key === 'n' || e.key === 'N') { notesVisible = !notesVisible; document.querySelectorAll('.notes').forEach(n => n.classList.toggle('visible', notesVisible && n.closest('.slide').classList.contains('active'))); }
+    });
+    document.getElementById('deck').addEventListener('click', (e) => {
+      if (e.target.closest('.nav-bar') || e.target.closest('.nav-btn')) return;
+      if (e.clientX > window.innerWidth / 2) next(); else prev();
+    });
+    show(0);
+  </script>
+</body>
+</html>

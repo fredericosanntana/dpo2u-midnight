@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>DPO2U · Midnight deploy console (Lace → preprod)</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      body { margin: 0; font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; background: #0b0e14; color: #d7dce5; padding: 24px; }
+      h1 { font-size: 18px; margin: 0 0 4px; }
+      .sub { color: #7a8699; margin: 0 0 20px; }
+      button { font: inherit; background: #1b2230; color: #d7dce5; border: 1px solid #2c3445; border-radius: 6px; padding: 8px 14px; cursor: pointer; }
+      button:hover:not(:disabled) { background: #232c3d; }
+      button:disabled { opacity: .5; cursor: not-allowed; }
+      .bar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
+      .pill { padding: 3px 9px; border-radius: 999px; font-size: 12px; border: 1px solid #2c3445; }
+      .ok { color: #5bd6a0; border-color: #1f5d45; }
+      .warn { color: #e0b34d; border-color: #5d4c1f; }
+      .err { color: #e06d6d; border-color: #5d2424; }
+      table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+      th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #1b2230; font-size: 12.5px; }
+      th { color: #7a8699; font-weight: 500; }
+      td.addr { font-family: ui-monospace, monospace; color: #9fc7ff; word-break: break-all; }
+      .status-idle { color: #7a8699; } .status-run { color: #e0b34d; }
+      .status-done { color: #5bd6a0; } .status-fail { color: #e06d6d; }
+      #log { margin-top: 18px; background: #070a0f; border: 1px solid #1b2230; border-radius: 6px; padding: 12px; height: 220px; overflow: auto; white-space: pre-wrap; font-size: 12px; color: #9aa6b8; }
+      a { color: #9fc7ff; }
+      .deployall { background: #16432f; border-color: #1f5d45; color: #b9f4d6; }
+    </style>
+  </head>
+  <body>
+    <h1>DPO2U · Midnight deploy console</h1>
+    <p class="sub">Deploy the 9 consolidated contracts to <b>preprod</b> via the Lace wallet (DApp Connector). Proving runs on your local proof-server; Lace balances + submits.</p>
+    <div class="bar">
+      <button id="connect">Connect Lace</button>
+      <span id="wallet" class="pill warn">not connected</span>
+      <span id="net" class="pill"></span>
+      <span id="bal" class="pill"></span>
+      <button id="deployAll" class="deployall" disabled>Deploy all 9 &#9656;</button>
+      <button id="export" disabled>Export JSON</button>
+    </div>
+    <table>
+      <thead><tr><th style="width:170px">contract</th><th style="width:90px">status</th><th>address / tx</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div id="log"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

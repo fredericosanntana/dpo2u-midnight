@@ -1,13 +1,13 @@
+/**
+ * FeeDistributor — 40/60 expert/auditor split (Counter pools).
+ *
+ * Rewritten for the consolidated contract: distributeComplianceFee(expert_share,
+ * auditor_share) validates the 40/60 ratio on-chain (expert*3 == auditor*2).
+ */
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
 import { createCircuitContext, dummyContractAddress } from '@midnight-ntwrk/compact-runtime';
-import { Contract, ledger } from '../compact/build/fee-distributor/contract/index.js';
-
-function padTo32Bytes(str: string): Uint8Array {
-  const buf = Buffer.alloc(32);
-  Buffer.from(str, 'utf-8').copy(buf, 0, 0, Math.min(str.length, 32));
-  return new Uint8Array(buf);
-}
+import { Contract, ledger } from '../build/FeeDistributor/contract/index.js';
 
 function setup() {
   const contract = new Contract({});
@@ -25,72 +25,38 @@ function setup() {
   return { contract, ctx };
 }
 
-describe('FeeDistributor', () => {
-  it('should distribute fees with valid 40/60 split', () => {
+describe('FeeDistributor (40/60 split)', () => {
+  it('distributes a valid 40/60 split into expert/auditor pools', () => {
     const { contract, ctx } = setup();
-
-    const { context } = contract.circuits.distributeComplianceFee(
-      ctx,
-      padTo32Bytes('company_001'),
-      padTo32Bytes('did:expert:01'),
-      padTo32Bytes('did:auditor:01'),
-      1000n, 400n, 600n,
-    );
-
-    const postLedger = ledger(context.currentQueryContext.state);
-    assert.equal(postLedger.expert_fee_pool, 400n);
-    assert.equal(postLedger.auditor_fee_pool, 600n);
+    const { context } = contract.circuits.distributeComplianceFee(ctx, 400n, 600n);
+    const L = ledger(context.currentQueryContext.state);
+    assert.equal(L.expert_fee_pool, 400n);
+    assert.equal(L.auditor_fee_pool, 600n);
+    assert.equal(L.total_distributed, 1000n);
   });
 
-  it('should reject fee = 0', () => {
+  it('rejects a non-40/60 ratio', () => {
     const { contract, ctx } = setup();
-
     assert.throws(
-      () => {
-        contract.circuits.distributeComplianceFee(
-          ctx,
-          padTo32Bytes('company'),
-          padTo32Bytes('expert'),
-          padTo32Bytes('auditor'),
-          0n, 0n, 0n,
-        );
-      },
-      /Fee must be greater than zero/,
+      () => contract.circuits.distributeComplianceFee(ctx, 500n, 600n),
+      /Must be 40\/60 split/,
     );
   });
 
-  it('should reject mismatched shares', () => {
+  it('rejects a zero expert share', () => {
     const { contract, ctx } = setup();
-
     assert.throws(
-      () => {
-        contract.circuits.distributeComplianceFee(
-          ctx,
-          padTo32Bytes('company'),
-          padTo32Bytes('expert'),
-          padTo32Bytes('auditor'),
-          1000n, 500n, 600n,
-        );
-      },
-      /Shares must sum to total amount/,
+      () => contract.circuits.distributeComplianceFee(ctx, 0n, 600n),
+      /Expert share must be > 0/,
     );
   });
 
-  it('should query pool balances', () => {
+  it('reads pool balances back via getters', () => {
     const { contract, ctx } = setup();
-
-    const { context } = contract.circuits.distributeComplianceFee(
-      ctx,
-      padTo32Bytes('company'),
-      padTo32Bytes('expert'),
-      padTo32Bytes('auditor'),
-      500n, 200n, 300n,
-    );
-
-    const auditorResult = contract.circuits.getAuditorPools(context);
-    assert.equal(auditorResult.result, 300n);
-
-    const expertResult = contract.circuits.getExpertPools(auditorResult.context);
-    assert.equal(expertResult.result, 200n);
+    const { context } = contract.circuits.distributeComplianceFee(ctx, 200n, 300n);
+    assert.equal(contract.circuits.getAuditorPool(context).result, 300n);
+    const expert = contract.circuits.getExpertPool(context);
+    assert.equal(expert.result, 200n);
+    assert.equal(contract.circuits.getTotalDistributed(expert.context).result, 500n);
   });
 });

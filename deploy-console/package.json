@@ -1,0 +1,35 @@
+{
+  "name": "dpo2u-midnight-deploy-console",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Browser deploy console — deploy the 9 DPO2U contracts to Midnight preprod via the Lace wallet (DApp Connector). Sidesteps the headless full-sync (Lace syncs in-extension).",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --port 4173 --host 127.0.0.1"
+  },
+  "dependencies": {
+    "@midnight-ntwrk/compact-runtime": "0.16.0",
+    "@midnight-ntwrk/ledger-v8": "8.1.0",
+    "@midnight-ntwrk/dapp-connector-api": "4.0.1",
+    "@midnight-ntwrk/midnight-js-contracts": "4.1.1",
+    "@midnight-ntwrk/midnight-js-types": "4.1.1",
+    "@midnight-ntwrk/midnight-js-utils": "4.1.1",
+    "@midnight-ntwrk/midnight-js-network-id": "4.1.1",
+    "@midnight-ntwrk/midnight-js-indexer-public-data-provider": "4.1.1",
+    "@midnight-ntwrk/midnight-js-http-client-proof-provider": "4.1.1",
+    "@midnight-ntwrk/midnight-js-fetch-zk-config-provider": "4.1.1",
+    "@midnight-ntwrk/compact-js": "2.5.1"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0",
+    "vite-plugin-wasm": "^3.3.0",
+    "vite-plugin-top-level-await": "^1.4.4",
+    "buffer": "^6.0.3",
+    "typescript": "^5.9.3"
+  },
+  "overrides": {
+    "@midnight-ntwrk/ledger-v8": "8.1.0"
+  }
+}

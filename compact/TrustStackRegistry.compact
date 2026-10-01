@@ -1,0 +1,39 @@
+pragma language_version >= 0.21.0;
+import CompactStandardLibrary;
+
+// DPO2U Shared ZK Trust Stack registry — "uma muralha, não cem castelos".
+//
+// Anchors the hash of the AUDITED compliance stack on-chain. Instead of every dApp building (and
+// having to separately audit) its own ZK compliance stack, they all reuse ONE audited stack whose
+// commitment is registered here. Any dApp/agent proves it uses the same audited base by checking
+// its computed stack hash equals the registered one — so ecosystem security scales WITH adoption
+// (one audit covers everyone) instead of degrading (n independent stacks → n failure surfaces).
+
+export ledger stack_hashes: Map<Bytes<32>, Bytes<32>>;     // stack_id -> audited-stack commitment hash
+export ledger stack_versions: Map<Bytes<32>, Uint<32>>;    // stack_id -> version
+export ledger stack_count: Counter;
+
+// Register an audited stack commitment. stack_hash = H(verifying keys / contract addresses of the
+// audited stack). One registration per stack_id (bump the id for a new audited version).
+export circuit registerStack(stack_id: Bytes<32>, stack_hash: Bytes<32>, version: Uint<32>): [] {
+  assert(!stack_hashes.member(disclose(stack_id)), "Stack already registered for this id");
+  stack_hashes.insert(disclose(stack_id), disclose(stack_hash));
+  stack_versions.insert(disclose(stack_id), disclose(version));
+  stack_count.increment(1);
+}
+
+// A consumer proves it uses the SAME audited stack: pass your computed hash, get true iff it matches.
+export circuit verifyStack(stack_id: Bytes<32>, candidate_hash: Bytes<32>): Boolean {
+  assert(stack_hashes.member(disclose(stack_id)), "Unknown stack id");
+  return stack_hashes.lookup(disclose(stack_id)) == disclose(candidate_hash);
+}
+
+export circuit getStackHash(stack_id: Bytes<32>): Bytes<32> {
+  return stack_hashes.lookup(disclose(stack_id));
+}
+export circuit getStackVersion(stack_id: Bytes<32>): Uint<32> {
+  return stack_versions.lookup(disclose(stack_id));
+}
+export circuit getStackCount(): Uint<64> {
+  return stack_count;
+}

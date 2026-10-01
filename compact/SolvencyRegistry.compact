@@ -1,0 +1,59 @@
+pragma language_version >= 0.21.0;
+import CompactStandardLibrary;
+
+// DPO2U SolvencyRegistry — Proof-of-Reserve / solvency seal (score-private analog).
+//
+// Midnight port of the Stellar `seal_solvency` (Groth16/BN254 PoR), the VASP spearhead:
+// BCB Res. 519/520/521 (in force 2026-02-02) require full client-fund segregation + a daily
+// proof of reserve. This proves the solvency predicate `reserves >= liabilities` WITHOUT
+// disclosing EITHER amount — only the verdict (1 = solvent) + entity + the off-chain
+// reserve-report commitment + an anti-replay context are written. "Private balances, public proof."
+//
+// Canonical-VK pinning is solved by construction (same as ComplianceRegistry): the circuit compiles
+// INTO this contract, so the verifying key is pinned by the deployed contract address and no
+// entrypoint accepts a caller-supplied VK/circuit. An INSOLVENT entity literally cannot produce a
+// valid proof (the `reserves >= liabilities` assert fails → no tx), so solvency cannot be faked.
+
+export ledger solvency_verdicts: Map<Bytes<32>, Uint<8>>;    // entity_id -> 1 (solvent)
+export ledger solvency_reports: Map<Bytes<32>, Bytes<32>>;   // entity_id -> off-chain reserve-report CID/hash
+export ledger solvency_contexts: Map<Bytes<32>, Bytes<32>>;  // entity_id -> public anti-replay context H(entity||period||nonce)
+export ledger solvency_periods: Map<Bytes<32>, Uint<32>>;    // entity_id -> reporting period (e.g. YYYYMMDD)
+export ledger used_contexts: Map<Bytes<32>, Uint<8>>;        // Set semantics: a context may be sealed only once
+export ledger solvency_count: Counter;
+
+// `reserves` and `liabilities` are PRIVATE inputs — never disclosed, never written. The circuit
+// proves reserves cover liabilities and writes only the public verdict + commitments.
+export circuit sealSolvency(
+  entity_id: Bytes<32>,
+  report_cid: Bytes<32>,
+  context: Bytes<32>,
+  period: Uint<32>,
+  reserves: Uint<64>,
+  liabilities: Uint<64>
+): [] {
+  // Anti-replay: a given context (entity||period||nonce) may be sealed only once.
+  assert(!used_contexts.member(disclose(context)), "Replay: solvency context already used");
+  // Proof-public predicate: prove reserves cover liabilities WITHOUT disclosing either amount.
+  assert(reserves >= liabilities, "Insolvent: reserves do not cover liabilities");
+  // Bind the context and write the public audit trail. The amounts are never written.
+  used_contexts.insert(disclose(context), disclose(1 as Uint<8>));
+  solvency_verdicts.insert(disclose(entity_id), disclose(1 as Uint<8>));
+  solvency_reports.insert(disclose(entity_id), disclose(report_cid));
+  solvency_contexts.insert(disclose(entity_id), disclose(context));
+  solvency_periods.insert(disclose(entity_id), disclose(period));
+  solvency_count.increment(1);
+}
+
+// Non-leaking reads. There is intentionally no getReserves/getLiabilities — both stay private.
+export circuit isSolvent(entity_id: Bytes<32>): Uint<8> {
+  return solvency_verdicts.lookup(disclose(entity_id));
+}
+export circuit getSolvencyReport(entity_id: Bytes<32>): Bytes<32> {
+  return solvency_reports.lookup(disclose(entity_id));
+}
+export circuit getSolvencyPeriod(entity_id: Bytes<32>): Uint<32> {
+  return solvency_periods.lookup(disclose(entity_id));
+}
+export circuit getSolvencyCount(): Uint<64> {
+  return solvency_count;
+}

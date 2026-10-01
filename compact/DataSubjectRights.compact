@@ -1,0 +1,172 @@
+pragma language_version >= 0.21.0;
+import CompactStandardLibrary;
+
+// DataSubjectRights — LGPD Chapter III rights request tracking on Midnight Network
+//
+// Tracks exercise of data subject rights (LGPD Art. 18) and response deadlines (Art. 19).
+// Designed as the third pillar of the DPO2U compliance suite alongside:
+//   - ConsentRegistry  (consent grant/revoke — Art. 7-8)
+//   - DataAuditLog     (processing event trail — Art. 37)
+//
+// REQUEST TYPE CODES (Uint<8>):
+//   1 = confirmation          (Art. 18 I  — confirm data is processed)
+//   2 = data_access           (Art. 18 II — copy of personal data held)
+//   3 = data_correction       (Art. 18 III — fix inaccurate/incomplete data)
+//   4 = anonymization_block   (Art. 18 IV — anonymize or block excessive data)
+//   5 = portability           (Art. 18 V  — machine-readable export)
+//   6 = consent_deletion      (Art. 18 VI — delete data processed under consent)
+//   7 = sharing_info          (Art. 18 VII — list of third-party recipients)
+//   8 = refusal_info          (Art. 18 VIII — consequences of withholding consent)
+//   9 = consent_revocation    (Art. 18 IX — revoke consent; use ConsentRegistry too)
+//
+// REQUEST STATUS CODES (Uint<8>):
+//   0 = not_found
+//   1 = open       (submitted, awaiting controller response)
+//   2 = fulfilled  (controller responded within deadline)
+//   3 = rejected   (controller rejected with justification — documented off-chain)
+//   4 = overdue    (15-day Art. 19 deadline exceeded without response)
+//
+// DESIGN:
+//   request_id: Bytes<32> = keccak256(subject_id || controller_id || req_type || nonce)
+//     Computed off-chain; nonce allows multiple requests of the same type per subject.
+//   submitted_block / resolved_block: Uint<32> block numbers (supports up to ~8000 years
+//     at 1 block/minute — avoids the Uint<16> 45-day limit of DataAuditLog).
+//   LGPD Art. 19 deadline = 15 days = 21600 blocks (at 1 block/minute).
+
+export ledger request_status: Map<Bytes<32>, Uint<8>>;
+export ledger request_type: Map<Bytes<32>, Uint<8>>;
+export ledger request_submitted_block: Map<Bytes<32>, Uint<32>>;
+export ledger request_resolved_block: Map<Bytes<32>, Uint<32>>;
+export ledger total_requests: Counter;
+export ledger total_fulfilled: Counter;
+export ledger total_rejected: Counter;
+export ledger total_overdue: Counter;
+
+// LGPD Art. 19 — controller must respond within 15 days.
+// At 1 block per minute: 15 * 24 * 60 = 21600 blocks.
+pure circuit lgpd_deadline_blocks(): Uint<32> {
+  return 21600 as Uint<32>;
+}
+
+// Submit a new rights request. Each unique request_id can only be submitted once.
+export circuit submitRequest(
+  request_id: Bytes<32>,
+  req_type: Uint<8>,
+  submitted_block: Uint<32>
+): [] {
+  assert(!request_status.member(disclose(request_id)), "Request already exists with this id");
+  assert(req_type > 0 as Uint<8>, "Request type must be 1-9");
+  assert(req_type <= 9 as Uint<8>, "Unknown request type; must be 1-9");
+  assert(submitted_block > 0 as Uint<32>, "Submitted block required");
+
+  request_status.insert(disclose(request_id), disclose(1 as Uint<8>));
+  request_type.insert(disclose(request_id), disclose(req_type));
+  request_submitted_block.insert(disclose(request_id), disclose(submitted_block));
+  total_requests.increment(1);
+}
+
+// Controller fulfills an open request within the LGPD Art. 19 deadline.
+export circuit fulfillRequest(
+  request_id: Bytes<32>,
+  resolved_block: Uint<32>
+): [] {
+  assert(request_status.member(disclose(request_id)), "No request found with this id");
+  const status = request_status.lookup(disclose(request_id));
+  assert(status == 1 as Uint<8>, "Request must be open to fulfill");
+  assert(resolved_block > 0 as Uint<32>, "Resolved block required");
+
+  request_status.insert(disclose(request_id), disclose(2 as Uint<8>));
+  request_resolved_block.insert(disclose(request_id), disclose(resolved_block));
+  total_fulfilled.increment(1);
+}
+
+// Controller rejects a request (LGPD Art. 18 §4 allows rejection with justification).
+// Justification is stored off-chain; only the outcome is recorded on-chain.
+export circuit rejectRequest(
+  request_id: Bytes<32>,
+  resolved_block: Uint<32>
+): [] {
+  assert(request_status.member(disclose(request_id)), "No request found with this id");
+  const status = request_status.lookup(disclose(request_id));
+  assert(status == 1 as Uint<8>, "Request must be open to reject");
+  assert(resolved_block > 0 as Uint<32>, "Resolved block required");
+
+  request_status.insert(disclose(request_id), disclose(3 as Uint<8>));
+  request_resolved_block.insert(disclose(request_id), disclose(resolved_block));
+  total_rejected.increment(1);
+}
+
+// Mark an open request as overdue after the LGPD Art. 19 deadline passes.
+// Caller provides current_block; circuit verifies deadline has truly elapsed.
+export circuit markRequestOverdue(
+  request_id: Bytes<32>,
+  current_block: Uint<32>
+): [] {
+  assert(request_status.member(disclose(request_id)), "No request found with this id");
+  const status = request_status.lookup(disclose(request_id));
+  assert(status == 1 as Uint<8>, "Only open requests can be marked overdue");
+
+  const submitted = request_submitted_block.lookup(disclose(request_id));
+  const deadline = lgpd_deadline_blocks();
+  const expiry = ((submitted as Uint<64>) + (deadline as Uint<64>)) as Uint<64>;
+  assert((current_block as Uint<64>) >= expiry, "LGPD Art. 19 15-day deadline not yet exceeded");
+
+  request_status.insert(disclose(request_id), disclose(4 as Uint<8>));
+  total_overdue.increment(1);
+}
+
+// Query: status of a specific request (0=none, 1=open, 2=fulfilled, 3=rejected, 4=overdue).
+export circuit getRequestStatus(request_id: Bytes<32>): Uint<8> {
+  if (request_status.member(disclose(request_id))) {
+    return request_status.lookup(disclose(request_id));
+  } else {
+    return 0 as Uint<8>;
+  }
+}
+
+// Query: request type code for a specific request. Returns 0 if unknown.
+export circuit getRequestType(request_id: Bytes<32>): Uint<8> {
+  if (request_type.member(disclose(request_id))) {
+    return request_type.lookup(disclose(request_id));
+  } else {
+    return 0 as Uint<8>;
+  }
+}
+
+// Query: block at which request was submitted (used to verify deadline compliance).
+export circuit getRequestSubmittedBlock(request_id: Bytes<32>): Uint<32> {
+  if (request_submitted_block.member(disclose(request_id))) {
+    return request_submitted_block.lookup(disclose(request_id));
+  } else {
+    return 0 as Uint<32>;
+  }
+}
+
+// Query: block at which request was resolved (0 if still open/overdue or unknown).
+export circuit getRequestResolvedBlock(request_id: Bytes<32>): Uint<32> {
+  if (request_resolved_block.member(disclose(request_id))) {
+    return request_resolved_block.lookup(disclose(request_id));
+  } else {
+    return 0 as Uint<32>;
+  }
+}
+
+// Query: cumulative rights requests submitted (all subjects and controllers).
+export circuit getTotalRequests(): Uint<64> {
+  return total_requests;
+}
+
+// Query: cumulative requests fulfilled.
+export circuit getTotalFulfilled(): Uint<64> {
+  return total_fulfilled;
+}
+
+// Query: cumulative requests rejected (with ANPD audit implications if high ratio).
+export circuit getTotalRejected(): Uint<64> {
+  return total_rejected;
+}
+
+// Query: cumulative requests overdue — primary ANPD enforcement risk indicator.
+export circuit getTotalOverdue(): Uint<64> {
+  return total_overdue;
+}

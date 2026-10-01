@@ -1,0 +1,90 @@
+pragma language_version >= 0.21.0;
+import CompactStandardLibrary;
+
+// DPO2U ComplianceEscrowV2 — conditional payment with REAL native-token (NIGHT) custody.
+//
+// Upgrade of ComplianceEscrow (V1, bookkeeping-only) to actually custody and move value:
+// NIGHT is the native UNSHIELDED token (color = default<Bytes<32>>). createEscrow RECEIVES NIGHT
+// from the payer into the contract; attestAndRelease SENDS it to the beneficiary on a passing ZK
+// attestation; refundEscrow returns it to the payer.
+//
+// This is the genuine Midnight port of Stellar `attest_and_execute` + `deposit_funds` — real value
+// moves, gated on a score-private ZK proof, atomically.
+//
+// CLIENT-SIDE (the integration the contract alone can't prove): calling createEscrow requires the
+// transaction to provide `amount` NIGHT as an unshielded input (the wallet/balancer must attach it);
+// beneficiary/payer must be valid UserAddress values supplied by the caller.
+
+// status: 0 = PENDING, 1 = RELEASED (beneficiary), 2 = REFUNDED (payer)
+export ledger escrow_payers: Map<Bytes<32>, UserAddress>;        // escrow_id -> payer address
+export ledger escrow_beneficiaries: Map<Bytes<32>, UserAddress>; // escrow_id -> beneficiary address
+export ledger escrow_amounts: Map<Bytes<32>, Uint<128>>;         // escrow_id -> NIGHT amount held
+export ledger escrow_status: Map<Bytes<32>, Uint<8>>;            // escrow_id -> status
+export ledger escrow_evidence: Map<Bytes<32>, Bytes<32>>;        // escrow_id -> settling evidence_hash
+export ledger used_contexts: Map<Bytes<32>, Uint<8>>;            // anti-replay (Set semantics)
+export ledger escrow_count: Counter;
+export ledger released_count: Counter;
+export ledger refunded_count: Counter;
+
+// Payer funds the escrow with real NIGHT (unshielded native token). The contract custodies it.
+export circuit createEscrow(
+  escrow_id: Bytes<32>,
+  payer: UserAddress,
+  beneficiary: UserAddress,
+  amount: Uint<128>,
+  use_case_id: Bytes<32>
+): [] {
+  assert(!escrow_status.member(disclose(escrow_id)), "Escrow already exists");
+  assert(amount > 0, "Amount must be greater than zero");
+  receiveUnshielded(default<Bytes<32>>, disclose(amount));        // contract receives NIGHT from caller
+  escrow_payers.insert(disclose(escrow_id), disclose(payer));
+  escrow_beneficiaries.insert(disclose(escrow_id), disclose(beneficiary));
+  escrow_amounts.insert(disclose(escrow_id), disclose(amount));
+  escrow_status.insert(disclose(escrow_id), disclose(0 as Uint<8>));
+  escrow_count.increment(1);
+}
+
+// Atomic: ZK-prove score >= threshold (score PRIVATE) AND send the held NIGHT to the beneficiary.
+export circuit attestAndRelease(
+  escrow_id: Bytes<32>,
+  evidence_hash: Bytes<32>,
+  threshold: Uint<8>,
+  context: Bytes<32>,
+  score: Uint<8>
+): [] {
+  assert(escrow_status.member(disclose(escrow_id)), "Unknown escrow");
+  assert(escrow_status.lookup(disclose(escrow_id)) == 0 as Uint<8>, "Escrow not pending");
+  assert(!used_contexts.member(disclose(context)), "Replay: context already used");
+  assert(score <= 100 as Uint<8>, "Invalid score, must be bounded 0-100%");
+  assert(score >= threshold, "Score below threshold");
+  const amount = escrow_amounts.lookup(disclose(escrow_id));
+  const beneficiary = escrow_beneficiaries.lookup(disclose(escrow_id));
+  sendUnshielded(default<Bytes<32>>, amount, right<ContractAddress, UserAddress>(beneficiary)); // release NIGHT
+  used_contexts.insert(disclose(context), disclose(1 as Uint<8>));
+  escrow_status.insert(disclose(escrow_id), disclose(1 as Uint<8>));
+  escrow_evidence.insert(disclose(escrow_id), disclose(evidence_hash));
+  released_count.increment(1);
+}
+
+export circuit refundEscrow(escrow_id: Bytes<32>): [] {
+  assert(escrow_status.member(disclose(escrow_id)), "Unknown escrow");
+  assert(escrow_status.lookup(disclose(escrow_id)) == 0 as Uint<8>, "Escrow not pending (already settled)");
+  const amount = escrow_amounts.lookup(disclose(escrow_id));
+  const payer = escrow_payers.lookup(disclose(escrow_id));
+  sendUnshielded(default<Bytes<32>>, amount, right<ContractAddress, UserAddress>(payer));        // refund NIGHT
+  escrow_status.insert(disclose(escrow_id), disclose(2 as Uint<8>));
+  refunded_count.increment(1);
+}
+
+export circuit getEscrowStatus(escrow_id: Bytes<32>): Uint<8> {
+  return escrow_status.lookup(disclose(escrow_id));
+}
+export circuit getEscrowAmount(escrow_id: Bytes<32>): Uint<128> {
+  return escrow_amounts.lookup(disclose(escrow_id));
+}
+export circuit getEscrowCount(): Uint<64> {
+  return escrow_count;
+}
+export circuit getReleasedCount(): Uint<64> {
+  return released_count;
+}

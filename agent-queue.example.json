@@ -1,0 +1,21 @@
+[
+  {
+    "type": "use_case",
+    "use_case_id": "lgpd_compliance_v1",
+    "verdict": 1,
+    "evidence_hash": "856bfa7a5e5a7eca63664a76f6aac0c8da4e5b8db92f93b46f81e61319eade07",
+    "metadata_hash": "6472904df35a9bfcfe887e1772e984188dab12b147f71067c9e64b0a6d8caa01",
+    "org": "acme-corp",
+    "jurisdiction": "LGPD"
+  },
+  {
+    "type": "compliance",
+    "company_id": "acme-corp",
+    "agent_did": "did:dpo2u:agent:001",
+    "policy_cid": "bafy-policy-cid",
+    "threshold": 70,
+    "score": 85,
+    "org": "acme-corp",
+    "jurisdiction": "LGPD"
+  }
+]

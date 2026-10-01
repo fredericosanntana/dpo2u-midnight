@@ -1,0 +1,111 @@
+pragma language_version >= 0.21.0;
+import CompactStandardLibrary;
+
+// ConsentRegistry — LGPD/GDPR consent management on Midnight Network
+//
+// Implements consent requirements from:
+//   - LGPD Art. 7 (legal bases), Art. 8 (consent requirements), Art. 8 §5 (revocation)
+//   - GDPR Art. 6(1)(a) and Art. 7 (conditions for consent)
+//
+// DESIGN CHOICES:
+//   - subject_id is a Bytes<32> hash of the data subject identifier (e.g. keccak256(email))
+//     This ensures the contract does NOT store PII on-chain — only its hash.
+//   - purposes is a Uint<8> bitmask allowing multi-purpose consent in a single tx:
+//       0x01 (1)  = essential_processing
+//       0x02 (2)  = analytics
+//       0x04 (4)  = marketing
+//       0x08 (8)  = third_party_sharing
+//       0x10 (16) = profiling
+//   - policy_version tracks which privacy policy version the subject consented to,
+//     enabling re-consent flows when policies change (LGPD Art. 8 §6)
+//
+// STATUS CODES (Uint<8>):
+//   0 = no_record    (subject never registered)
+//   1 = active       (consent granted and current)
+//   2 = revoked      (consent withdrawn, Art. 8 §5)
+
+export ledger consent_status: Map<Bytes<32>, Uint<8>>;
+export ledger consent_purposes: Map<Bytes<32>, Uint<8>>;
+export ledger consent_policy_version: Map<Bytes<32>, Uint<8>>;
+export ledger total_consents_granted: Counter;
+export ledger total_revocations: Counter;
+
+// Grant consent for a data subject.
+// Must specify at least one purpose and a valid policy version.
+// Re-calling this for an existing subject updates their record (e.g. policy upgrade re-consent).
+export circuit grantConsent(
+  subject_id: Bytes<32>,
+  purposes: Uint<8>,
+  policy_version: Uint<8>
+): [] {
+  assert(purposes > 0 as Uint<8>, "Must grant at least one purpose");
+  assert(policy_version > 0 as Uint<8>, "Policy version must be specified");
+  consent_status.insert(disclose(subject_id), disclose(1 as Uint<8>));
+  consent_purposes.insert(disclose(subject_id), disclose(purposes));
+  consent_policy_version.insert(disclose(subject_id), disclose(policy_version));
+  total_consents_granted.increment(1);
+}
+
+// Revoke ALL consent for a data subject (LGPD Art. 8 §5 — must be as easy as granting).
+// Sets status=2, clears purposes. Record is retained for audit (revocation is itself an event).
+export circuit revokeConsent(subject_id: Bytes<32>): [] {
+  assert(consent_status.member(disclose(subject_id)), "No consent record found for this subject");
+  consent_status.insert(disclose(subject_id), disclose(2 as Uint<8>));
+  consent_purposes.insert(disclose(subject_id), disclose(0 as Uint<8>));
+  total_revocations.increment(1);
+}
+
+// Update consented purposes without full revocation (e.g. uncheck marketing, keep essential).
+// Requires an existing consent record. Use revokeConsent to remove all purposes.
+export circuit updateConsentPurposes(
+  subject_id: Bytes<32>,
+  new_purposes: Uint<8>,
+  policy_version: Uint<8>
+): [] {
+  assert(consent_status.member(disclose(subject_id)), "No consent record found for this subject");
+  assert(new_purposes > 0 as Uint<8>, "Must keep at least one purpose; use revokeConsent to fully revoke");
+  assert(policy_version > 0 as Uint<8>, "Policy version must be specified");
+  consent_status.insert(disclose(subject_id), disclose(1 as Uint<8>));
+  consent_purposes.insert(disclose(subject_id), disclose(new_purposes));
+  consent_policy_version.insert(disclose(subject_id), disclose(policy_version));
+}
+
+// Query: get consent status for a subject (0=none, 1=active, 2=revoked).
+// Returns 0 for unknown subjects (Map.lookup requires the key to exist, so guard with member).
+export circuit getConsentStatus(subject_id: Bytes<32>): Uint<8> {
+  if (consent_status.member(disclose(subject_id))) {
+    return consent_status.lookup(disclose(subject_id));
+  } else {
+    return 0 as Uint<8>;
+  }
+}
+
+// Query: get bitmask of currently consented purposes.
+// Returns 0 if no record or fully revoked.
+export circuit getConsentPurposes(subject_id: Bytes<32>): Uint<8> {
+  if (consent_purposes.member(disclose(subject_id))) {
+    return consent_purposes.lookup(disclose(subject_id));
+  } else {
+    return 0 as Uint<8>;
+  }
+}
+
+// Query: get the policy version the subject last consented to.
+// Returns 0 if no record.
+export circuit getConsentPolicyVersion(subject_id: Bytes<32>): Uint<8> {
+  if (consent_policy_version.member(disclose(subject_id))) {
+    return consent_policy_version.lookup(disclose(subject_id));
+  } else {
+    return 0 as Uint<8>;
+  }
+}
+
+// Query: cumulative number of grantConsent calls (may exceed unique subject count on re-consent).
+export circuit getTotalConsentsGranted(): Uint<64> {
+  return total_consents_granted;
+}
+
+// Query: total revocations (cumulative).
+export circuit getTotalRevocations(): Uint<64> {
+  return total_revocations;
+}
