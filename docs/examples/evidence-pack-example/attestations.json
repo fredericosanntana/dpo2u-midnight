@@ -1,0 +1,26 @@
+[
+  {
+    "id": "att-001",
+    "type": "travel_rule_verdict",
+    "transfer_id": "7472616e736665722d504153532d303031000000000000000000000000000000",
+    "verdict": "RELEASED",
+    "reason_code": 0,
+    "originator_root": "83d3efbd49855f9e1e1dbec3d3fc839080e6cbd08f95b3a3e56703a896f552fe",
+    "beneficiary_root": "654aa678941cd4767b1a66c0265132e6960f77e7fd06213c90ccb22aa960fd96",
+    "source": "simulator",
+    "contract_address": null,
+    "tx_hash": null
+  },
+  {
+    "id": "att-002",
+    "type": "travel_rule_verdict",
+    "transfer_id": "7472616e736665722d4641494c2d303032000000000000000000000000000000",
+    "verdict": "FAIL",
+    "reason_code": 2,
+    "originator_root": "998122156f3230e1ae0ce1ed5a52d9b80582d639d6087d018b6d46bef419a897",
+    "beneficiary_root": "c0b17ccc09195745bccf7600966dcf36ea9bfa966f8c786f18ec4cfa9403b10c",
+    "source": "simulator",
+    "contract_address": null,
+    "tx_hash": null
+  }
+]
