@@ -1,0 +1,177 @@
+{
+  "label": "FICTITIOUS test VASP - not a real entity",
+  "generatedAt": "2026-11-06T21:32:29.815Z",
+  "engine": "pilot-gateway predicates + control-plane policy packs",
+  "examples": [
+    {
+      "useCase": "psav_partner_br_v1",
+      "pack": {
+        "id": "psav-partner-br@1.0.0",
+        "version": "1.0.0",
+        "hash": "5098e1806e2a918da1aa7f1db39c0b4e41e022d2d7bad6abcdc511b6ddddab86"
+      },
+      "engineVerdict": "REVIEW",
+      "rules": [
+        {
+          "id": "psav.partner.relevant_service",
+          "origin": "human",
+          "verdict": "REVIEW"
+        },
+        {
+          "id": "psav.partner.due_diligence",
+          "origin": "human",
+          "verdict": "REVIEW"
+        },
+        {
+          "id": "psav.partner.acts_on_behalf",
+          "origin": "human",
+          "verdict": "REVIEW"
+        },
+        {
+          "id": "psav.partner.no_direct_charge",
+          "origin": "human",
+          "verdict": "REVIEW"
+        },
+        {
+          "id": "psav.partner.bcb_access",
+          "origin": "human",
+          "verdict": "REVIEW"
+        },
+        {
+          "id": "psav.partner.client_disclosure",
+          "origin": "human",
+          "verdict": "REVIEW"
+        },
+        {
+          "id": "psav.partner.accountable_director",
+          "origin": "human",
+          "verdict": "REVIEW"
+        },
+        {
+          "id": "psav.partner.kyc_partner",
+          "origin": "human",
+          "verdict": "REVIEW"
+        }
+      ],
+      "slots": {
+        "origins": [
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          2,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "verdicts": [
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "evidenceSha256": "611ed1550a9c934710ad3d8e35afbd9c53fe62e63c86ec48b2b38ced800312ce"
+    },
+    {
+      "useCase": "vasp_por_br_v1",
+      "pack": {
+        "id": "psav-safeguard-br@1.1.0",
+        "version": "1.1.0",
+        "hash": "da7e8b23363947d80dff87be55be565b74dcf991daf10060d7b0cf1eeb5ea713"
+      },
+      "engineVerdict": "REVIEW",
+      "rules": [
+        {
+          "id": "psav.safeguard.fiat_segregation",
+          "origin": "human",
+          "verdict": "REVIEW"
+        },
+        {
+          "id": "psav.safeguard.asset_segregation",
+          "origin": "machine",
+          "verdict": "REVIEW"
+        },
+        {
+          "id": "psav.safeguard.reserve_proof",
+          "origin": "human",
+          "verdict": "REVIEW"
+        },
+        {
+          "id": "psav.safeguard.segregation_audit",
+          "origin": "third_party",
+          "verdict": "REVIEW"
+        },
+        {
+          "id": "psav.safeguard.no_client_asset_use",
+          "origin": "human",
+          "verdict": "REVIEW"
+        },
+        {
+          "id": "psav.safeguard.por_filing",
+          "origin": "machine",
+          "verdict": "REVIEW"
+        }
+      ],
+      "slots": {
+        "origins": [
+          2,
+          1,
+          2,
+          3,
+          2,
+          1,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ],
+        "verdicts": [
+          3,
+          3,
+          3,
+          3,
+          3,
+          3,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0
+        ]
+      },
+      "evidenceSha256": "b3afd5a2352fcc137f78e78f06fbf8f38a0287be3bff4ca87684146eb905fb3b"
+    }
+  ]
+}

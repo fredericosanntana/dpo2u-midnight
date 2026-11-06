@@ -1,0 +1,246 @@
+pragma language_version >= 0.21.0;
+import CompactStandardLibrary;
+
+// PsavPassport — PSAV partner conformity passport (Res. BCB 520/2025), on Midnight (preview only).
+//
+// Mirrors the off-chain passport of the DPO2U control-plane (PassportService): tier, pinned
+// pack version/hash, validity window, per-origin rule counts, suspension/revocation/expiry, and
+// SPSAV sponsorship (SPSAV proposes, partner consents).
+//
+// PUBLIC state only holds commitments and coarse facts: partner_commit (salted), pack hash/version,
+// tier, issued/expires, verdict, status, rule counts per origin, salted evidence commitment,
+// salted reviewer-signature commitment. NEVER on chain: the partner identity (CNPJ/ID), per-rule
+// verdicts, the evidence, the reviewer signature, the salts.
+//
+// ISSUING IS NOT GATING. The issuer records the passport with whatever verdict the rules produce:
+//   verdict 1 PASS, 2 FAIL, 3 REVIEW. Only PASS counts as valid in isValid / verifyPassport.
+//   FAIL  = any rule (any origin) is FAIL.
+//   PASS  = tier "machine-only": >=1 machine rule and every machine rule PASS (human/third-party rules
+//           may be pending); tier1/2/3: every rule PASS AND a reviewer-signature commitment present.
+//   REVIEW = everything else (pending rules, no machine rule at machine-only, reviewer missing).
+//   A PASS on a human/third-party rule without a reviewer signature is rejected (as in the control-plane).
+//
+// TIER: 0 tier1-machine-only, 1 tier1, 2 tier2, 3 tier3. Window: 365 days (tier 0/1), 31 days (tier 2/3),
+//   counted from issued_at (the seal time), enforced in-circuit. Timestamps are unix seconds.
+// STATUS: 1 ACTIVE, 2 SUSPENDED, 3 REVOKED, 4 EXPIRED. Expiry is by time: isValid is false once the
+//   block time reaches expires_at; markExpired (anyone) records EXPIRED on the ledger.
+// RULE SLOTS (witness, 16 max): origin 0 unused, 1 machine, 2 human, 3 third_party; verdict 1/2/3.
+// SPONSORSHIP STATUS: 1 PROPOSED, 2 CONSENTED.
+
+witness owner_secret(): Bytes<32>;
+witness rule_origins(): Vector<16, Uint<8>>;
+witness rule_verdicts(): Vector<16, Uint<8>>;
+// Partner identifier (CNPJ/ID digest) and the commitment salt. The salt is shared off-chain by the
+// issuer and the partner; the partner needs it to open partner_commit and to consent.
+witness partner_id(): Bytes<32>;
+witness commit_salt(): Bytes<32>;
+// Hash of the reviewer's signature over the verdicts (zero = none). Only its salted commitment goes on chain.
+witness reviewer_sig_hash(): Bytes<32>;
+// Hash of the evaluation evidence (the evidence itself never leaves the off-chain system).
+witness evidence_hash(): Bytes<32>;
+witness sponsor_secret(): Bytes<32>;
+
+export ledger owner_commit: Bytes<32>;
+
+export ledger partner_commit: Map<Bytes<32>, Bytes<32>>;
+export ledger pack_hash: Map<Bytes<32>, Bytes<32>>;
+export ledger pack_version: Map<Bytes<32>, Bytes<32>>;
+export ledger tier: Map<Bytes<32>, Uint<8>>;
+export ledger issued_at: Map<Bytes<32>, Uint<64>>;
+export ledger expires_at: Map<Bytes<32>, Uint<64>>;
+export ledger verdict: Map<Bytes<32>, Uint<8>>;
+export ledger status: Map<Bytes<32>, Uint<8>>;
+export ledger machine_rules: Map<Bytes<32>, Uint<16>>;
+export ledger human_rules: Map<Bytes<32>, Uint<16>>;
+export ledger third_party_rules: Map<Bytes<32>, Uint<16>>;
+export ledger evidence_commit: Map<Bytes<32>, Bytes<32>>;
+export ledger reviewer_commit: Map<Bytes<32>, Bytes<32>>;
+export ledger total_issued: Counter;
+export ledger total_pass: Counter;
+
+export ledger sp_sponsor: Map<Bytes<32>, Bytes<32>>;
+export ledger sp_passport: Map<Bytes<32>, Bytes<32>>;
+export ledger sp_min_tier: Map<Bytes<32>, Uint<8>>;
+export ledger sp_status: Map<Bytes<32>, Uint<8>>;
+export ledger sp_consent_commit: Map<Bytes<32>, Bytes<32>>;
+
+export struct PassportCheck {
+  exists: Boolean;
+  verdict: Uint<8>;
+  valid: Boolean;
+  status: Uint<8>;
+}
+
+constructor(owner_commit_: Bytes<32>) {
+  owner_commit = disclose(owner_commit_);
+}
+
+export pure circuit owner_commitment(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Bytes<32>>(secret);
+}
+
+// Salted, domain-separated commitment (label keeps partner/evidence/reviewer/consent apart).
+export pure circuit labeled_commit(v: Bytes<32>, salt: Bytes<32>, label: Bytes<32>): Bytes<32> {
+  const s = persistentHash<Vector<2, Bytes<32>>>([salt, label]);
+  return persistentCommit<Bytes<32>>(v, s);
+}
+
+circuit assert_owner(): [] {
+  assert(persistentHash<Bytes<32>>(owner_secret()) == owner_commit, "Only the passport issuer can do this");
+}
+
+circuit window_seconds(t: Uint<8>): Uint<64> {
+  // 365 days for tier 0/1, 31 days for tier 2/3 (monthly 5710 cadence).
+  return t <= 1 ? 31536000 : 2678400;
+}
+
+
+circuit b2n(c: Boolean): Uint<16> { return c ? 1 : 0; }
+circuit count(flags: Vector<16, Uint<16>>): Uint<16> {
+  return fold((acc: Uint<16>, x: Uint<16>): Uint<16> => (acc + x) as Uint<16>, 0, flags);
+}
+circuit slot_ok(o: Uint<8>, v: Uint<8>): Uint<16> {
+  return b2n(o <= 3 && (o == 0 ? v == 0 : (v >= 1 && v <= 3)));
+}
+circuit is_origin1(o: Uint<8>): Uint<16> { return b2n(o == 1); }
+circuit is_origin2(o: Uint<8>): Uint<16> { return b2n(o == 2); }
+circuit is_origin3(o: Uint<8>): Uint<16> { return b2n(o == 3); }
+circuit is_fail(o: Uint<8>, v: Uint<8>): Uint<16> { return b2n(o != 0 && v == 2); }
+circuit is_not_pass(o: Uint<8>, v: Uint<8>): Uint<16> { return b2n(o != 0 && v != 1); }
+circuit is_machine_not_pass(o: Uint<8>, v: Uint<8>): Uint<16> { return b2n(o == 1 && v != 1); }
+circuit is_nonmachine_pass(o: Uint<8>, v: Uint<8>): Uint<16> { return b2n(o >= 2 && v == 1); }
+
+export circuit issuePassport(
+  passport_id: Bytes<32>, pack_hash_: Bytes<32>, pack_version_: Bytes<32>,
+  tier_: Uint<8>, issued_at_: Uint<64>, expires_at_: Uint<64>
+): Uint<8> {
+  assert_owner();
+  assert(!status.member(disclose(passport_id)), "Passport id already used");
+  assert(tier_ <= 3, "Unknown tier");
+  assert(blockTimeGte(disclose(issued_at_)), "issued_at is in the future");
+  assert(expires_at_ == issued_at_ + window_seconds(tier_), "expires_at does not match the tier window");
+  assert(blockTimeLt(disclose(expires_at_)), "Validity window already closed");
+
+  const zero = default<Bytes<32>>;
+  const origins = rule_origins();
+  const verdicts = rule_verdicts();
+  const sig = reviewer_sig_hash();
+  const has_reviewer = sig != zero;
+
+  // Per-slot validation, then per-origin counts and verdict flags (Compact has no mutable locals).
+  const checks = map(slot_ok, origins, verdicts);
+  const m = count(map(is_origin1, origins));
+  const h = count(map(is_origin2, origins));
+  const t = count(map(is_origin3, origins));
+  const n_fail = count(map(is_fail, origins, verdicts));
+  const n_machine_not_pass = count(map(is_machine_not_pass, origins, verdicts));
+  const n_not_pass = count(map(is_not_pass, origins, verdicts));
+  const n_nonmachine_pass = count(map(is_nonmachine_pass, origins, verdicts));
+  assert(count(checks) == 16, "Invalid rule slot (origin 0..3; verdict 1..3 when used, 0 when unused)");
+  assert(m + h + t > 0, "No rules evaluated");
+  assert(n_nonmachine_pass == 0 || has_reviewer, "PASS on a human/third-party rule requires the reviewer signature");
+  const any_fail = n_fail > 0;
+  const machine_not_pass = n_machine_not_pass > 0;
+  const any_not_pass = n_not_pass > 0;
+
+  const machine_only = tier_ == 0;
+  const pass_ok = machine_only ? (m > 0 && !machine_not_pass) : (!any_not_pass && has_reviewer);
+  const v_out: Uint<8> = any_fail ? 2 : (pass_ok ? 1 : 3);
+
+  const id = disclose(passport_id);
+  partner_commit.insert(id, disclose(labeled_commit(partner_id(), commit_salt(), pad(32, "partner"))));
+  pack_hash.insert(id, disclose(pack_hash_));
+  pack_version.insert(id, disclose(pack_version_));
+  tier.insert(id, disclose(tier_));
+  issued_at.insert(id, disclose(issued_at_));
+  expires_at.insert(id, disclose(expires_at_));
+  verdict.insert(id, disclose(v_out));
+  status.insert(id, disclose(1 as Uint<8>));
+  machine_rules.insert(id, disclose(m));
+  human_rules.insert(id, disclose(h));
+  third_party_rules.insert(id, disclose(t));
+  evidence_commit.insert(id, disclose(labeled_commit(evidence_hash(), commit_salt(), pad(32, "evidence"))));
+  reviewer_commit.insert(id, disclose(has_reviewer ? labeled_commit(sig, commit_salt(), pad(32, "reviewer")) : zero));
+  total_issued.increment(1);
+  if (disclose(v_out == 1)) { total_pass.increment(1); }
+  return disclose(v_out);
+}
+
+export circuit suspendPassport(passport_id: Bytes<32>): [] {
+  assert_owner();
+  assert(status.member(disclose(passport_id)), "Unknown passport");
+  assert(status.lookup(disclose(passport_id)) == 1, "Only an ACTIVE passport can be suspended");
+  status.insert(disclose(passport_id), disclose(2 as Uint<8>));
+}
+
+export circuit revokePassport(passport_id: Bytes<32>): [] {
+  assert_owner();
+  assert(status.member(disclose(passport_id)), "Unknown passport");
+  const s = status.lookup(disclose(passport_id));
+  assert(s == 1 || s == 2, "REVOKED and EXPIRED are terminal");
+  status.insert(disclose(passport_id), disclose(3 as Uint<8>));
+}
+
+// Permissionless and deterministic: records EXPIRED once the block time reached expires_at.
+export circuit markExpired(passport_id: Bytes<32>): [] {
+  assert(status.member(disclose(passport_id)), "Unknown passport");
+  const s = status.lookup(disclose(passport_id));
+  assert(s == 1 || s == 2, "REVOKED and EXPIRED are terminal");
+  assert(blockTimeGte(expires_at.lookup(disclose(passport_id))), "Validity window still open");
+  status.insert(disclose(passport_id), disclose(4 as Uint<8>));
+}
+
+// Valid = exists, verdict PASS, status ACTIVE and the block time before expires_at.
+export circuit isValid(passport_id: Bytes<32>): Boolean {
+  return status.member(disclose(passport_id))
+      && verdict.lookup(disclose(passport_id)) == 1
+      && status.lookup(disclose(passport_id)) == 1
+      && blockTimeLt(expires_at.lookup(disclose(passport_id)));
+}
+
+// Public verification: verdict (1 PASS / 2 FAIL / 3 REVIEW; 0 = unknown id) + validity at the block time.
+export circuit verifyPassport(passport_id: Bytes<32>): PassportCheck {
+  const known = status.member(disclose(passport_id));
+  const v: Uint<8> = known ? verdict.lookup(disclose(passport_id)) : 0;
+  const s: Uint<8> = known ? status.lookup(disclose(passport_id)) : 0;
+  const ok = known && v == 1 && s == 1 && blockTimeLt(expires_at.lookup(disclose(passport_id)));
+  return PassportCheck { exists: known, verdict: v, valid: ok, status: s };
+}
+
+// SPSAV proposes. The sponsor is a commitment; the passport id and min tier are public coarse facts.
+export circuit proposeSponsorship(sponsorship_id: Bytes<32>, passport_id: Bytes<32>, min_tier: Uint<8>): [] {
+  assert(!sp_status.member(disclose(sponsorship_id)), "Sponsorship id already used");
+  assert(status.member(disclose(passport_id)), "Unknown passport");
+  assert(min_tier <= 3, "Unknown tier");
+  sp_sponsor.insert(disclose(sponsorship_id), disclose(persistentHash<Bytes<32>>(sponsor_secret())));
+  sp_passport.insert(disclose(sponsorship_id), disclose(passport_id));
+  sp_min_tier.insert(disclose(sponsorship_id), disclose(min_tier));
+  sp_status.insert(disclose(sponsorship_id), disclose(1 as Uint<8>));
+}
+
+// The partner consents by opening partner_commit (knowledge of id + salt) and binding a salted
+// consent commitment to this exact sponsorship and sponsor.
+export circuit consentSponsorship(sponsorship_id: Bytes<32>): [] {
+  assert(sp_status.member(disclose(sponsorship_id)), "Unknown sponsorship");
+  assert(sp_status.lookup(disclose(sponsorship_id)) == 1, "Sponsorship is not awaiting consent");
+  const pid = sp_passport.lookup(disclose(sponsorship_id));
+  const mine = labeled_commit(partner_id(), commit_salt(), pad(32, "partner"));
+  assert(mine == partner_commit.lookup(pid), "Only the passport partner can consent");
+  const terms = persistentHash<Vector<3, Bytes<32>>>([sponsorship_id, pid, sp_sponsor.lookup(disclose(sponsorship_id))]);
+  sp_consent_commit.insert(disclose(sponsorship_id), disclose(labeled_commit(terms, commit_salt(), pad(32, "consent"))));
+  sp_status.insert(disclose(sponsorship_id), disclose(2 as Uint<8>));
+}
+
+// Active only while consented AND the sponsored passport is valid AND its tier >= min tier
+// (the passport leaving "valid" suspends the sponsorship, as in the control-plane).
+export circuit isSponsorshipActive(sponsorship_id: Bytes<32>): Boolean {
+  const known = sp_status.member(disclose(sponsorship_id));
+  const pid = known ? sp_passport.lookup(disclose(sponsorship_id)) : default<Bytes<32>>;
+  const consented = known && sp_status.lookup(disclose(sponsorship_id)) == 2;
+  return consented
+      && status.member(pid)
+      && verdict.lookup(pid) == 1
+      && status.lookup(pid) == 1
+      && blockTimeLt(expires_at.lookup(pid))
+      && tier.lookup(pid) >= sp_min_tier.lookup(disclose(sponsorship_id));
+}
