@@ -8,8 +8,10 @@ import CompactStandardLibrary;
 // SHIELDED (witness, never on chain): originator/beneficiary identity fields and the amount.
 //
 // FLOW
-//   1. evaluateTransfer(transfer_id): runs the rule over private data, records verdict
-//      1=PASS or 2=FAIL (+ reason) publicly, and stores only salted commitments (roots).
+//   1. evaluateTransfer(transfer_id): owner (VASP) only. Runs the rule over private data, records
+//      verdict 1=PASS or 2=FAIL (+ reason) publicly, and stores only salted commitments (roots).
+//      Owner-gated because the verdict is final and the witnesses (incl. sanctions_clear) are the
+//      VASP's: anyone else knowing a transfer_id could otherwise front-run it with forged data.
 //   2. releaseTransfer(transfer_id): reverts unless verdict == PASS. Sets status 3=RELEASED.
 //   3. grantDisclosure(...): owner (VASP) registers a scoped, expiring access grant for a
 //      supervisor. The data itself travels off-chain, encrypted under a per-grant key; the
@@ -96,6 +98,7 @@ export circuit attestVasp(vasp_id: Bytes<32>): [] {
 }
 
 export circuit evaluateTransfer(transfer_id: Bytes<32>): Uint<8> {
+  assert_owner();
   assert(!status.member(disclose(transfer_id)), "Transfer already evaluated");
   const o = originator_data();
   const b = beneficiary_data();

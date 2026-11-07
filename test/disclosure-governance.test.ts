@@ -102,6 +102,23 @@ describe('disclosure governance', () => {
     assert.equal(DisclosureGovernance.verifyLog(logPath).ok, false);
   });
 
+  it('fails closed: a tampered log is rejected on load (REVOKE cannot be edited away)', () => {
+    const { gov, logPath, clock } = mk();
+    issue(gov);
+    gov.revoke('g-bcb', 'request withdrawn');
+    const lines = fs.readFileSync(logPath, 'utf8').split('\n').filter(Boolean);
+    assert.match(lines[1], /"event":"REVOKE"/);
+    lines[1] = lines[1].replace('"event":"REVOKE"', '"event":"ACCESS_GRANTED"');
+    fs.writeFileSync(logPath, lines.join('\n') + '\n');
+    assert.throws(() => new DisclosureGovernance(Buffer.alloc(32, 1), logPath, () => clock.t), /failed verification/);
+    // an empty or missing log is accepted
+    const empty = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'disc-')), 'log.jsonl');
+    assert.ok(DisclosureGovernance.verifyLog(empty).ok);
+    fs.writeFileSync(empty, '');
+    assert.ok(DisclosureGovernance.verifyLog(empty).ok);
+    assert.doesNotThrow(() => new DisclosureGovernance(Buffer.alloc(32, 1), empty, () => clock.t));
+  });
+
   it('key file must be mode 600', () => {
     const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'k-')), 'k');
     fs.writeFileSync(f, randomBytes(32).toString('hex'), { mode: 0o644 });

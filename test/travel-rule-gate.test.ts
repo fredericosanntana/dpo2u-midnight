@@ -122,6 +122,15 @@ describe('TravelRuleGate', () => {
     assert.throws(() => contract.circuits.releaseTransfer(intruder, TID), /Only the VASP owner/);
   });
 
+  it('a non-owner cannot evaluate a transfer', () => {
+    const { contract, ctx, mk } = setup(base());
+    const { context: c1 } = contract.circuits.attestVasp(ctx, BENEF_VASP);
+    const intruder = mk(c1.currentQueryContext.state, base({ secret: b32('not-the-owner') }));
+    assert.throws(() => contract.circuits.evaluateTransfer(intruder, TID), /Only the VASP owner can do this/);
+    assert.equal(ledger(c1.currentQueryContext.state).status.member(TID), false);
+    assert.equal(ledger(intruder.currentQueryContext.state).status.member(TID), false);
+  });
+
   it('DISCLOSURE: scoped grant is active, expires with block time, and can be revoked', () => {
     const { contract, ctx, mk } = setup(base());
     const { context: c1 } = contract.circuits.attestVasp(ctx, BENEF_VASP);

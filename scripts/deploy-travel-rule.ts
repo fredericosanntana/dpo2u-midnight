@@ -276,7 +276,7 @@ async function main() {
   const witnesses: any = {
     originator_data: (c: any) => [c.privateState, cur.o], beneficiary_data: (c: any) => [c.privateState, cur.b],
     transfer_amount: (c: any) => [c.privateState, cur.amount], sanctions_clear: (c: any) => [c.privateState, cur.clear],
-    owner_secret: (c: any) => [c.privateState, ownerSecret],
+    owner_secret: (c: any) => [c.privateState, cur.secret ?? ownerSecret],
   };
 
   const ctx = await createWallet(cfg, seed);
@@ -294,9 +294,13 @@ async function main() {
     (CompiledContract.withWitnesses as any)(witnesses), (CompiledContract.withCompiledFileAssets as any)(zkPath));
   const providers = makeProviders(walletProvider, cfg, zkPath, `${name}-state`, addr);
 
+  // Keep earlier deployments in the record (never drop an address that is still on chain).
+  const recPath = path.resolve(__dirname, '..', 'deployment-preview-travelrule.json');
+  const prior: any = fs.existsSync(recPath) ? JSON.parse(fs.readFileSync(recPath, 'utf8')) : undefined;
+  const previous: any[] = prior ? [...(prior.previous ?? []), ...(prior.contractAddress ? [{ ...prior, previous: undefined, note: process.env.PREVIOUS_NOTE ?? 'superseded' }] : [])] : [];
   const out: any = { network: net, wallet: addr, deployedAt: new Date().toISOString(), txs: [] as any[] };
   const rec = (label: string, r: any) => { const d = r?.public ?? r?.deployTxData?.public ?? {}; out.txs.push({ label, txId: d.txId, blockHeight: d.blockHeight }); console.log(`  ${label}: tx ${d.txId} (block ${d.blockHeight})`); };
-  const save = () => fs.writeFileSync(path.resolve(__dirname, '..', 'deployment-preview-travelrule.json'), JSON.stringify(out, null, 2));
+  const save = () => fs.writeFileSync(recPath, JSON.stringify({ ...out, previous }, null, 2));
 
   const c: any = await (deployContract as any)(providers as any, {
     compiledContract: compiled, privateStateId: `${name}PrivateState`, initialPrivateState: {},
@@ -310,6 +314,18 @@ async function main() {
   rec('attestVasp(counterparty-A)', await c.callTx.attestVasp(b32('vasp:counterparty-A')));
   const PASS = b32('transfer-PASS-001'), FAIL = b32('transfer-FAIL-002');
   out.transfer_ids = { pass: hx(PASS), fail: hx(FAIL) };
+  // Non-owner tries to evaluate first (front-run with forged witnesses, sanctions_clear=true).
+  const INTRUDER = b32('transfer-INTRUDER-003');
+  out.transfer_ids.intruder = hx(INTRUDER);
+  cur.secret = new Uint8Array(createHash('sha256').update('not-the-owner').digest());
+  try {
+    await c.callTx.evaluateTransfer(INTRUDER);
+    out.non_owner_evaluate = 'UNEXPECTEDLY ACCEPTED';
+  } catch (e: any) {
+    out.non_owner_evaluate = `rejected: ${String(e?.message ?? e).slice(0, 200)}`;
+  }
+  cur.secret = undefined;
+  console.log(`  evaluateTransfer(non-owner): ${out.non_owner_evaluate}`);
   rec('evaluateTransfer(PASS case)', await c.callTx.evaluateTransfer(PASS));
   rec('releaseTransfer(PASS case)', await c.callTx.releaseTransfer(PASS));
   save();
@@ -327,7 +343,7 @@ async function main() {
   save();
 
   const L = TravelRuleGate.ledger((await (providers.publicDataProvider as any).queryContractState(out.contractAddress)).data);
-  out.final_state = { pass_status: String(L.status.lookup(PASS)), fail_status: String(L.status.lookup(FAIL)), fail_reason: String(L.fail_reason.lookup(FAIL)), total_pass: String(L.total_pass), total_fail: String(L.total_fail), total_released: String(L.total_released) };
+  out.final_state = { pass_status: String(L.status.lookup(PASS)), fail_status: String(L.status.lookup(FAIL)), fail_reason: String(L.fail_reason.lookup(FAIL)), total_pass: String(L.total_pass), total_fail: String(L.total_fail), total_released: String(L.total_released), intruder_status: L.status.member(INTRUDER) ? String(L.status.lookup(INTRUDER)) : 'none' };
   console.log('  final on-chain state:', JSON.stringify(out.final_state));
   save();
   try { await (ctx.wallet as any).close?.(); } catch { /* ignore */ }

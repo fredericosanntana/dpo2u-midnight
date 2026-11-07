@@ -78,6 +78,9 @@ export class DisclosureGovernance {
     if (masterKey.length !== 32) throw new Error('masterKey must be 32 bytes');
     fs.mkdirSync(path.dirname(logPath), { recursive: true });
     if (fs.existsSync(logPath)) {
+      // Fail closed: a tampered log (e.g. a REVOKE edited away) must not rebuild revoked/issued.
+      const v = DisclosureGovernance.verifyLog(logPath);
+      if (!v.ok) throw new Error(`disclosure log failed verification: ${v.error}`);
       this.entries = fs.readFileSync(logPath, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
       for (const e of this.entries) {
         if (e.event === 'REVOKE') this.revoked.add(e.grant_id);
