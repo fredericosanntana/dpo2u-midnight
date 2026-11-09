@@ -1,0 +1,18 @@
+[Unit]
+Description=DPO2U LGPD attestation bridge (host -> MCP, Midnight preview)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/dpo2u-lgpd-bridge.env
+WorkingDirectory=/root/dpo2u-midnight-v9
+ExecStart=/usr/local/bin/node /root/dpo2u-midnight-v9/bridge/lgpd-attest-bridge.mjs
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/dpo2u-lgpd-bridge.log
+StandardError=append:/var/log/dpo2u-lgpd-bridge.log
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

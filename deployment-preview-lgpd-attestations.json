@@ -1,0 +1,29 @@
+{
+  "network": "preview",
+  "attestations": [
+    {
+      "label": "attestUseCase(lgpd lgpd@1.1.0, verdict=review, evidence=1c9c4f46cca8…)",
+      "txId": "00923ad5d5b419675a43730965ad9f938afd2316b5e0a803f121265c1b973ede38",
+      "blockHeight": 40038,
+      "contract": "817dc7481a314991c57c49ea354315bc3366cff213343faf93dc195ca422c135",
+      "circuit": "attestUseCase",
+      "useCaseId": "038551436fbfa6b81ebfb31f30ce13a84ea92788eec896cc74a7917cf2e9faf2",
+      "evidenceHash": "1c9c4f46cca8a776bb21e1073e23a33145d5e1506c3978a9edf19fe30e13aa81",
+      "metadataHash": "6b8c47e7376f9f816021b73e2864918bc947fa0f73702997f25ceb0d296a4a64",
+      "metadata": {
+        "attestedAt": "2026-11-09",
+        "packId": "lgpd@1.1.0",
+        "reportId": "lgpdrep_785cd28f36f4326a96e836229ea84029",
+        "reviewerHash": "5a611427835bab348f680418b76f1a6f9e05ea04007418c0d81dbe9add29983d",
+        "verdict": "review"
+      },
+      "onchain": {
+        "usecase_verdict": "2",
+        "usecase_id": "038551436fbfa6b81ebfb31f30ce13a84ea92788eec896cc74a7917cf2e9faf2",
+        "metadata_hash": "6b8c47e7376f9f816021b73e2864918bc947fa0f73702997f25ceb0d296a4a64",
+        "usecase_attestation_count": "2"
+      },
+      "at": "2026-11-09T19:49:03.242Z"
+    }
+  ]
+}
