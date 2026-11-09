@@ -1,0 +1,13 @@
+{
+  "network": "preview",
+  "ledger": "v9",
+  "deployedAt": "2026-11-09T19:13:45.140Z",
+  "contracts": [
+    {
+      "name": "ComplianceRegistry",
+      "contractAddress": "817dc7481a314991c57c49ea354315bc3366cff213343faf93dc195ca422c135",
+      "blockHeight": 39685,
+      "txId": "0020271adac5aac0b29ea41c4bc015a39a768b3a30289591f935f2a083d8e35f92"
+    }
+  ]
+}

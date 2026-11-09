@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Compile every Compact contract with a PINNED compiler version.
 #
-# Pinned to compactc 0.31.0 — its generated code targets compact-runtime 0.16.0
+# Pinned to compactc 0.36.0 — its generated code targets compact-runtime 0.21.0 (ledger v9)
 # (checkRuntimeVersion('0.16.0')) and language-version 0.23.0, which matches the
 # versions pinned in package.json. Override with COMPACT_VERSION=x.y.z if needed.
 set -euo pipefail
 
-COMPILER_VERSION="${COMPACT_VERSION:-0.31.0}"
+COMPILER_VERSION="${COMPACT_VERSION:-0.36.0}"
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
