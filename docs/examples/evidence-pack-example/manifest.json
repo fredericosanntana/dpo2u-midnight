@@ -1,0 +1,40 @@
+{
+  "schema": "dpo2u.evidence-pack/1",
+  "pack_version": "1.0.0",
+  "generated_at": "2026-11-06T17:22:05.762Z",
+  "vasp": {
+    "name": "Example VASP Ltda (fictitious)",
+    "fictitious": true
+  },
+  "attestation_count": 2,
+  "attestations_onchain": 0,
+  "disclosure_log": {
+    "entries": 8,
+    "head": "d9939758bebdacf68c7f21e466e9909f476ad759a728e454be5fd451c7f6ba4c",
+    "chain_verified": true
+  },
+  "generator": {},
+  "files": [
+    {
+      "path": "attestations.json",
+      "sha256": "17d841f23d9b0ee8b1bd2610e3ca3fe9da52cb09ccff57dcb6c5ddcbd56f063d",
+      "bytes": 921
+    },
+    {
+      "path": "disclosure-log.jsonl",
+      "sha256": "605ed8d9001989ff54ab7e94e707f3c08694febec5de211c5b1e204e44fbc871",
+      "bytes": 3671
+    },
+    {
+      "path": "disclosure-log.verification.json",
+      "sha256": "b814dcadb34d22eebd622ba944fb967c1fa762081cacd8000e55e31dd8b5827a",
+      "bytes": 156
+    },
+    {
+      "path": "README.md",
+      "sha256": "8c9a6d6eb2ad479b1ea2884ba7f5b6a7e3118525331d49266df7db6fcd420cad",
+      "bytes": 1441
+    }
+  ],
+  "pack_root": "2be6954c9b1bef62626e60730e9df9c2c9c037edd4aa4f708a3b46fd2e79752e"
+}

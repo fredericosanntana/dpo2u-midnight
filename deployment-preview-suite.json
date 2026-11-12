@@ -1,0 +1,159 @@
+{
+  "network": "preview",
+  "contracts": {
+    "ConsentRegistry": {
+      "purpose": "LGPD/GDPR consent grant/revoke (hashed subject ids)",
+      "txs": [
+        {
+          "label": "deploy",
+          "txId": "00e42f7026673109a04b3b4587249dadadc3dfeb52bf481592216d15cb210d388b",
+          "blockHeight": 1630041
+        },
+        {
+          "label": "grantConsent(subject=demo-subject-1, purposes=7, policy=1)",
+          "txId": "00dd70c5163f5375c0641fe5e3abd687fe071d8724cbc77096b82ede816d44f612",
+          "blockHeight": 1630045
+        }
+      ],
+      "contractAddress": "842f74c19e5648cd85c127ad13251c16b2a41139bed7bf7b2b4df247ea797117",
+      "state": {
+        "status": "1",
+        "purposes": "7",
+        "total_granted": "1"
+      }
+    },
+    "DataSubjectRights": {
+      "purpose": "Data-subject request lifecycle (LGPD Art. 18 / GDPR 15-22)",
+      "txs": [
+        {
+          "label": "deploy",
+          "txId": "00e59d6ee8527b5892f873830aa113e67c0665698456c7e1fd5d713973ba6c0d5f",
+          "blockHeight": 1630048
+        },
+        {
+          "label": "submitRequest(req=demo-req-1, type=1)",
+          "txId": "00b3ea6a7356938a35c7a0ecc47d321441b0ecba84015fe09476aa0462eaefbf6c",
+          "blockHeight": 1630052
+        },
+        {
+          "label": "fulfillRequest(req=demo-req-1)",
+          "txId": "00c9f762b50a7dcf85e401b3133758296a230736eec82701227b31a1fad7d8a12d",
+          "blockHeight": 1630056
+        }
+      ],
+      "contractAddress": "c4ea63c155880a43ada70ff59c9247a0f5956e5846c71d928de06bbcd6140488",
+      "state": {
+        "status": "2",
+        "total_fulfilled": "1"
+      }
+    },
+    "DataAuditLog": {
+      "purpose": "Processing audit log: events, deletion requests/confirmations, breach events",
+      "txs": [
+        {
+          "label": "deploy",
+          "txId": "005d6f3de5a6a332eebee8594a121feebc72f8b2f69e72b777c849d4c900cd8cb4",
+          "blockHeight": 1630059
+        },
+        {
+          "label": "logEvent(controller=demo-controller, type=1)",
+          "txId": "00a5bc5675a74fd6769ae24c1aaab0253def86f693be4d9e0205e340c470684d3b",
+          "blockHeight": 1630063
+        }
+      ],
+      "contractAddress": "f9d01462b2a36aadbf5a07e4a8574f6042243e9abb4387ce72c64337f4055862",
+      "state": {
+        "events_for_controller": "1",
+        "total_events": "1"
+      }
+    },
+    "SolvencyRegistry": {
+      "purpose": "Proof of reserves: public verdict, amounts stay private (demo values, fictitious entity)",
+      "txs": [
+        {
+          "label": "deploy",
+          "txId": "008655c6e976eab59fe9802515a3e02a8f84f475354d63fafabb72b74d10105156",
+          "blockHeight": 1630067
+        },
+        {
+          "label": "sealSolvency(entity=Example VASP (fictitious), reserves>=liabilities)",
+          "txId": "00ab98b778cbc080fb00711212836ad044824a47f776c243aa8d968a446cd67454",
+          "blockHeight": 1630071
+        }
+      ],
+      "contractAddress": "dc5d6a103f1b3a6224d6fb7e7f948f80a5146983ed35110e72b015b40ed32dc6",
+      "state": {
+        "verdict": "1",
+        "count": "1"
+      }
+    },
+    "ComplianceRegistry": {
+      "purpose": "Compliance attestation: score>=threshold proven, score never published (demo, fictitious company)",
+      "txs": [
+        {
+          "label": "deploy",
+          "txId": "00f213260fb8dbec9b2577cde48040ece9912fbc1dfbbe77f664aa2287fc4dcede",
+          "blockHeight": 1630074
+        },
+        {
+          "label": "attestCompliance(company=Example VASP (fictitious), threshold=70, score private)",
+          "txId": "00b021c53dbc7f630daa07533ae3ef8fdaf20a55cf21a0d792ebf1e725fb802a5c",
+          "blockHeight": 1630078
+        },
+        {
+          "label": "attestUseCase(use_case=psav-demo-1, verdict=PASS)",
+          "txId": "00c79c98fe9aaea549f26845e13c2ba7b6837a7b28990b5c305a53738954415517",
+          "blockHeight": 1630121
+        }
+      ],
+      "contractAddress": "4ab343801cee1e27fa1b69495f604783669f1a27ad3f81a3071305ad71a5668d",
+      "state": {
+        "verdict": "1",
+        "count": "1",
+        "usecase_verdict": "1",
+        "usecase_count": "1"
+      }
+    },
+    "LgpdKitRegistry": {
+      "purpose": "LGPD kit anchor: DPIA/policy hashes + privacy score (demo, fictitious company)",
+      "txs": [
+        {
+          "label": "deploy",
+          "txId": "00bb9b1364ee4a10cd10d4872195c1a32f54cbaff3d2fd2f8fe24c9c40895274c3",
+          "blockHeight": 1630081
+        },
+        {
+          "label": "registerLgpdKit(company=Example VASP (fictitious), score=88)",
+          "txId": "00de10b913133973178ed151160d67cd47e5393dddbba5b6de113ec05e0e887ab4",
+          "blockHeight": 1630085
+        }
+      ],
+      "contractAddress": "6e00fab35759f84cbb889aecae5dabfe44b35887616dacf75a1fc5d90be78939",
+      "state": {
+        "score": "88"
+      }
+    },
+    "TravelRuleGate": {
+      "purpose": "Travel Rule gate (already deployed, MID4): disclosure grant/revoke",
+      "contractAddress": "279fa62fdd39064c7e62585105ab1c1589e81eedc4220cde5205ddeccd9d6288",
+      "txs": [
+        {
+          "label": "grantDisclosure(BCB (fictitious), scope=name, +1h)",
+          "txId": "00b35a31d6f1fe26cdca7d4238e1995e55393c1200619e7b57efc55f1873b7ae30",
+          "blockHeight": 1630090
+        },
+        {
+          "label": "revokeDisclosure(grant-BCB-fict-001)",
+          "txId": "0013dc68b42bc3b43723e5ecc5f14f119cc6c26336a7651e66bf53cfb79c9ace70",
+          "blockHeight": 1630095
+        }
+      ],
+      "state": {
+        "grant_scope": "1",
+        "revoked": "true",
+        "total_grants": "1"
+      }
+    }
+  },
+  "wallet": "mn_addr_preview1jelp33c5gftpr9gl62yynuccsgny8e9cvgh89rfguct7pcmdcjzqlylk84"
+}
