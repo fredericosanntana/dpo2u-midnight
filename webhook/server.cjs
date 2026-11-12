@@ -44,7 +44,7 @@ const VNUM = { PASS: 1, FAIL: 0, REVIEW: 2 }; // verdict string -> ledger numeri
 const NETWORK = process.env.MIDNIGHT_NETWORK || 'preview';
 const INDEXERS = {
   preview: 'https://indexer.preview.midnight.network/api/v4/graphql',
-  preprod: 'https://indexer.preprod.midnight.network/api/v4/graphql',
+  preprod: 'https://midnight-preprod.blockfrost.io/api/v0', // Blockfrost; needs a project_id, not shown publicly
   mainnet: 'https://midnight-mainnet.blockfrost.io/api/v0', // Blockfrost; needs a project_id, not shown publicly
 };
 if (!INDEXERS[NETWORK]) throw new Error(`MIDNIGHT_NETWORK inválida: ${NETWORK}`);

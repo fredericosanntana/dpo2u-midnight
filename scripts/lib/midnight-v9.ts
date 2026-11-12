@@ -39,21 +39,46 @@ export function networkConfig(name: string = process.env.MIDNIGHT_NETWORK ?? 'pr
         indexerWS: 'wss://indexer.preview.midnight.network/api/v4/graphql/ws',
         node: 'https://rpc.preview.midnight.network' };
     case 'preprod':
-      return { name, networkId: 'preprod', proofServer: PROOF_SERVER(),
-        indexer: 'https://indexer.preprod.midnight.network/api/v4/graphql',
-        indexerWS: 'wss://indexer.preprod.midnight.network/api/v4/graphql/ws',
-        node: 'https://rpc.preprod.midnight.network' };
-    case 'mainnet': {
+      // Midnight-hosted preprod endpoints were retired on 2026-10-09 too; Blockfrost only.
+      return blockfrost(name, 'preprod');
+    case 'mainnet':
       assertMainnetAllowed();
-      const q = `?project_id=${encodeURIComponent(process.env.BLOCKFROST_PROJECT_ID!)}`;
-      // https://docs.midnight.network/guides/networks-and-environments (Blockfrost is the mainnet provider)
-      return { name, networkId: 'mainnet', proofServer: PROOF_SERVER(),
-        indexer: `https://midnight-mainnet.blockfrost.io/api/v0${q}`,
-        indexerWS: `wss://midnight-mainnet.blockfrost.io/api/v0/ws${q}`,
-        node: `https://rpc.midnight-mainnet.blockfrost.io${q}` };
-    }
+      return blockfrost(name, 'mainnet');
     default:
       throw new Error(`Unknown MIDNIGHT_NETWORK "${name}" (preview | preprod | mainnet)`);
+  }
+}
+
+/**
+ * Blockfrost endpoints (https://docs.midnight.network/guides/networks-and-environments). The
+ * project id goes in the query string because the Midnight SDK cannot set headers. Project ids are
+ * per network (nightpreprod… / nightmainnet…), and the token is masked in everything this process logs.
+ */
+function blockfrost(name: NetworkName, net: 'preprod' | 'mainnet'): NetCfg {
+  const id = (process.env.BLOCKFROST_PROJECT_ID ?? '').trim();
+  if (!id) throw new Error(`BLOCKFROST_PROJECT_ID is required for ${net} (Midnight-hosted endpoints were retired)`);
+  if (!id.startsWith(`night${net}`)) throw new Error(`BLOCKFROST_PROJECT_ID is not a ${net} project id (expected prefix night${net})`);
+  maskInLogs(id);
+  const q = `?project_id=${encodeURIComponent(id)}`;
+  return { name, networkId: net, proofServer: PROOF_SERVER(),
+    indexer: `https://midnight-${net}.blockfrost.io/api/v0${q}`,
+    indexerWS: `wss://midnight-${net}.blockfrost.io/api/v0/ws${q}`,
+    node: `https://rpc.midnight-${net}.blockfrost.io${q}` };
+}
+
+let masked = false;
+/** Replaces the secret with *** in console output and uncaught error text (URLs in errors carry it). */
+function maskInLogs(secret: string): void {
+  if (masked) return;
+  masked = true;
+  const scrub = (a: unknown) => {
+    if (typeof a === 'string') return a.split(secret).join('***');
+    if (a instanceof Error) { a.message = a.message.split(secret).join('***'); if (a.stack) a.stack = a.stack.split(secret).join('***'); return a; }
+    return a;
+  };
+  for (const k of ['log', 'info', 'warn', 'error', 'debug'] as const) {
+    const orig = console[k].bind(console);
+    console[k] = (...args: unknown[]) => orig(...args.map(scrub));
   }
 }
 
