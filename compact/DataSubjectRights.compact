@@ -1,6 +1,25 @@
 pragma language_version >= 0.21.0;
 import CompactStandardLibrary;
 
+// ── Access control (mainnet) ──
+// Every circuit that writes state is owner-only. The deployer keeps owner_secret private
+// (witness, never on chain) and passes owner_commit = owner_commitment(owner_secret) to the
+// constructor. Same pattern as TravelRuleGate / PsavPassport.
+witness owner_secret(): Bytes<32>;
+export ledger owner_commit: Bytes<32>;
+
+constructor(owner_commit_: Bytes<32>) {
+  owner_commit = disclose(owner_commit_);
+}
+
+export pure circuit owner_commitment(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Bytes<32>>(secret);
+}
+
+circuit assert_owner(): [] {
+  assert(persistentHash<Bytes<32>>(owner_secret()) == owner_commit, "Only the contract owner can do this");
+}
+
 // DataSubjectRights — LGPD Chapter III rights request tracking on Midnight Network
 //
 // Tracks exercise of data subject rights (LGPD Art. 18) and response deadlines (Art. 19).
@@ -70,6 +89,7 @@ export circuit fulfillRequest(
   request_id: Bytes<32>,
   resolved_block: Uint<32>
 ): [] {
+  assert_owner();
   assert(request_status.member(disclose(request_id)), "No request found with this id");
   const status = request_status.lookup(disclose(request_id));
   assert(status == 1 as Uint<8>, "Request must be open to fulfill");
@@ -86,6 +106,7 @@ export circuit rejectRequest(
   request_id: Bytes<32>,
   resolved_block: Uint<32>
 ): [] {
+  assert_owner();
   assert(request_status.member(disclose(request_id)), "No request found with this id");
   const status = request_status.lookup(disclose(request_id));
   assert(status == 1 as Uint<8>, "Request must be open to reject");
@@ -102,6 +123,7 @@ export circuit markRequestOverdue(
   request_id: Bytes<32>,
   current_block: Uint<32>
 ): [] {
+  assert_owner();
   assert(request_status.member(disclose(request_id)), "No request found with this id");
   const status = request_status.lookup(disclose(request_id));
   assert(status == 1 as Uint<8>, "Only open requests can be marked overdue");

@@ -4,8 +4,8 @@
  */
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { createCircuitContext, dummyContractAddress } from '@midnight-ntwrk/compact-runtime';
-import { Contract, ledger } from '../build/DataSubjectRights/contract/index.js';
+import { Contract, ledger, pureCircuits } from '../build/DataSubjectRights/contract/index.js';
+import { setupOwned, asStranger, b32, NOT_OWNER } from './helpers.js';
 
 function padTo32Bytes(str: string): Uint8Array {
   const buf = Buffer.alloc(32);
@@ -14,19 +14,7 @@ function padTo32Bytes(str: string): Uint8Array {
 }
 
 function setup() {
-  const contract = new Contract({});
-  const coinPublicKey = '0'.repeat(64) as unknown as string;
-  const { currentContractState, currentPrivateState } = contract.initialState({
-    initialZswapLocalState: { coinPublicKey },
-    initialPrivateState: new Map(),
-  });
-  const ctx = createCircuitContext(
-    dummyContractAddress(),
-    coinPublicKey,
-    currentContractState.data,
-    currentPrivateState ?? new Map(),
-  );
-  return { contract, ctx };
+  return setupOwned(Contract, pureCircuits);
 }
 
 const REQ = padTo32Bytes('keccak256(subject||controller||type||nonce):1');
@@ -90,5 +78,15 @@ describe('DataSubjectRights (LGPD Art. 18-19)', () => {
     const { context } = contract.circuits.submitRequest(ctx, REQ, 1n, 500n);
     assert.equal(contract.circuits.getRequestStatus(context, REQ).result, 1n);
     assert.equal(contract.circuits.getTotalRequests(context).result, 1n);
+  });
+});
+
+describe('DataSubjectRights access control', () => {
+  it('lets anyone submit a request, but only the owner (controller) resolves it', () => {
+    const { contract, ctx } = setup();
+    const { context } = contract.circuits.submitRequest(asStranger(ctx), REQ, 5n, 1000n);
+    assert.throws(() => contract.circuits.fulfillRequest(asStranger(context), REQ, 1500n), NOT_OWNER);
+    assert.throws(() => contract.circuits.rejectRequest(asStranger(context), REQ, 1500n), NOT_OWNER);
+    assert.throws(() => contract.circuits.markRequestOverdue(asStranger(context), REQ, 1000n + DEADLINE), NOT_OWNER);
   });
 });

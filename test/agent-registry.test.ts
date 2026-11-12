@@ -7,8 +7,8 @@
  */
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { createCircuitContext, dummyContractAddress } from '@midnight-ntwrk/compact-runtime';
-import { Contract, ledger } from '../build/AgentRegistry/contract/index.js';
+import { Contract, ledger, pureCircuits } from '../build/AgentRegistry/contract/index.js';
+import { setupOwned, asStranger, b32, NOT_OWNER } from './helpers.js';
 
 function padTo32Bytes(str: string): Uint8Array {
   const buf = Buffer.alloc(32);
@@ -17,19 +17,7 @@ function padTo32Bytes(str: string): Uint8Array {
 }
 
 function setup() {
-  const contract = new Contract({});
-  const coinPublicKey = '0'.repeat(64) as unknown as string;
-  const { currentContractState, currentPrivateState } = contract.initialState({
-    initialZswapLocalState: { coinPublicKey },
-    initialPrivateState: new Map(),
-  });
-  const ctx = createCircuitContext(
-    dummyContractAddress(),
-    coinPublicKey,
-    currentContractState.data,
-    currentPrivateState ?? new Map(),
-  );
-  return { contract, ctx };
+  return setupOwned(Contract, pureCircuits);
 }
 
 const DID = padTo32Bytes('did:midnight:agent:42');
@@ -70,5 +58,12 @@ describe('AgentRegistry (DID + role)', () => {
     const { context: c2 } = contract.circuits.registerAgent(ctx, DID, ROLE);
     const { context: c3 } = contract.circuits.registerAgent(c2, padTo32Bytes('did:midnight:agent:43'), ROLE);
     assert.equal(contract.circuits.getAgentCount(c3).result, 2n);
+  });
+});
+
+describe('AgentRegistry access control', () => {
+  it('rejects a caller that does not hold the owner secret', () => {
+    const { contract, ctx } = setup();
+    assert.throws(() => contract.circuits.registerAgent(asStranger(ctx), b32('did:x'), b32('role')), NOT_OWNER);
   });
 });

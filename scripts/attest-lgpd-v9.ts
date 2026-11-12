@@ -34,6 +34,7 @@ import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config
 import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { createLedger9WalletProvider, createLedger9MidnightProvider } from '@midnight-ntwrk/midnight-js-types';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
+import { ownerSecret, ownerWitnesses, ownerCommit } from './owner.js';
 import { ContractState } from '@midnight-ntwrk/compact-runtime';
 import { WalletFacade, WalletEntrySchema, mergeWalletEntries } from '@midnight-ntwrk/wallet-sdk-facade';
 import { InMemoryTransactionHistoryStorage } from '@midnight-ntwrk/wallet-sdk-abstractions';
@@ -211,18 +212,20 @@ async function main() {
     config: { networkId: NETWORK_ID, ttlSeconds: 1800 },
   };
   const compiled = (CompiledContract.make('ComplianceRegistry', (ComplianceRegistry as any).Contract) as any).pipe(
-    (CompiledContract as any).withVacantWitnesses, (CompiledContract as any).withCompiledFileAssets(ZK));
+    (CompiledContract as any).withWitnesses(ownerWitnesses(ownerSecret(seed))), (CompiledContract as any).withCompiledFileAssets(ZK));
 
   const out = fs.existsSync(OUT) ? JSON.parse(fs.readFileSync(OUT, 'utf8')) : { network: 'preview', attestations: [] };
-  let contractAddress: string | undefined = process.env.COMPLIANCE_REGISTRY_ADDRESS ?? out.complianceRegistry?.contractAddress;
+  // Only reuse a recorded contract deployed with access control; the older owner-less one cannot be called with this build.
+  const recorded = out.complianceRegistry?.accessControl === 'owner-v1' ? out.complianceRegistry.contractAddress : undefined;
+  let contractAddress: string | undefined = process.env.COMPLIANCE_REGISTRY_ADDRESS ?? recorded;
   let c: any;
   if (!contractAddress) {
     if (process.env.ALLOW_DEPLOY !== '1') throw new Error('ComplianceRegistry sem endereço no preview atual; rode com ALLOW_DEPLOY=1');
     log('[deploy] ComplianceRegistry (preview, ledger v9)');
-    c = await (deployContract as any)(providers, { compiledContract: compiled, privateStateId: 'ComplianceRegistryPS', initialPrivateState: {} });
+    c = await (deployContract as any)(providers, { compiledContract: compiled, privateStateId: 'ComplianceRegistryPS', initialPrivateState: {}, args: [ownerCommit(ComplianceRegistry, ownerSecret(seed))] });
     const d = c.deployTxData.public;
     contractAddress = String(d.contractAddress);
-    out.complianceRegistry = { contractAddress, deployTxId: d.txId, blockHeight: d.blockHeight, deployedAt: new Date().toISOString(), compiler: 'compactc 0.36.0', ledger: 'v9' };
+    out.complianceRegistry = { contractAddress, deployTxId: d.txId, blockHeight: d.blockHeight, deployedAt: new Date().toISOString(), compiler: 'compactc 0.36.0', ledger: 'v9', accessControl: 'owner-v1' };
     fs.writeFileSync(OUT, JSON.stringify(out, null, 2));
     log(`  ComplianceRegistry ${contractAddress} tx ${d.txId} bloco ${d.blockHeight}`);
   } else {

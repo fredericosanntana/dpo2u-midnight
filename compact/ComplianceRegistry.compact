@@ -1,6 +1,25 @@
 pragma language_version >= 0.21.0;
 import CompactStandardLibrary;
 
+// ── Access control (mainnet) ──
+// Every circuit that writes state is owner-only. The deployer keeps owner_secret private
+// (witness, never on chain) and passes owner_commit = owner_commitment(owner_secret) to the
+// constructor. Same pattern as TravelRuleGate / PsavPassport.
+witness owner_secret(): Bytes<32>;
+export ledger owner_commit: Bytes<32>;
+
+constructor(owner_commit_: Bytes<32>) {
+  owner_commit = disclose(owner_commit_);
+}
+
+export pure circuit owner_commitment(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Bytes<32>>(secret);
+}
+
+circuit assert_owner(): [] {
+  assert(persistentHash<Bytes<32>>(owner_secret()) == owner_commit, "Only the contract owner can do this");
+}
+
 // DPO2U ComplianceRegistry — score-private / proof-public attestation.
 //
 // Ported from the Stellar ZK reference architecture (zk-verifier CBOOYCOU…FMNT):
@@ -41,6 +60,7 @@ export circuit attestCompliance(
   context: Bytes<32>,
   score: Uint<8>
 ): [] {
+  assert_owner();
   // Anti-replay: a given context (org||jurisdiction||nonce) may be sealed only once.
   assert(!used_contexts.member(disclose(context)), "Replay: context already used");
   // Score hygiene: a compliance score is a 0-100 percentage. `score` stays private.
@@ -79,6 +99,7 @@ export circuit attestUseCase(
   evidence_hash: Bytes<32>,
   metadata_hash: Bytes<32>
 ): [] {
+  assert_owner();
   assert(verdict <= 2, "Invalid verdict: 0=FAIL, 1=PASS, 2=REVIEW");
   usecase_verdicts.insert(disclose(evidence_hash), disclose(verdict));
   usecase_ids.insert(disclose(evidence_hash), disclose(use_case_id));
@@ -104,6 +125,7 @@ export ledger sponsor_agent: Map<Bytes<32>, Bytes<32>>;    // sponsor_id -> DID 
 export ledger sponsored_total: Counter;                    // total sponsored attestations
 
 export circuit recordSponsoredAttestation(agent_did: Bytes<32>, sponsor: Bytes<32>): [] {
+  assert_owner();
   const prev = sponsored_usage.member(disclose(sponsor))
     ? sponsored_usage.lookup(disclose(sponsor))
     : 0 as Uint<64>;

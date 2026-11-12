@@ -21,6 +21,7 @@ import { setNetworkId, getNetworkId } from '@midnight-ntwrk/midnight-js-network-
 import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { createLedger9WalletProvider, createLedger9MidnightProvider } from '@midnight-ntwrk/midnight-js-types';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
+import { ownerSecret, ownerWitnesses, ownerCommit } from './owner.js';
 import { WalletFacade, WalletEntrySchema, mergeWalletEntries } from '@midnight-ntwrk/wallet-sdk-facade';
 import { DustWallet } from '@midnight-ntwrk/wallet-sdk-dust-wallet';
 import { HDWallet, Roles, WalletSeeds } from '@midnight-ntwrk/wallet-sdk-hd';
@@ -177,10 +178,14 @@ function providers(w: Awaited<ReturnType<typeof openWallet>>) {
   } as any;
 }
 
+async function contractModule() {
+  return import(path.join(ZK, 'contract', 'index.js'));
+}
+
 async function compiled() {
-  const mod = await import(path.join(ZK, 'contract', 'index.js'));
+  const mod = await contractModule();
   return CompiledContract.make('ComplianceRegistry', mod.Contract).pipe(
-    CompiledContract.withVacantWitnesses,
+    (CompiledContract.withWitnesses as any)(ownerWitnesses(ownerSecret(Buffer.from(masterSeed()).toString('hex')))),
     CompiledContract.withCompiledFileAssets(ZK),
   );
 }
@@ -191,10 +196,11 @@ async function main() {
   await ensureDust(w);
   const p = providers(w);
   if (cmd === 'deploy') {
-    const c: any = await (deployContract as any)(p, { compiledContract: await compiled(), privateStateId: 'ComplianceRegistryPrivateState', initialPrivateState: {} });
+    const commit = ownerCommit(await contractModule(), ownerSecret(Buffer.from(masterSeed()).toString('hex')));
+    const c: any = await (deployContract as any)(p, { compiledContract: await compiled(), privateStateId: 'ComplianceRegistryPrivateState', initialPrivateState: {}, args: [commit] });
     const d = c.deployTxData.public;
     const out = { network: 'preview', ledger: 'v9', deployedAt: new Date().toISOString(),
-      contracts: [{ name: 'ComplianceRegistry', contractAddress: d.contractAddress, blockHeight: d.blockHeight, txId: d.txId }] };
+      contracts: [{ name: 'ComplianceRegistry', contractAddress: d.contractAddress, blockHeight: d.blockHeight, txId: d.txId, accessControl: 'owner-v1' }] };
     fs.writeFileSync(OUT, JSON.stringify(out, null, 2) + '\n');
     console.log('DEPLOY_RESULT ' + JSON.stringify(out.contracts[0]));
   } else if (cmd === 'attest') {

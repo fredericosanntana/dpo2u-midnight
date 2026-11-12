@@ -8,8 +8,8 @@
  */
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { createCircuitContext, dummyContractAddress } from '@midnight-ntwrk/compact-runtime';
-import { Contract, ledger } from '../build/ComplianceRegistry/contract/index.js';
+import { Contract, ledger, pureCircuits } from '../build/ComplianceRegistry/contract/index.js';
+import { setupOwned, asStranger, b32, NOT_OWNER } from './helpers.js';
 
 function padTo32Bytes(str: string): Uint8Array {
   const buf = Buffer.alloc(32);
@@ -18,19 +18,7 @@ function padTo32Bytes(str: string): Uint8Array {
 }
 
 function setup() {
-  const contract = new Contract({});
-  const coinPublicKey = '0'.repeat(64) as unknown as string;
-  const { currentContractState, currentPrivateState } = contract.initialState({
-    initialZswapLocalState: { coinPublicKey },
-    initialPrivateState: new Map(),
-  });
-  const ctx = createCircuitContext(
-    dummyContractAddress(),
-    coinPublicKey,
-    currentContractState.data,
-    currentPrivateState ?? new Map(),
-  );
-  return { contract, ctx };
+  return setupOwned(Contract, pureCircuits);
 }
 
 const COMPANY = padTo32Bytes('acme-corp-001');
@@ -112,5 +100,24 @@ describe('ComplianceRegistry (score-private / proof-public)', () => {
       () => contract.circuits.attestUseCase(ctx, padTo32Bytes('x'), 3n, padTo32Bytes('e'), padTo32Bytes('m')),
       /Invalid verdict/,
     );
+  });
+});
+
+describe('ComplianceRegistry access control', () => {
+  it('rejects a caller that does not hold the owner secret', () => {
+    const { contract, ctx } = setup();
+    assert.throws(() => contract.circuits.attestUseCase(asStranger(ctx), b32('uc'), 1n, b32('evidence'), b32('meta')), NOT_OWNER);
+  });
+
+  it('a stranger cannot overwrite an owner verdict (FAIL -> PASS)', () => {
+    const { contract, ctx } = setup();
+    const { context } = contract.circuits.attestUseCase(ctx, b32('uc'), 0n, b32('evidence'), b32('meta'));
+    assert.throws(() => contract.circuits.attestUseCase(asStranger(context), b32('uc'), 1n, b32('evidence'), b32('meta')), NOT_OWNER);
+  });
+
+  it('a stranger cannot self-attest a score or meter sponsored usage', () => {
+    const { contract, ctx } = setup();
+    assert.throws(() => contract.circuits.attestCompliance(asStranger(ctx), b32('co'), b32('did'), b32('cid'), 70n, b32('ctx-1'), 100n), NOT_OWNER);
+    assert.throws(() => contract.circuits.recordSponsoredAttestation(asStranger(ctx), b32('did'), b32('sponsor')), NOT_OWNER);
   });
 });

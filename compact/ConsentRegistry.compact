@@ -1,6 +1,25 @@
 pragma language_version >= 0.21.0;
 import CompactStandardLibrary;
 
+// ── Access control (mainnet) ──
+// Every circuit that writes state is owner-only. The deployer keeps owner_secret private
+// (witness, never on chain) and passes owner_commit = owner_commitment(owner_secret) to the
+// constructor. Same pattern as TravelRuleGate / PsavPassport.
+witness owner_secret(): Bytes<32>;
+export ledger owner_commit: Bytes<32>;
+
+constructor(owner_commit_: Bytes<32>) {
+  owner_commit = disclose(owner_commit_);
+}
+
+export pure circuit owner_commitment(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Bytes<32>>(secret);
+}
+
+circuit assert_owner(): [] {
+  assert(persistentHash<Bytes<32>>(owner_secret()) == owner_commit, "Only the contract owner can do this");
+}
+
 // ConsentRegistry — LGPD/GDPR consent management on Midnight Network
 //
 // Implements consent requirements from:
@@ -38,6 +57,7 @@ export circuit grantConsent(
   purposes: Uint<8>,
   policy_version: Uint<8>
 ): [] {
+  assert_owner();
   assert(purposes > 0 as Uint<8>, "Must grant at least one purpose");
   assert(policy_version > 0 as Uint<8>, "Policy version must be specified");
   consent_status.insert(disclose(subject_id), disclose(1 as Uint<8>));
@@ -49,6 +69,7 @@ export circuit grantConsent(
 // Revoke ALL consent for a data subject (LGPD Art. 8 §5 — must be as easy as granting).
 // Sets status=2, clears purposes. Record is retained for audit (revocation is itself an event).
 export circuit revokeConsent(subject_id: Bytes<32>): [] {
+  assert_owner();
   assert(consent_status.member(disclose(subject_id)), "No consent record found for this subject");
   consent_status.insert(disclose(subject_id), disclose(2 as Uint<8>));
   consent_purposes.insert(disclose(subject_id), disclose(0 as Uint<8>));
@@ -62,6 +83,7 @@ export circuit updateConsentPurposes(
   new_purposes: Uint<8>,
   policy_version: Uint<8>
 ): [] {
+  assert_owner();
   assert(consent_status.member(disclose(subject_id)), "No consent record found for this subject");
   assert(new_purposes > 0 as Uint<8>, "Must keep at least one purpose; use revokeConsent to fully revoke");
   assert(policy_version > 0 as Uint<8>, "Policy version must be specified");

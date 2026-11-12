@@ -1,6 +1,25 @@
 pragma language_version >= 0.21.0;
 import CompactStandardLibrary;
 
+// ── Access control (mainnet) ──
+// Every circuit that writes state is owner-only. The deployer keeps owner_secret private
+// (witness, never on chain) and passes owner_commit = owner_commitment(owner_secret) to the
+// constructor. Same pattern as TravelRuleGate / PsavPassport.
+witness owner_secret(): Bytes<32>;
+export ledger owner_commit: Bytes<32>;
+
+constructor(owner_commit_: Bytes<32>) {
+  owner_commit = disclose(owner_commit_);
+}
+
+export pure circuit owner_commitment(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Bytes<32>>(secret);
+}
+
+circuit assert_owner(): [] {
+  assert(persistentHash<Bytes<32>>(owner_secret()) == owner_commit, "Only the contract owner can do this");
+}
+
 // DPO2U Shared ZK Trust Stack registry — "uma muralha, não cem castelos".
 //
 // Anchors the hash of the AUDITED compliance stack on-chain. Instead of every dApp building (and
@@ -16,6 +35,7 @@ export ledger stack_count: Counter;
 // Register an audited stack commitment. stack_hash = H(verifying keys / contract addresses of the
 // audited stack). One registration per stack_id (bump the id for a new audited version).
 export circuit registerStack(stack_id: Bytes<32>, stack_hash: Bytes<32>, version: Uint<32>): [] {
+  assert_owner();
   assert(!stack_hashes.member(disclose(stack_id)), "Stack already registered for this id");
   stack_hashes.insert(disclose(stack_id), disclose(stack_hash));
   stack_versions.insert(disclose(stack_id), disclose(version));

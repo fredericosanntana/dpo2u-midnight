@@ -4,8 +4,8 @@
  */
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { createCircuitContext, dummyContractAddress } from '@midnight-ntwrk/compact-runtime';
-import { Contract, ledger } from '../build/DataAuditLog/contract/index.js';
+import { Contract, ledger, pureCircuits } from '../build/DataAuditLog/contract/index.js';
+import { setupOwned, asStranger, b32, NOT_OWNER } from './helpers.js';
 
 function padTo32Bytes(str: string): Uint8Array {
   const buf = Buffer.alloc(32);
@@ -14,19 +14,7 @@ function padTo32Bytes(str: string): Uint8Array {
 }
 
 function setup() {
-  const contract = new Contract({});
-  const coinPublicKey = '0'.repeat(64) as unknown as string;
-  const { currentContractState, currentPrivateState } = contract.initialState({
-    initialZswapLocalState: { coinPublicKey },
-    initialPrivateState: new Map(),
-  });
-  const ctx = createCircuitContext(
-    dummyContractAddress(),
-    coinPublicKey,
-    currentContractState.data,
-    currentPrivateState ?? new Map(),
-  );
-  return { contract, ctx };
+  return setupOwned(Contract, pureCircuits);
 }
 
 const CONTROLLER = padTo32Bytes('did:controller:acme');
@@ -77,5 +65,12 @@ describe('DataAuditLog (LGPD Art. 37)', () => {
     const { context: c3 } = contract.circuits.logEvent(c2, CONTROLLER, 3n, 20n);
     assert.equal(contract.circuits.getControllerEventCount(c3, CONTROLLER).result, 2n);
     assert.equal(contract.circuits.getTotalEvents(c3).result, 2n);
+  });
+});
+
+describe('DataAuditLog access control', () => {
+  it('rejects a caller that does not hold the owner secret', () => {
+    const { contract, ctx } = setup();
+    assert.throws(() => contract.circuits.logEvent(asStranger(ctx), b32('controller'), 1n, 10n), NOT_OWNER);
   });
 });

@@ -1,6 +1,25 @@
 pragma language_version >= 0.21.0;
 import CompactStandardLibrary;
 
+// ── Access control (mainnet) ──
+// Every circuit that writes state is owner-only. The deployer keeps owner_secret private
+// (witness, never on chain) and passes owner_commit = owner_commitment(owner_secret) to the
+// constructor. Same pattern as TravelRuleGate / PsavPassport.
+witness owner_secret(): Bytes<32>;
+export ledger owner_commit: Bytes<32>;
+
+constructor(owner_commit_: Bytes<32>) {
+  owner_commit = disclose(owner_commit_);
+}
+
+export pure circuit owner_commitment(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Bytes<32>>(secret);
+}
+
+circuit assert_owner(): [] {
+  assert(persistentHash<Bytes<32>>(owner_secret()) == owner_commit, "Only the contract owner can do this");
+}
+
 // DPO2U Legal Source Manifest — anchors (citation -> canonical statute source hash) on-chain so the
 // compliance predicates trace back to REAL law. Midnight port of the Solana legal_source_manifest.
 // Makes "law -> circuit" auditable: a verdict's predicate cites an anchored statute, not an implicit
@@ -11,6 +30,7 @@ export ledger source_jurisdictions: Map<Bytes<32>, Bytes<32>>; // citation_id ->
 export ledger manifest_count: Counter;
 
 export circuit anchorSource(citation_id: Bytes<32>, source_hash: Bytes<32>, jurisdiction: Bytes<32>): [] {
+  assert_owner();
   assert(!source_hashes.member(disclose(citation_id)), "Citation already anchored");
   source_hashes.insert(disclose(citation_id), disclose(source_hash));
   source_jurisdictions.insert(disclose(citation_id), disclose(jurisdiction));

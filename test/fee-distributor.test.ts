@@ -6,23 +6,11 @@
  */
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { createCircuitContext, dummyContractAddress } from '@midnight-ntwrk/compact-runtime';
-import { Contract, ledger } from '../build/FeeDistributor/contract/index.js';
+import { Contract, ledger, pureCircuits } from '../build/FeeDistributor/contract/index.js';
+import { setupOwned, asStranger, b32, NOT_OWNER } from './helpers.js';
 
 function setup() {
-  const contract = new Contract({});
-  const coinPublicKey = '0'.repeat(64) as unknown as string;
-  const { currentContractState, currentPrivateState } = contract.initialState({
-    initialZswapLocalState: { coinPublicKey },
-    initialPrivateState: new Map(),
-  });
-  const ctx = createCircuitContext(
-    dummyContractAddress(),
-    coinPublicKey,
-    currentContractState.data,
-    currentPrivateState ?? new Map(),
-  );
-  return { contract, ctx };
+  return setupOwned(Contract, pureCircuits);
 }
 
 describe('FeeDistributor (40/60 split)', () => {
@@ -58,5 +46,12 @@ describe('FeeDistributor (40/60 split)', () => {
     const expert = contract.circuits.getExpertPool(context);
     assert.equal(expert.result, 200n);
     assert.equal(contract.circuits.getTotalDistributed(expert.context).result, 500n);
+  });
+});
+
+describe('FeeDistributor access control', () => {
+  it('rejects a caller that does not hold the owner secret', () => {
+    const { contract, ctx } = setup();
+    assert.throws(() => contract.circuits.distributeComplianceFee(asStranger(ctx), 400n, 600n), NOT_OWNER);
   });
 });
