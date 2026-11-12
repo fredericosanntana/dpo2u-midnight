@@ -71,3 +71,44 @@ test('health, auth, validação, fila serial e rate limit', async () => {
     p.kill();
   }
 });
+
+// ── Avalanche (12/11) ──
+test('avalancheArgs: veredito do registry, origin HUMAN_REVIEWED, validade e metadata', async () => {
+  process.env.BRIDGE_TOKEN_FILE = join(dir, 'tok');
+  process.env.COMPLIANCE_REGISTRY_ADDRESS = CONTRACT;
+  process.env.BRIDGE_AVAX_VALIDITY_DAYS = '9999'; // teto 365
+  const m = await import(join(here, 'lgpd-attest-bridge.mjs') + '?avax');
+  assert.deepEqual(m.EVM_VERDICT, { pass: 1, fail: 2, review: 3 });
+  const p = { ...payload, subject: 'e'.repeat(64) };
+  const a = m.avalancheArgs(p, 1_000_000);
+  assert.equal(a.verdict, 3);
+  assert.equal(a.origin, 1);
+  assert.equal(a.expiresAt, 1_000_000 + 365 * 86400);
+  assert.equal(a.evidenceHashHex, '0x' + mh);
+  assert.equal(a.subjectHex, '0x' + 'e'.repeat(64));
+  const meta = { attestedAt: p.attestedAt, packId: p.packId, reportId: p.reportId, reviewerHash: p.reviewerHash, verdict: p.verdict };
+  assert.equal(a.metadataHashHex, '0x' + createHash('sha256').update(canonical(meta)).digest('hex'));
+  assert.equal(m.avalancheArgs({ ...p, verdict: 'fail' }, 0).verdict, 2);
+  assert.equal(m.avalancheArgs({ ...p, verdict: 'pass' }, 0).verdict, 1);
+  assert.equal(m.checkRequest({ payload, manifest, chains: ['avalanche'] }), 'subject (hash hex de 32 bytes) é obrigatório para avalanche');
+  assert.equal(m.checkRequest({ payload: p, manifest, chains: ['midnight', 'avalanche'] }), null);
+  assert.equal(m.checkRequest({ payload: p, manifest, chains: ['solana'] }), 'chains inválido');
+  assert.equal(m.checkRequest({ payload: p, manifest, chains: ['midnight', 'midnight'] }), 'chains inválido');
+});
+
+test('chains=[midnight,avalanche] sem Avalanche configurada: midnight grava, avalanche fica failed, HTTP 200', async () => {
+  const { p, url } = await start({ BRIDGE_RATE_PER_HOUR: '10' });
+  try {
+    const r = await post(url, { payload: { ...payload, subject: 'e'.repeat(64) }, manifest, chains: ['midnight', 'avalanche'] });
+    assert.equal(r.status, 200);
+    const j = await r.json();
+    assert.equal(j.chains.midnight.status, 'submitted');
+    assert.equal(j.chains.midnight.txId, '00aa');
+    assert.equal(j.chains.avalanche.status, 'failed');
+    assert.match(j.chains.avalanche.error, /não configurada/);
+    const only = await post(url, { payload: { ...payload, subject: 'e'.repeat(64) }, manifest, chains: ['avalanche'] });
+    assert.equal(only.status, 502);
+  } finally {
+    p.kill();
+  }
+});
