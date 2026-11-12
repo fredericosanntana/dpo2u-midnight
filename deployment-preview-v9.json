@@ -1,13 +1,182 @@
 {
   "network": "preview",
   "ledger": "v9",
-  "deployedAt": "2026-11-09T19:13:45.140Z",
-  "contracts": [
-    {
-      "name": "ComplianceRegistry",
-      "contractAddress": "817dc7481a314991c57c49ea354315bc3366cff213343faf93dc195ca422c135",
-      "blockHeight": 39685,
-      "txId": "0020271adac5aac0b29ea41c4bc015a39a768b3a30289591f935f2a083d8e35f92"
+  "contracts": {
+    "ComplianceRegistry": {
+      "contractAddress": "937791d931656e6dcc158d344e4023ba0779973976a6f25f6a84c0a6cb84ad0d",
+      "txId": "008d82ff93cfb31c463b7da28c94464c20a31aa4df4bee056de648b87246ce8a4a",
+      "blockHeight": 81697,
+      "deployedAt": "2026-11-12T17:47:03.503Z",
+      "compiler": "compactc 0.36.0",
+      "accessControl": "owner-v1",
+      "dustSpent": "11192976841858197",
+      "dustBefore": "10717304782856497638",
+      "seconds": 27
+    },
+    "TravelRuleGate": {
+      "contractAddress": "ccc6b24c59dce9805581e1afdab158f0e7091a14bdb4a82e28396bcd522d7004",
+      "txId": "001055952b9271b08b8c85821f0c953b2f3f24e2c1d1b653338d4bb181a33ae2f2",
+      "blockHeight": 81701,
+      "deployedAt": "2026-11-12T17:47:26.972Z",
+      "compiler": "compactc 0.36.0",
+      "accessControl": "owner-v1",
+      "dustSpent": "8363470071893336",
+      "dustBefore": "10706111806014639441",
+      "seconds": 23
+    },
+    "PsavPassport": {
+      "contractAddress": "a993c39e2aeca86740d82528c377890d4811cb210f6b74ef3db49b347c619e5f",
+      "txId": "002b71338e6dd93752c70e7a5186d3e22dceccecffdb4b2885b95bb0b9eeffcd6a",
+      "blockHeight": 81705,
+      "deployedAt": "2026-11-12T17:47:51.092Z",
+      "compiler": "compactc 0.36.0",
+      "accessControl": "owner-v1",
+      "dustSpent": "11888929304980755",
+      "dustBefore": "10697748335942746105",
+      "seconds": 24
+    },
+    "ConsentRegistry": {
+      "contractAddress": "0b25ab966fbc13b824894573398051c52628f0b6bb9692b1271d08b0a7fd9a30",
+      "txId": "009792631497c4aff28e380676a35bbd51f194d77c99d8de24befb7fd2be039d2d",
+      "blockHeight": 81709,
+      "deployedAt": "2026-11-12T17:48:15.537Z",
+      "compiler": "compactc 0.36.0",
+      "accessControl": "owner-v1",
+      "dustSpent": "9241317915343263",
+      "dustBefore": "10685859406637765350",
+      "seconds": 24
+    },
+    "DataSubjectRights": {
+      "contractAddress": "645951d68022585555f692058828430fc970a1db350f1ed52d7321e64d5995d6",
+      "txId": "00ce019c6884d396970e3bc51dfb7fe5be0cbd6e11ca63e54f5ce2b70d3d86c0c7",
+      "blockHeight": 81713,
+      "deployedAt": "2026-11-12T17:48:39.504Z",
+      "compiler": "compactc 0.36.0",
+      "accessControl": "owner-v1",
+      "dustSpent": "13342266614327551",
+      "dustBefore": "10676618088722422087",
+      "seconds": 24
+    },
+    "DataAuditLog": {
+      "contractAddress": "6f7e1eedd763f590744f2c69c9c0e40a396bd94ac659d19433798d49088e4ea2",
+      "txId": "005c752e3cefa5e1d14e01d62a2b6ebd619db201cd463683503723dbeb9de53d14",
+      "blockHeight": 81717,
+      "deployedAt": "2026-11-12T17:49:03.897Z",
+      "compiler": "compactc 0.36.0",
+      "accessControl": "owner-v1",
+      "dustSpent": "12913099061679685",
+      "dustBefore": "10663275822108094536",
+      "seconds": 24
+    },
+    "SolvencyRegistry": {
+      "contractAddress": "a3bde82015fc53d51241a9699d9bf8fad07c91d939cf8f7846cce367eff4b240",
+      "txId": "00cb02b17dd860d98ac3bdac38807e5c970fda4fe0ef29f2a1abc2dacb46c4f4ea",
+      "blockHeight": 81721,
+      "deployedAt": "2026-11-12T17:49:28.053Z",
+      "compiler": "compactc 0.36.0",
+      "accessControl": "owner-v1",
+      "dustSpent": "5378707761018791",
+      "dustBefore": "10650362723046414851",
+      "seconds": 24
+    },
+    "LgpdKitRegistry": {
+      "contractAddress": "73295648a51fb92de9eff407d741d7518e11dd3ac0919079aca6eb3317c0ba51",
+      "txId": "001eb26af64390ae4e42cf821330ad4588051a7cfdda282b0015a91b713e76268e",
+      "blockHeight": 81725,
+      "deployedAt": "2026-11-12T17:49:51.219Z",
+      "compiler": "compactc 0.36.0",
+      "accessControl": "owner-v1",
+      "dustSpent": "2791273711176520",
+      "dustBefore": "10644984015285396060",
+      "seconds": 23
+    },
+    "LegalSourceManifest": {
+      "contractAddress": "d87c585fa9fba478c35f6247e1631ff2d2a0b71eecfa8b087c808272a12bab5d",
+      "txId": "00b840dcba728b8fdc830c5edce1538d7eb9b1b5ac2abd487e0784e85a8c63c90c",
+      "blockHeight": 81729,
+      "deployedAt": "2026-11-12T17:50:15.539Z",
+      "compiler": "compactc 0.36.0",
+      "accessControl": "owner-v1",
+      "dustSpent": "4527356510811650",
+      "dustBefore": "10642192741574219540",
+      "seconds": 24
+    },
+    "TrustStackRegistry": {
+      "contractAddress": "40c973e858d295c13b1527ada79cfd0b31223adb6fa6106932478e74a9a99c4e",
+      "txId": "000ce3ad3b71c22c1d69035fcfc0cb79c953807ba8e8235c371d6e1ac8dadb7672",
+      "blockHeight": 81733,
+      "deployedAt": "2026-11-12T17:50:39.552Z",
+      "compiler": "compactc 0.36.0",
+      "accessControl": "owner-v1",
+      "dustSpent": "5400342000276179",
+      "dustBefore": "10637665385063407890",
+      "seconds": 24
+    },
+    "AgentRegistry": {
+      "contractAddress": "2b10672f08c13796f63492ad893959e43e40179c98a22e9060a057da399d8260",
+      "txId": "00924b00a3d450752effa86501e9cc1ff8f6dd2891653bcbd18c27eb64046eda8c",
+      "blockHeight": 81737,
+      "deployedAt": "2026-11-12T17:51:03.941Z",
+      "compiler": "compactc 0.36.0",
+      "accessControl": "owner-v1",
+      "dustSpent": "5263187793406867",
+      "dustBefore": "10632265043063131711",
+      "seconds": 24
+    },
+    "AgentWalletFactory": {
+      "contractAddress": "10bf09a27b8a5e0a9a41859101d4c5e4f520f6bd84685532ad89c17d73b57725",
+      "txId": "00b53cef80b06851a1fc2f32fb18388a72f99367555cbd1d95200449449354dd4e",
+      "blockHeight": 81741,
+      "deployedAt": "2026-11-12T17:51:27.779Z",
+      "compiler": "compactc 0.36.0",
+      "accessControl": "owner-v1",
+      "dustSpent": "3648590986968024",
+      "dustBefore": "10627001855269724844",
+      "seconds": 24
+    },
+    "ComplianceEscrow": {
+      "contractAddress": "78f9578052b31f74703f721bf18888216c1ea0acdf4607e655ba476ee1665450",
+      "txId": "0027e79ecf5ed1a3ce25524512ef161adda929969e304eaac116077d1cb76c5895",
+      "blockHeight": 81745,
+      "deployedAt": "2026-11-12T17:51:50.498Z",
+      "compiler": "compactc 0.36.0",
+      "accessControl": "owner-v1",
+      "dustSpent": "12222658818060888",
+      "dustBefore": "10623353264282756820",
+      "seconds": 23
+    },
+    "ComplianceEscrowV2": {
+      "contractAddress": "e85dc82dccb28d3d88e62789364c0f8ac9c17422402b477706545f0718be1218",
+      "txId": "009e0c925611ebf9dfb5b479029f1b40d87eee4f6b491c96d4f72b548fa4a847aa",
+      "blockHeight": 81749,
+      "deployedAt": "2026-11-12T17:52:14.598Z",
+      "compiler": "compactc 0.36.0",
+      "accessControl": "owner-v1",
+      "dustSpent": "7925623282785783",
+      "dustBefore": "10611130605464695932",
+      "seconds": 24
+    },
+    "PaymentGateway": {
+      "contractAddress": "cde67e56bbd99c42c3debf409de09b12372b32ae46213d6600d5ba4d51e051d9",
+      "txId": "0082dd3d1dacb2b8bb9f37c1d0e739609fc40e6290a101301bd8e0fdd4e1d38541",
+      "blockHeight": 81753,
+      "deployedAt": "2026-11-12T17:52:38.152Z",
+      "compiler": "compactc 0.36.0",
+      "accessControl": "owner-v1",
+      "dustSpent": "9969616554125129",
+      "dustBefore": "10603204982181910149",
+      "seconds": 24
+    },
+    "FeeDistributor": {
+      "contractAddress": "1a1a1c40159daa54b649ea757bf7cec04b5dd1b1d1b48a6cfd49f01c22a5e74a",
+      "txId": "00b95d912a52c03e385ec4d9424dbc66e3f114a97b816d5b685154b1645a76ef18",
+      "blockHeight": 81756,
+      "deployedAt": "2026-11-12T17:52:56.771Z",
+      "compiler": "compactc 0.36.0",
+      "accessControl": "owner-v1",
+      "dustSpent": "8739583059892426",
+      "dustBefore": "10593235365627785020",
+      "seconds": 19
     }
-  ]
+  }
 }
