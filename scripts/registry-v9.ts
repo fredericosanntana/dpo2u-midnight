@@ -184,9 +184,9 @@ async function contractModule() {
 
 async function compiled() {
   const mod = await contractModule();
-  return CompiledContract.make('ComplianceRegistry', mod.Contract).pipe(
-    (CompiledContract.withWitnesses as any)(ownerWitnesses(ownerSecret(Buffer.from(masterSeed()).toString('hex')))),
-    CompiledContract.withCompiledFileAssets(ZK),
+  return (CompiledContract.make('ComplianceRegistry', mod.Contract as any) as any).pipe(
+    (CompiledContract as any).withWitnesses(ownerWitnesses(ownerSecret(Buffer.from(masterSeed()).toString('hex')))),
+    (CompiledContract as any).withCompiledFileAssets(ZK),
   );
 }
 

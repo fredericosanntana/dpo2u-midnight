@@ -26,18 +26,18 @@ const witnesses = {
 const COIN_PK = '0'.repeat(64);
 
 /** Deploys `ContractClass` in the simulator with OWNER_SECRET as owner; returns the contract and an owner context. */
-export function setupOwned<C = any>(ContractClass: any, pureCircuits: any, ...extraArgs: unknown[]): { contract: C & any; ctx: any } {
+export async function setupOwned<C = any>(ContractClass: any, pureCircuits: any, ...extraArgs: unknown[]): Promise<{ contract: C & any; ctx: any }> {
   const contract = new ContractClass(witnesses);
   const ps: OwnerPS = { ownerSecret: OWNER_SECRET };
   const commit = pureCircuits.owner_commitment(OWNER_SECRET);
-  const { currentContractState } = contract.initialState(createConstructorContext(ps, COIN_PK), commit, ...extraArgs);
+  const { currentContractState } = await contract.initialState(createConstructorContext(ps, COIN_PK), commit, ...extraArgs);
   const ctx = createCircuitContext({
     circuitId: 'test',
     contractAddress: dummyContractAddress(),
     coinPublicKeyOrZswapState: COIN_PK,
-    contractState: currentContractState.data,
+    contractState: currentContractState,
     privateState: ps,
-  } as any);
+  });
   return { contract, ctx };
 }
 

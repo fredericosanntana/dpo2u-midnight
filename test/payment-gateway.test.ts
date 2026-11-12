@@ -12,38 +12,38 @@ function setup() {
 }
 
 describe('PaymentGateway', () => {
-  it('deposits to treasury', () => {
-    const { contract, ctx } = setup();
-    const { context } = contract.circuits.depositToTreasury(ctx, 1000n);
-    assert.equal(ledger(context.currentQueryContext.state).protocol_treasury, 1000n);
+  it('deposits to treasury', async () => {
+    const { contract, ctx } = await setup();
+    const { context } = await contract.circuits.depositToTreasury(ctx, 1000n);
+    assert.equal(ledger(context.callContext.currentQueryContext.state).protocol_treasury, 1000n);
   });
 
-  it('rejects a zero deposit', () => {
-    const { contract, ctx } = setup();
-    assert.throws(() => contract.circuits.depositToTreasury(ctx, 0n), /Deposit must be greater than zero/);
+  it('rejects a zero deposit', async () => {
+    const { contract, ctx } = await setup();
+    await assert.rejects(() => contract.circuits.depositToTreasury(ctx, 0n), /Deposit must be greater than zero/);
   });
 
-  it('stakes $NIGHT', () => {
-    const { contract, ctx } = setup();
-    const { context } = contract.circuits.stakeTokens(ctx, 500n);
-    assert.equal(ledger(context.currentQueryContext.state).total_staked_night, 500n);
+  it('stakes $NIGHT', async () => {
+    const { contract, ctx } = await setup();
+    const { context } = await contract.circuits.stakeTokens(ctx, 500n);
+    assert.equal(ledger(context.callContext.currentQueryContext.state).total_staked_night, 500n);
   });
 
-  it('rejects a zero stake', () => {
-    const { contract, ctx } = setup();
-    assert.throws(() => contract.circuits.stakeTokens(ctx, 0n), /Stake must be greater than zero/);
+  it('rejects a zero stake', async () => {
+    const { contract, ctx } = await setup();
+    await assert.rejects(() => contract.circuits.stakeTokens(ctx, 0n), /Stake must be greater than zero/);
   });
 
-  it('reads treasury balance back', () => {
-    const { contract, ctx } = setup();
-    const { context } = contract.circuits.depositToTreasury(ctx, 750n);
-    assert.equal(contract.circuits.getTreasuryBalance(context).result, 750n);
+  it('reads treasury balance back', async () => {
+    const { contract, ctx } = await setup();
+    const { context } = await contract.circuits.depositToTreasury(ctx, 750n);
+    assert.equal((await contract.circuits.getTreasuryBalance(context)).result, 750n);
   });
 });
 
 describe('PaymentGateway access control', () => {
-  it('rejects a caller that does not hold the owner secret', () => {
-    const { contract, ctx } = setup();
-    assert.throws(() => contract.circuits.depositToTreasury(asStranger(ctx), 10n), NOT_OWNER);
+  it('rejects a caller that does not hold the owner secret', async () => {
+    const { contract, ctx } = await setup();
+    await assert.rejects(() => contract.circuits.depositToTreasury(asStranger(ctx), 10n), NOT_OWNER);
   });
 });
