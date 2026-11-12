@@ -167,7 +167,8 @@ async function main() {
   console.log(`  ✅ Paymaster loop proven on ${net.name}. Saved paymaster-demo-result-${net.name}.json`);
   console.log(`     · Holder kept its NIGHT (custody): ${holderNightBefore} → ${holderNightAfter}`);
   console.log(`     · Controller sealed the attestation on delegated DUST (cost ${dustCost})`);
-  console.log(`  console.log(bar);
+  console.log(`     · Verify on-chain state:  MIDNIGHT_SEED=... npm run verify:paymaster`);
+  console.log(bar);
   try { await controller.facade.stop(); await holder.facade.stop(); } catch { /* ignore */ }
   process.exit(0);
 }
