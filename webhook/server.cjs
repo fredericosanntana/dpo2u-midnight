@@ -39,11 +39,27 @@ const VLABEL = { 1: 'PASS', 0: 'FAIL', 2: 'REVIEW' };
 const VNUM = { PASS: 1, FAIL: 0, REVIEW: 2 }; // verdict string -> ledger numeric
 
 // ── agent self-funding status: DUST health + address + faucet (powers the SPA "fuel the agent" widget) ──
-const DEPLOY = path.join(REPO, 'deployment-preview.json');
+// Network: MIDNIGHT_NETWORK (preview | preprod | mainnet; default preview). Contract addresses come from
+// deployment-<network>-v9.json (scripts/deploy-v9.ts); mainnet has no faucet.
+const NETWORK = process.env.MIDNIGHT_NETWORK || 'preview';
+const INDEXERS = {
+  preview: 'https://indexer.preview.midnight.network/api/v4/graphql',
+  preprod: 'https://indexer.preprod.midnight.network/api/v4/graphql',
+  mainnet: 'https://midnight-mainnet.blockfrost.io/api/v0', // Blockfrost; needs a project_id, not shown publicly
+};
+if (!INDEXERS[NETWORK]) throw new Error(`MIDNIGHT_NETWORK inválida: ${NETWORK}`);
+const INDEXER = INDEXERS[NETWORK];
+const DEPLOY = path.join(REPO, `deployment-${NETWORK}-v9.json`);
+// v9 file: { contracts: { Name: { contractAddress } } }; older files: { contracts: [{ name, contractAddress }] }
+const contractAddr = (dep, name) => {
+  const c = dep.contracts;
+  if (Array.isArray(c)) return (c.find((x) => x.name === name) || {}).contractAddress || null;
+  return (c && c[name] && c[name].contractAddress) || null;
+};
 const DUST_FLOOR = BigInt(process.env.AGENT_DUST_FLOOR || '1000000000000000'); // 1e15, matches the daemon --dust-floor
 const LOW_FUEL_MULT = BigInt(process.env.AGENT_LOW_FUEL_MULT || '5');           // warn below floor*5
 const QUEUE_CAP = Number(process.env.AGENT_QUEUE_CAP || '50');                  // back-pressure so an open alpha can't drain DUST
-const FAUCET_URL = process.env.MIDNIGHT_FAUCET_URL || 'https://midnight-tmnight-preview.nethermind.dev/';
+const FAUCET_URL = NETWORK === 'mainnet' ? null : (process.env.MIDNIGHT_FAUCET_URL || (NETWORK === 'preview' ? 'https://midnight-tmnight-preview.nethermind.dev/' : null));
 function agentStatus() {
   const dep = readJSON(DEPLOY, {});
   const led = readJSON(LEDGER, []);
@@ -54,7 +70,7 @@ function agentStatus() {
   const sealsToday = led.filter((e) => e && String(e.ts || '').slice(0, 10) === today).length;
   return {
     address: dep.walletAddress || null,
-    network: dep.networkId || dep.network || 'preview',
+    network: NETWORK,
     dust: dust.toString(),
     dustHuman: (Number(dust) / 1e18).toFixed(4), // cosmetic; healthy/lowFuel use raw bigint
     floor: DUST_FLOOR.toString(),
@@ -154,7 +170,7 @@ function renderVerify(uc, hash) {
   const sealed = !!led;
   const verdict = rec ? VLABEL[rec.verdict] : '?';
   const color = verdict === 'PASS' ? '#1a7f37' : verdict === 'REVIEW' ? '#9a6700' : verdict === 'FAIL' ? '#cf222e' : '#57606a';
-  const indexer = 'https://indexer.preview.midnight.network/api/v4/graphql';
+  const indexer = INDEXER;
   return `<!doctype html><meta charset=utf-8><title>DPO2U /verify</title>
 <style>body{font:15px/1.6 system-ui;max-width:760px;margin:48px auto;padding:0 20px;color:#1f2328}
 .b{display:inline-block;padding:2px 10px;border-radius:12px;color:#fff;background:${color};font-weight:600}
@@ -166,7 +182,7 @@ ${rec ? `<p><span class=k>Repositório</span> <code>${rec.owner}/${rec.repo}</co
 <p><span class=k>Veredito</span> <b>${verdict}</b> ${rec && rec.score != null ? `(score ${rec.score}, privado on-chain)` : '(score-private ZK)'}</p>
 <p><span class=k>evidence_hash</span> <code>${hash}</code></p>
 ${sealed ? `<p><span class=k>On-chain</span> <code>tx ${led.txId}</code> · bloco ${led.blockHeight}</p>
-<p><span class=k>Rede</span> Midnight preview</p>
+<p><span class=k>Rede</span> Midnight ${NETWORK}</p>
 <hr><p>Verificação independente (terceiro, sem confiar em nós):<br>
 <code>npx tsx scripts/verify-seal.ts &lt;ComplianceRegistry&gt; ${hash}</code><br>
 ou consulte <code>${indexer}</code> (queryContractState + getUseCaseVerdict).</p>`
@@ -234,13 +250,12 @@ function attestationJson(uc, hash) {
   const rec = readJSON(RECORDS, []).find((r) => r.evidence_hash === hash);
   const led = readJSON(LEDGER, []).find((e) => e.key === hash && e.txId);
   const dep = readJSON(DEPLOY, {});
-  const cr = (dep.contracts || []).find((c) => c.name === 'ComplianceRegistry');
   const sealed = !!led;
   const tsMs = (sealed && led.ts) ? Date.parse(led.ts) : (rec && rec.at ? Date.parse(rec.at) : NaN);
   return {
     found: !!rec || sealed,
     chain: 'midnight',
-    network: dep.networkId || dep.network || 'preview',
+    network: NETWORK,
     use_case_id: uc,
     evidence_hash: hash,
     verdict: rec ? (VLABEL[rec.verdict] ?? null) : null,
@@ -251,10 +266,10 @@ function attestationJson(uc, hash) {
     tx: sealed ? led.txId : null,
     block: sealed ? led.blockHeight : null,
     submitted_by: dep.walletAddress || null,
-    contract_id: cr ? cr.contractAddress : null,
+    contract_id: contractAddr(dep, 'ComplianceRegistry'),
     metadata_hash: hash,
     timestamp: Number.isFinite(tsMs) ? Math.floor(tsMs / 1000) : null,
-    indexer: 'https://indexer.preview.midnight.network/api/v4/graphql',
+    indexer: INDEXER,
   };
 }
 

@@ -74,9 +74,10 @@ export function masterSeedHex(): string {
 
 export type V9Wallet = { facade: WalletFacade; keystore: any; state: any; net: NetCfg; address: string };
 
-export async function openWallet(net: NetCfg, opts: { syncTimeoutMs?: number } = {}): Promise<V9Wallet> {
+/** Opens and syncs a wallet. `seedHex` overrides MIDNIGHT_SEED (e.g. a derived paymaster account seed). */
+export async function openWallet(net: NetCfg, opts: { syncTimeoutMs?: number; seedHex?: string; label?: string } = {}): Promise<V9Wallet> {
   setNetworkId(net.networkId as any);
-  const seeds = WalletSeeds.fromMasterSeed(Buffer.from(masterSeedHex(), 'hex'));
+  const seeds = WalletSeeds.fromMasterSeed(Buffer.from(opts.seedHex ?? masterSeedHex(), 'hex'));
   const keystore = createKeystore({ kind: 'schnorr', secret: seeds.unshielded } as any, getNetworkId() as any);
   const address = String((keystore as any).getBech32Address?.() ?? (keystore as any).getAddress?.() ?? '');
   const configuration = {
@@ -95,7 +96,7 @@ export async function openWallet(net: NetCfg, opts: { syncTimeoutMs?: number } =
     dust: (c: any) => DustWallet(c).startWithSeed(seeds.dust),
   } as any);
   await facade.start(seeds);
-  console.log(`[wallet] ${net.name}: ${address} — syncing...`);
+  console.log(`[wallet${opts.label ? ' ' + opts.label : ''}] ${net.name}: ${address} — syncing...`);
   const state: any = await Rx.firstValueFrom(
     facade.state().pipe(Rx.filter((s: any) => s.isSynced === true), Rx.timeout({ first: opts.syncTimeoutMs ?? 30 * 60_000 })),
   );

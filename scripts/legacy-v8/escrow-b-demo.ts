@@ -29,13 +29,13 @@ import { HDWallet, Roles } from '@midnight-ntwrk/wallet-sdk-hd';
 import { ShieldedWallet } from '@midnight-ntwrk/wallet-sdk-shielded';
 import { createKeystore, PublicKey, UnshieldedWallet } from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
-import * as ComplianceEscrow from '../build/ComplianceEscrow/contract/index.js';
+import * as ComplianceEscrow from '../../build/ComplianceEscrow/contract/index.js';
 
 // @ts-expect-error WS polyfill
 globalThis.WebSocket = WebSocket;
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
-const buildPath = (n: string) => path.resolve(__dirname, '..', 'build', n);
+const buildPath = (n: string) => path.resolve(__dirname, '..', '..', 'build', n);
 const hhmmss = () => new Date().toISOString().slice(11, 19);
 const b32 = (s: string) => { const b = Buffer.alloc(32); Buffer.from(s, 'utf-8').copy(b, 0, 0, Math.min(s.length, 32)); return new Uint8Array(b); };
 const sha32 = (s: string) => new Uint8Array(createHash('sha256').update(s).digest());
@@ -177,7 +177,7 @@ async function main() {
   const txId = await transferNight(ctx, ctx.unshieldedKeystore.getBech32Address(), TRANSFER);
   console.log('  ✓ transfer tx', txId, '— REAL NIGHT moved on-chain');
 
-  fs.writeFileSync(path.resolve(__dirname, '..', 'escrow-b-result.json'), JSON.stringify({
+  fs.writeFileSync(path.resolve(__dirname, '..', '..', 'escrow-b-result.json'), JSON.stringify({
     network: getNetworkId(), escrowContract: ESCROW_V1, escrowId: Buffer.from(id).toString('hex'),
     createTx: c1?.public?.txId, releaseTx: c2?.public?.txId, transferTx: String(txId), transferAmount: TRANSFER.toString(), at: new Date().toISOString(),
   }, null, 2));

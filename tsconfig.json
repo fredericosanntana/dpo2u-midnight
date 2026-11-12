@@ -16,5 +16,8 @@
     "./scripts/**/*.ts",
     "./src/**/*.ts",
     "./build/*/contract/*.d.ts"
+  ],
+  "exclude": [
+    "./scripts/legacy-v8/**"
   ]
 }
