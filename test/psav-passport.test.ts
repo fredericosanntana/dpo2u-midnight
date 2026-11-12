@@ -6,8 +6,9 @@
  */
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { createCircuitContext, createConstructorContext, dummyContractAddress } from '@midnight-ntwrk/compact-runtime';
+import { createCircuitContext, createConstructorContext, dummyContractAddress, type CircuitContext } from '@midnight-ntwrk/compact-runtime';
 import * as fs from 'node:fs';
+import { publicStateHex } from './helpers.js';
 import { Contract, ledger, pureCircuits } from '../build/PsavPassport/contract/index.js';
 
 type PS = {
@@ -53,7 +54,7 @@ async function setup(ps: PS) {
   const cpk = '0'.repeat(64);
   const { currentContractState } = await contract.initialState(
     createConstructorContext(ps, cpk), pureCircuits.owner_commitment(OWNER_SECRET));
-  const mk = (state: any, p: PS, t = T0) => createCircuitContext({
+  const mk = (state: any, p: PS, t = T0): CircuitContext<PS> => createCircuitContext({
     circuitId: 'test', contractAddress: dummyContractAddress(), coinPublicKeyOrZswapState: cpk,
     contractState: state, privateState: p, time: t,
   } as any);
@@ -202,7 +203,7 @@ describe('PsavPassport', () => {
     const ps = base();
     const s = await setup(ps);
     const r = await issue(s, s.ctx);
-    const blob = String(r.context.callContext.currentQueryContext.state);
+    const blob = publicStateHex(r.context.callContext.currentQueryContext.state); // full public ledger state, hex-rendered
     for (const raw of [ps.partnerId, ps.salt, ps.evidence, ps.reviewerSig, ps.sponsorSecret, OWNER_SECRET]) {
       assert.ok(!blob.includes(hex(raw)), 'raw private field leaked into public state');
     }

@@ -50,3 +50,39 @@ export function withPrivateState(ctx: any, ps: OwnerPS): any {
   if (ctx?.callContext) return { ...ctx, callContext: { ...ctx.callContext, currentPrivateState: ps } };
   return { ...ctx, currentPrivateState: ps };
 }
+
+/**
+ * Hex dump of the full public ledger state, for PRIVACY scans.
+ *
+ * In compact-runtime 0.21 String(state) renders values lazily ("<Lazy Sp>"), so it no longer
+ * exposes the bytes. This walks the StateValue tree (cells, map keys and values, arrays,
+ * Merkle-tree roots) and hex-encodes every Uint8Array of every AlignedValue.
+ */
+export function publicStateHex(state: any): string {
+  const out: string[] = [];
+  // Stored values trim trailing zero bytes; pad each Bytes<n> atom back to its declared length
+  // (from the alignment) so a zero-padded raw field would still be found by the scan.
+  const atoms = (al: any[]): any[] => al.flatMap((seg: any) => seg.tag === 'atom' ? [seg.value] : [null]);
+  const av = (a: any) => {
+    if (!a) return;
+    const at = atoms(a.alignment);
+    a.value.forEach((chunk: Uint8Array, i: number) => {
+      const atom = at.length === a.value.length ? at[i] : null;
+      const buf = Buffer.alloc(Math.max(chunk.length, atom?.tag === 'bytes' ? atom.length : 0));
+      Buffer.from(chunk).copy(buf);
+      out.push(buf.toString('hex'));
+    });
+  };
+  const walk = (v: any): void => {
+    if (!v) return;
+    switch (v.type()) {
+      case 'cell': av(v.asCell()); break;
+      case 'map': { const m = v.asMap(); for (const k of m.keys()) { av(k); walk(m.get(k)); } break; }
+      case 'array': for (const x of v.asArray()) walk(x); break;
+      case 'boundedMerkleTree': av(v.asBoundedMerkleTree().root()); break;
+      default: break;
+    }
+  };
+  walk(state?.state ?? state);
+  return out.join('|');
+}

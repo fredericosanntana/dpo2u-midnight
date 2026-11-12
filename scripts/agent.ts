@@ -29,6 +29,7 @@ import * as Rx from 'rxjs';
 import { findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { toHex } from '@midnight-ntwrk/midnight-js-utils';
 import * as ledger from '@midnight-ntwrk/ledger-v9';
+import { MidnightBech32m, UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
 import { networkConfig, openWallet, ensureDust, makeProviders, masterSeedHex, dustBalance, type V9Wallet } from './lib/midnight-v9.js';
 import { ownerSecret, ownerWitnesses } from './owner.js';
@@ -89,7 +90,10 @@ async function ensureDustFloor(ctx: V9Wallet, floor: bigint, maxWaitMs = 10 * 60
 }
 
 // (B) real value release: unshielded NIGHT transfer, gated by the on-chain verdict.
-async function transferNight(ctx: V9Wallet, receiverAddress: any, amount: bigint): Promise<string> {
+async function transferNight(ctx: V9Wallet, beneficiary: string, amount: bigint): Promise<string> {
+  // The facade wants an UnshieldedAddress instance, not the bech32 string; decoding also rejects
+  // an address from another network before anything is signed.
+  const receiverAddress = MidnightBech32m.parse(beneficiary).decode(UnshieldedAddress, ctx.net.networkId as any);
   const recipe = await ctx.facade.transferTransaction(
     [{ type: 'unshielded', outputs: [{ type: ledger.unshieldedToken().raw, receiverAddress, amount }] }],
     { ttl: new Date(Date.now() + 30 * 60 * 1000) },

@@ -8,7 +8,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { createCircuitContext, dummyContractAddress } from '@midnight-ntwrk/compact-runtime';
+import { createCircuitContext, createConstructorContext, dummyContractAddress } from '@midnight-ntwrk/compact-runtime';
 import { Contract, ledger, pureCircuits } from '../build/TravelRuleGate/contract/index.js';
 import { DisclosureGovernance, type DataSource, type Field, type Party as P } from '../src/disclosure/governance.js';
 import { buildPack, verifyPack, type Attestation } from '../src/evidence/pack.js';
@@ -32,23 +32,27 @@ const contract = new Contract<PS>({
 } as any);
 (contract as any).witnesses.owner_secret = (c: any) => [c.privateState, OWNER];
 
-let { currentContractState } = contract.initialState({ initialZswapLocalState: { coinPublicKey: CPK } as any, initialPrivateState: {} as any } as any, pureCircuits.owner_commitment(OWNER), 100_000n);
-let state: any = currentContractState.data;
-const run = <T>(ps: PS, f: (ctx: any) => { context: any; result: T }) => {
-  const r = f(createCircuitContext(dummyContractAddress(), CPK, state, ps, undefined, undefined, 1_800_000_000));
-  state = r.context.currentQueryContext.state; return r.result;
+// compact-runtime 0.21: initialState and circuits are async; state threads through callContext.
+const { currentContractState } = await contract.initialState(createConstructorContext({} as any, CPK), pureCircuits.owner_commitment(OWNER), 100_000n);
+let state: any = currentContractState;
+const run = async <T>(ps: PS, f: (ctx: any) => Promise<{ context: any; result: T }>) => {
+  const r = await f(createCircuitContext({
+    circuitId: 'demo', contractAddress: dummyContractAddress(), coinPublicKeyOrZswapState: CPK,
+    contractState: state, privateState: ps, time: 1_800_000_000,
+  } as any));
+  state = r.context.callContext.currentQueryContext.state; return r.result;
 };
 
 const COUNTERPARTY = 'vasp:counterparty-A (fictitious)';
 const t1: PS = { o: party('orig-1', true, 'vasp:example'), b: party('benef-1', true, COUNTERPARTY), amount: 250_000n, clear: true };
 const t2: PS = { o: party('orig-2', false, 'vasp:example'), b: party('benef-2', true, 'vasp:unknown'), amount: 250_000n, clear: true };
-run(t1, (c) => contract.circuits.attestVasp(c, b32(COUNTERPARTY)));
+await run(t1, (c) => contract.circuits.attestVasp(c, b32(COUNTERPARTY)));
 const ids = { pass: b32('transfer-PASS-001'), fail: b32('transfer-FAIL-002') };
-const v1 = run(t1, (c) => contract.circuits.evaluateTransfer(c, ids.pass));
-const v2 = run(t2, (c) => contract.circuits.evaluateTransfer(c, ids.fail));
-run(t1, (c) => contract.circuits.releaseTransfer(c, ids.pass));
+const v1 = await run(t1, (c) => contract.circuits.evaluateTransfer(c, ids.pass));
+const v2 = await run(t2, (c) => contract.circuits.evaluateTransfer(c, ids.fail));
+await run(t1, (c) => contract.circuits.releaseTransfer(c, ids.pass));
 let blocked = false;
-try { run(t2, (c) => contract.circuits.releaseTransfer(c, ids.fail)); } catch (e: any) { blocked = /not satisfied/.test(e.message); }
+try { await run(t2, (c) => contract.circuits.releaseTransfer(c, ids.fail)); } catch (e: any) { blocked = /not satisfied/.test(e.message); }
 const L = ledger(state);
 console.log(`[1] travel rule: PASS verdict=${v1} (status after release=${L.status.lookup(ids.pass)}), FAIL verdict=${v2} reason=${L.fail_reason.lookup(ids.fail)}, release of FAIL blocked=${blocked}`);
 

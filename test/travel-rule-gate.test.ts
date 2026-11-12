@@ -4,8 +4,9 @@
  */
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { createCircuitContext, createConstructorContext, dummyContractAddress } from '@midnight-ntwrk/compact-runtime';
+import { createCircuitContext, createConstructorContext, dummyContractAddress, type CircuitContext } from '@midnight-ntwrk/compact-runtime';
 import { Contract, ledger, pureCircuits } from '../build/TravelRuleGate/contract/index.js';
+import { publicStateHex } from './helpers.js';
 
 type Party = { name_hash: Uint8Array; account_hash: Uint8Array; doc_hash: Uint8Array; vasp_id: Uint8Array; salt: Uint8Array };
 type PS = { o: Party; b: Party; amount: bigint; sanctionsClear: boolean; secret: Uint8Array };
@@ -39,7 +40,7 @@ async function setup(ps: PS) {
   const cpk = '0'.repeat(64);
   const { currentContractState } = await contract.initialState(
     createConstructorContext(ps, cpk), pureCircuits.owner_commitment(OWNER_SECRET), THRESHOLD);
-  const mk = (state: any, p: PS, t = T0) => createCircuitContext({
+  const mk = (state: any, p: PS, t = T0): CircuitContext<PS> => createCircuitContext({
     circuitId: 'test', contractAddress: dummyContractAddress(), coinPublicKeyOrZswapState: cpk,
     contractState: state, privateState: p, time: t,
   } as any);
@@ -104,7 +105,7 @@ describe('TravelRuleGate', () => {
     const { contract, ctx } = await setup(ps);
     const { context: c1 } = await contract.circuits.attestVasp(ctx, BENEF_VASP);
     const { context: c2 } = await contract.circuits.evaluateTransfer(c1, TID);
-    const blob = String(c2.callContext.currentQueryContext.state); // full public ledger state, hex-rendered
+    const blob = publicStateHex(c2.callContext.currentQueryContext.state); // full public ledger state, hex-rendered
     for (const secret of [ps.o.name_hash, ps.o.account_hash, ps.o.doc_hash, ps.b.name_hash, ps.b.account_hash, ps.o.salt]) {
       assert.ok(!blob.includes(Buffer.from(secret).toString('hex')), 'raw private field leaked into public state');
     }

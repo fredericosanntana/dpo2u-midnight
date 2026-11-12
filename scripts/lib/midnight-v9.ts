@@ -72,7 +72,7 @@ export function masterSeedHex(): string {
   return s;
 }
 
-export type V9Wallet = { facade: any; keystore: any; state: any; net: NetCfg; address: string };
+export type V9Wallet = { facade: WalletFacade; keystore: any; state: any; net: NetCfg; address: string };
 
 export async function openWallet(net: NetCfg, opts: { syncTimeoutMs?: number } = {}): Promise<V9Wallet> {
   setNetworkId(net.networkId as any);
