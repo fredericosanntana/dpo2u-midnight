@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Compile every Compact contract with a PINNED compiler version.
+# Compile every Compact contract (compact/*.compact and compact/examples/*.compact)
+# with a PINNED compiler version. Each lands in build/<ContractName>.
 #
 # Pinned to compactc 0.36.0 — its generated code targets compact-runtime 0.21.0 (ledger v9)
 # (checkRuntimeVersion('0.16.0')) and language-version 0.23.0, which matches the
@@ -14,7 +15,8 @@ rm -rf build
 mkdir -p build
 
 fail=0
-for src in compact/*.compact; do
+for src in compact/*.compact compact/examples/*.compact; do
+  [ -e "$src" ] || continue
   name="$(basename "$src" .compact)"
   printf '→ %-22s (compactc %s)\n' "$name" "$COMPILER_VERSION"
   if compact compile "+$COMPILER_VERSION" "$src" "build/$name" >/dev/null 2>"build/$name.err"; then

@@ -1,0 +1,423 @@
+pragma language_version >= 0.21.0;
+import CompactStandardLibrary;
+
+// ShieldedDepositIssuer — reference issuer for a tokenized deposit / stablecoin register, on Midnight.
+//
+// An EXAMPLE contract (compact/examples/): small, auditable, preprod-only. It shows three controls a
+// regulated issuer needs, each with the least public data that still lets a third party check it.
+//
+//   (a) ELIGIBILITY. Only an eligible account can receive new issuance. Two routes:
+//       1. PSAV route: the account belongs to a regulated institution holding a valid PsavPassport.
+//          The issuer enrolls it and the gate calls passport.isValid(passport_id) on chain (the
+//          TravelRuleGate pattern). isValid is re-checked on EVERY issue: a suspended, revoked or
+//          expired passport stops new issuance with no action from the issuer.
+//       2. Credential route: the issuer attests a credential by inserting its leaf into a
+//          HistoricMerkleTree. The leaf is a salted hash of the off-chain KYC record AND of the holder
+//          commitment of the account it will open, so the credential is not a bearer token: its
+//          opening is useless without the holder secret. The holder enrolls by proving, in zero
+//          knowledge, that it knows the opening of SOME attested leaf (Merkle path) and spends a
+//          nullifier (scoped to this register's asset_id) so that one credential opens one account.
+//          The credential, its leaf and its position are never published; the observer sees only the
+//          nullifier. An attested leaf cannot be withdrawn before enrollment (checking a revocation
+//          list would publish the leaf); after enrollment the issuer's lever is freeze.
+//   (b) FREEZE. The issuer (owner_secret / owner_commit) freezes and unfreezes an account. The reason
+//       is recorded only as a hash (freeze_reason / unfreeze_reason); the case file stays off chain.
+//       A frozen account can neither receive issuance nor redeem.
+//   (c) AUDITOR KEY. The issuer registers an auditor (key commitment, scope, expiry). The auditor
+//       asks, with its own key, whether one account's balance respects a rule (1 CAP: balance <=
+//       limit, 2 FLOOR: balance >= limit); the issuer answers with a proof over the private balance.
+//       Only the yes/no answer is published: not the balance, not the other accounts.
+//
+// BALANCES are private. Each account has ONE salted commitment on chain (balance_commit); issue and
+// redeem open the old commitment in the circuit (witness balance_opening), check it, and write a new
+// one under a fresh salt (witness next_salt). Amounts are circuit parameters that never cross a public
+// boundary, so they stay out of the transcript. A new account starts at the PUBLIC zero commitment
+// zero_balance_commitment(account_id): its balance is zero and everybody may know it.
+//
+// SETTLEMENT is off chain (the deposit sits at the issuer). This contract is the register and the
+// rulebook, not a zswap token: a shielded-coin wrapper (mintShieldedToken) is a separate step, and
+// a coin that has left the contract cannot be frozen, which is why the register is kept here.
+//
+// TRUST: the issuer and the holder share each account's opening (balance + salt) off chain. The
+// issuer can therefore see every balance (as a bank does); the public and the auditor cannot. The
+// contract cannot force the hand-off: whoever writes a new commitment (issuer on issue, holder on
+// redeem) must pass the new opening to the other, or the other's next proof for that account fails.
+// That is an off-chain obligation of the issuer's terms, not something this example enforces.
+//
+// WHAT IS PUBLIC (by design, stated so nobody reads more privacy into it than there is):
+//   - account ids, their kind, the PSAV account's passport id, a per-account holder commitment;
+//   - WHEN an account is issued to or redeemed from (the circuit name and the new commitment), never how much;
+//   - freeze / unfreeze events and their reason COMMITMENTS (reason_commitment(reason, salt): salted, so a
+//     guessable case number cannot be dictionary-attacked);
+//   - every audit question (auditor, account, rule, limit) and its yes/no answer. Each answer is one bit
+//     about a balance, so repeated questions narrow it down (64 well-chosen ones would pin a Uint<64>).
+//     The contract therefore gives each auditor a CHECK BUDGET fixed by the issuer at registration
+//     (auditor_budget, consumed by requestCheck): the leak is bounded by the budget, not by goodwill.
+//   - the credential route hides WHICH attested leaf enrolled from the PUBLIC, among the leaves not yet
+//     used (attest in batches: anonymity set = unused leaves). It does NOT hide it from the issuer: the
+//     issuer must check the leaf's opening off chain before attesting (credential_hash is the KYC'd
+//     record, one leaf per credential_hash), and that opening contains the holder commitment that
+//     later appears in account_holder. Unlinkability is against observers, not against the issuer.
+//
+// CONCURRENCY: an account has one balance commitment. issue / redeem / answerCheck prove against the
+// current one, so two in-flight operations on the same account cannot both land: the second must re-read
+// the commitment and re-prove. Operate one account at a time (the issuer through a single queue).
+//
+// CAPACITY: the credential tree has depth 10 (1024 attested credentials). Enough for an example; a
+// production register would pick its depth from the expected population (it cannot grow after deploy).
+//
+// CODES (Uint<8>, same convention as PsavPassport / TravelRuleGate):
+//   ACCOUNT KIND 1 PSAV (passport), 2 CREDENTIAL. CHECK STATUS 1 REQUESTED, 2 HOLDS, 3 VIOLATED.
+//   RULE 1 CAP (balance <= limit), 2 FLOOR (balance >= limit). AUDITOR SCOPE 1 CAP, 2 FLOOR, 3 both.
+
+struct Opening {
+  balance: Uint<64>;
+  salt: Bytes<32>;
+}
+
+struct Credential {
+  credential_hash: Bytes<32>;  // hash of the off-chain KYC record (never on chain)
+  salt: Bytes<32>;             // holder's salt (never on chain)
+}
+
+// Witnesses (TypeScript side: scripts/lib/issuer-example.ts). Each party supplies only its own.
+witness owner_secret(): Bytes<32>;                 // issuer key; opens owner_commit
+witness holder_secret(): Bytes<32>;                // holder key; opens account_holder[account]
+witness auditor_secret(): Bytes<32>;               // auditor key; opens auditor_key[auditor]
+witness credential(): Credential;                  // holder's credential opening (credential route)
+witness credential_path(leaf: Bytes<32>): MerkleTreePath<10, Bytes<32>>;  // from the PUBLIC tree; bound to leaf in-circuit
+witness balance_opening(account_id: Bytes<32>): Opening;  // the account's current opening, from the off-chain book
+witness next_salt(account_id: Bytes<32>): Bytes<32>;      // fresh random salt for the new commitment
+
+// Interface of the linked contract (only the circuit this issuer calls).
+contract PsavPassport {
+  circuit isValid(passport_id: Bytes<32>): Boolean;
+}
+
+// Configuration, fixed at deploy (sealed). The issuer key is not rotatable in this example: losing it
+// stops issuance, freeze and audit answers (holders can still redeem), which a production issuer would
+// cover with a rotation circuit behind a second key.
+export sealed ledger owner_commit: Bytes<32>;     // owner_commitment(issuer secret)
+export sealed ledger asset_id: Bytes<32>;         // label of the deposit / stablecoin this register tracks
+export sealed ledger passport: PsavPassport;      // the PsavPassport contract checked on chain
+
+// (a) eligibility
+export ledger credentials: HistoricMerkleTree<10, Bytes<32>>;
+export ledger credential_nullifiers: Set<Bytes<32>>;
+export ledger passport_bound: Set<Bytes<32>>;
+export ledger account_kind: Map<Bytes<32>, Uint<8>>;
+export ledger account_holder: Map<Bytes<32>, Bytes<32>>;
+export ledger account_passport: Map<Bytes<32>, Bytes<32>>;
+export ledger balance_commit: Map<Bytes<32>, Bytes<32>>;
+
+// (b) freeze
+export ledger frozen: Set<Bytes<32>>;
+export ledger freeze_reason: Map<Bytes<32>, Bytes<32>>;
+export ledger unfreeze_reason: Map<Bytes<32>, Bytes<32>>;
+
+// (c) auditors and checks
+export ledger auditor_key: Map<Bytes<32>, Bytes<32>>;
+export ledger auditor_scope: Map<Bytes<32>, Uint<8>>;
+export ledger auditor_expires: Map<Bytes<32>, Uint<64>>;
+export ledger auditor_revoked: Set<Bytes<32>>;
+export ledger auditor_budget: Map<Bytes<32>, Uint<16>>;   // checks this auditor may still request
+export ledger check_auditor: Map<Bytes<32>, Bytes<32>>;
+export ledger check_account: Map<Bytes<32>, Bytes<32>>;
+export ledger check_rule: Map<Bytes<32>, Uint<8>>;
+export ledger check_limit: Map<Bytes<32>, Uint<64>>;
+export ledger check_status: Map<Bytes<32>, Uint<8>>;
+export ledger check_commit: Map<Bytes<32>, Bytes<32>>;   // the account's balance commitment when asked
+
+export ledger total_accounts: Counter;
+export ledger total_issue_ops: Counter;
+export ledger total_redeem_ops: Counter;
+export ledger total_freezes: Counter;
+
+// owner_commit_ = owner_commitment(issuer secret), computed off chain; never pass the secret itself.
+constructor(owner_commit_: Bytes<32>, asset_id_: Bytes<32>, passport_: PsavPassport) {
+  owner_commit = disclose(owner_commit_);
+  asset_id = disclose(asset_id_);
+  passport = disclose(passport_);
+}
+
+// ---- key commitments (domain-separated: one secret never opens two roles) ----
+
+export pure circuit owner_commitment(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([pad(32, "dpo2u/issuer/owner/v1"), secret]);
+}
+
+// Bound to the account: one holder secret used for two accounts gives two unrelated public values.
+export pure circuit holder_commitment(secret: Bytes<32>, account_id: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<3, Bytes<32>>>([pad(32, "dpo2u/issuer/holder/v1"), secret, account_id]);
+}
+
+// What freeze / unfreeze take as reason: a salted commitment to the hash of the case file. The salt
+// stays with the issuer (and whoever it shows the case file to), so the reason cannot be guessed.
+export pure circuit reason_commitment(reason_hash: Bytes<32>, salt: Bytes<32>): Bytes<32> {
+  return persistentCommit<Bytes<32>>(reason_hash, salt);
+}
+
+export pure circuit auditor_commitment(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([pad(32, "dpo2u/issuer/auditor/v1"), secret]);
+}
+
+// ---- credential leaf and nullifier (different domains: the nullifier cannot be linked to the leaf) ----
+
+// holder_commit = holder_commitment(holder secret, account id): the leaf only opens that account.
+export pure circuit credential_leaf(credential_hash: Bytes<32>, salt: Bytes<32>, holder_commit: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<4, Bytes<32>>>([pad(32, "dpo2u/issuer/cred-leaf/v1"), credential_hash, salt, holder_commit]);
+}
+
+// Scoped to the register (asset): the same credential used with two issuers gives unrelated nullifiers.
+export pure circuit credential_nullifier(asset: Bytes<32>, credential_hash: Bytes<32>, salt: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<4, Bytes<32>>>([pad(32, "dpo2u/issuer/cred-null/v1"), asset, credential_hash, salt]);
+}
+
+// ---- balance commitments ----
+
+export pure circuit balance_commitment(balance: Uint<64>, salt: Bytes<32>): Bytes<32> {
+  return persistentCommit<Uint<64>>(balance, salt);
+}
+
+// Public, deterministic opening of a fresh account: balance 0 under this salt. Everybody may know it.
+export pure circuit zero_balance_salt(account_id: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([pad(32, "dpo2u/issuer/zero/v1"), account_id]);
+}
+
+export pure circuit zero_balance_commitment(account_id: Bytes<32>): Bytes<32> {
+  return balance_commitment(0, zero_balance_salt(account_id));
+}
+
+// ---- guards ----
+
+circuit assert_owner(): [] {
+  assert(owner_commitment(owner_secret()) == owner_commit, "Only the issuer can do this");
+}
+
+circuit assert_holder(id: Bytes<32>): [] {
+  assert(holder_commitment(holder_secret(), id) == account_holder.lookup(id), "Only the account holder can do this");
+}
+
+circuit assert_account(id: Bytes<32>): [] {
+  assert(account_kind.member(id), "Unknown account");
+}
+
+circuit assert_not_frozen(id: Bytes<32>): [] {
+  assert(!frozen.member(id), "Account is frozen");
+}
+
+// Opens the account's balance commitment with the private opening; reverts on a wrong opening.
+circuit open_balance(id: Bytes<32>): Uint<64> {
+  const o = balance_opening(id);
+  assert(disclose(balance_commitment(o.balance, o.salt) == balance_commit.lookup(id)), "Balance opening does not match the commitment");
+  return o.balance;
+}
+
+circuit store_balance(id: Bytes<32>, balance: Uint<64>): [] {
+  // persistentCommit hides the balance and clears the witness taint: no disclose needed.
+  balance_commit.insert(id, balance_commitment(balance, next_salt(id)));
+}
+
+circuit open_account(id: Bytes<32>, kind: Uint<8>, holder_commit_: Bytes<32>): [] {
+  assert(!account_kind.member(id), "Account id already used");
+  assert(holder_commit_ != default<Bytes<32>>, "Holder commitment must not be zero");
+  account_kind.insert(id, kind);
+  account_holder.insert(id, disclose(holder_commit_));
+  balance_commit.insert(id, zero_balance_commitment(id));
+  total_accounts.increment(1);
+}
+
+// Eligible for new issuance: a PSAV account whose passport is still valid, or a credential account
+// (whose credential was proven once, at enrollment; the issuer's ongoing lever is freeze).
+circuit eligible(id: Bytes<32>): Boolean {
+  if (account_kind.lookup(id) == 1) {
+    return passport.isValid(account_passport.lookup(id));
+  }
+  return true;
+}
+
+// ---- (a) eligibility ----
+
+// The issuer attests a credential: leaf = credential_leaf(credential_hash, salt, holder_commitment(holder
+// secret, account_id)). The holder hands the issuer the OPENING (not only the leaf); the issuer checks
+// that credential_hash is the KYC'd record and that it has not attested that record before, then inserts.
+// MerkleTree.insert publishes only a hash of the leaf.
+export circuit attestCredential(leaf: Bytes<32>): [] {
+  assert_owner();
+  credentials.insert(disclose(leaf));
+}
+
+// PSAV route: issuer only; the passport must be valid now and binds one account.
+export circuit enrollPsav(account_id: Bytes<32>, passport_id: Bytes<32>, holder_commit_: Bytes<32>): [] {
+  assert_owner();
+  const id = disclose(account_id);
+  const pid = disclose(passport_id);
+  assert(!passport_bound.member(pid), "Passport already bound to an account");
+  assert(passport.isValid(pid), "PsavPassport is not valid");
+  open_account(id, 1, holder_commit_);
+  account_passport.insert(id, pid);
+  passport_bound.insert(pid);
+}
+
+// Credential route: the holder (credential opening + holder secret). Reveals neither the credential
+// nor which leaf: only the root check (always true for an accepted call) and the nullifier.
+export circuit enrollWithCredential(account_id: Bytes<32>): [] {
+  const id = disclose(account_id);
+  const c = credential();
+  const hc = holder_commitment(holder_secret(), id);
+  const leaf = credential_leaf(c.credential_hash, c.salt, hc);
+  const path = credential_path(leaf);
+  assert(path.leaf == leaf, "Merkle path is not for this credential");
+  assert(credentials.checkRoot(disclose(merkleTreePathRoot<10, Bytes<32>>(path))), "Credential not attested by the issuer");
+  const nul = disclose(credential_nullifier(asset_id, c.credential_hash, c.salt));
+  assert(!credential_nullifiers.member(nul), "Credential already used");
+  credential_nullifiers.insert(nul);
+  open_account(id, 2, hc);
+}
+
+// For other contracts (composition). A DApp should read the public ledger instead of paying for a proof.
+export circuit isEligible(account_id: Bytes<32>): Boolean {
+  const id = disclose(account_id);
+  return account_kind.member(id) && !frozen.member(id) && eligible(id);
+}
+
+// ---- issuance and redemption (amounts stay private) ----
+
+// Issuer only. amount (private, > 0, in the asset's minor unit) is added to the account's balance.
+// Requires: known account, not frozen, eligible. Writes: balance_commit[account], total_issue_ops.
+export circuit issue(account_id: Bytes<32>, amount: Uint<64>): [] {
+  assert_owner();
+  const id = disclose(account_id);
+  assert_account(id);
+  assert_not_frozen(id);
+  assert(eligible(id), "Account is not eligible");
+  assert(amount > 0, "Amount must be positive");
+  const old = open_balance(id);
+  store_balance(id, (old + amount) as Uint<64>);
+  total_issue_ops.increment(1);
+}
+
+// Holder only. amount (private, > 0) leaves the register; the payout is the issuer's off-chain duty.
+// Eligibility is deliberately NOT checked: a lapsed passport does not trap funds; a freeze does.
+export circuit redeem(account_id: Bytes<32>, amount: Uint<64>): [] {
+  const id = disclose(account_id);
+  assert_account(id);
+  assert_holder(id);
+  assert_not_frozen(id);
+  assert(amount > 0, "Amount must be positive");
+  const old = open_balance(id);
+  assert(disclose(old >= amount), "Insufficient balance");
+  store_balance(id, (old - amount) as Uint<64>);
+  total_redeem_ops.increment(1);
+}
+
+// ---- (b) freeze ----
+
+// The salted reason commitment is computed IN the circuit, so an unsalted, guessable hash cannot be
+// stored by mistake. reason_hash = hash of the case file; salt = random, kept with the case file.
+circuit reason_of(reason_hash: Bytes<32>, salt: Bytes<32>): Bytes<32> {
+  assert(reason_hash != default<Bytes<32>>, "Reason hash must not be zero");
+  assert(salt != default<Bytes<32>>, "Reason salt must not be zero");
+  return reason_commitment(reason_hash, salt);
+}
+
+// Issuer only. Writes frozen, freeze_reason[account] = reason_commitment(reason_hash, salt) (the last
+// freeze; earlier ones stay in the transaction history), total_freezes.
+export circuit freeze(account_id: Bytes<32>, reason_hash: Bytes<32>, salt: Bytes<32>): [] {
+  assert_owner();
+  const id = disclose(account_id);
+  assert_account(id);
+  assert(!frozen.member(id), "Account already frozen");
+  frozen.insert(id);
+  freeze_reason.insert(id, reason_of(reason_hash, salt));
+  total_freezes.increment(1);
+}
+
+// Issuer only. Clears frozen, writes unfreeze_reason[account] = reason_commitment(reason_hash, salt).
+export circuit unfreeze(account_id: Bytes<32>, reason_hash: Bytes<32>, salt: Bytes<32>): [] {
+  assert_owner();
+  const id = disclose(account_id);
+  assert(frozen.member(id), "Account is not frozen");
+  frozen.remove(id);
+  unfreeze_reason.insert(id, reason_of(reason_hash, salt));
+}
+
+// ---- (c) auditor key ----
+
+// Issuer only. key_commit = auditor_commitment(auditor secret). budget = how many checks it may request.
+export circuit registerAuditor(auditor_id: Bytes<32>, key_commit: Bytes<32>, scope: Uint<8>, expires_at: Uint<64>, budget: Uint<16>): [] {
+  assert_owner();
+  const aid = disclose(auditor_id);
+  assert(!auditor_key.member(aid), "Auditor id already used");
+  assert(key_commit != default<Bytes<32>>, "Auditor key must not be zero");
+  assert(scope >= 1 && scope <= 3, "Scope must be 1 (CAP), 2 (FLOOR) or 3 (both)");
+  assert(blockTimeLt(disclose(expires_at)), "Expiry must be in the future");
+  assert(budget > 0, "Check budget must be positive");
+  auditor_key.insert(aid, disclose(key_commit));
+  auditor_budget.insert(aid, disclose(budget));
+  auditor_scope.insert(aid, disclose(scope));
+  auditor_expires.insert(aid, disclose(expires_at));
+}
+
+export circuit revokeAuditor(auditor_id: Bytes<32>): [] {
+  assert_owner();
+  const aid = disclose(auditor_id);
+  assert(auditor_key.member(aid), "Unknown auditor");
+  auditor_revoked.insert(aid);
+}
+
+export circuit isAuditorActive(auditor_id: Bytes<32>): Boolean {
+  const aid = disclose(auditor_id);
+  return auditor_key.member(aid) && !auditor_revoked.member(aid) && blockTimeLt(auditor_expires.lookup(aid));
+}
+
+circuit assert_auditor_active(aid: Bytes<32>): [] {
+  assert(auditor_key.member(aid), "Unknown auditor");
+  assert(!auditor_revoked.member(aid), "Auditor revoked");
+  assert(blockTimeLt(auditor_expires.lookup(aid)), "Auditor key expired");
+}
+
+// The auditor, with its own key, asks one question about one account. The rule must be in its scope
+// and the auditor must have budget left (each request spends one; see WHAT IS PUBLIC above).
+// limit is in the asset's minor unit, like amount.
+export circuit requestCheck(check_id: Bytes<32>, auditor_id: Bytes<32>, account_id: Bytes<32>, rule: Uint<8>, limit: Uint<64>): [] {
+  const aid = disclose(auditor_id);
+  const cid = disclose(check_id);
+  const id = disclose(account_id);
+  assert_auditor_active(aid);
+  assert(auditor_commitment(auditor_secret()) == auditor_key.lookup(aid), "Only the registered auditor can request a check");
+  assert(rule == 1 || rule == 2, "Rule must be 1 (CAP) or 2 (FLOOR)");
+  const s = auditor_scope.lookup(aid);
+  assert(s == 3 || s == rule, "Rule outside the auditor's scope");
+  assert(!check_status.member(cid), "Check id already used");
+  assert_account(id);
+  const left = auditor_budget.lookup(aid);
+  assert(left > 0, "Auditor check budget exhausted");
+  auditor_budget.insert(aid, (left - 1) as Uint<16>);
+  check_auditor.insert(cid, aid);
+  check_account.insert(cid, id);
+  check_rule.insert(cid, disclose(rule));
+  check_limit.insert(cid, disclose(limit));
+  check_status.insert(cid, 1);
+  check_commit.insert(cid, balance_commit.lookup(id));
+}
+
+// The issuer answers with a proof over the private balance. Only HOLDS / VIOLATED is published.
+// The auditor must still be active when the answer lands, and the balance must be the one the auditor
+// asked about (check_commit): the issuer cannot issue (or the holder redeem) first to steer the
+// answer. If the balance moved, the check can no longer be answered, and an unanswered check is
+// itself on the public record.
+export circuit answerCheck(check_id: Bytes<32>): Boolean {
+  assert_owner();
+  const cid = disclose(check_id);
+  assert(check_status.member(cid), "Unknown check");
+  assert(check_status.lookup(cid) == 1, "Check already answered");
+  assert_auditor_active(check_auditor.lookup(cid));
+  const acct = check_account.lookup(cid);
+  assert(balance_commit.lookup(acct) == check_commit.lookup(cid), "Balance changed since the check was requested");
+  const bal = open_balance(acct);
+  const lim = check_limit.lookup(cid);
+  const holds = disclose(check_rule.lookup(cid) == 1 ? bal <= lim : bal >= lim);
+  check_status.insert(cid, holds ? 2 : 3);
+  return holds;
+}
