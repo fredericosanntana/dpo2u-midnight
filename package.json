@@ -73,6 +73,7 @@
     "@types/ws": "^8.18.1"
   },
   "overrides": {
-    "@midnight-ntwrk/ledger-v8": "8.1.0"
+    "@midnight-ntwrk/ledger-v8": "8.1.0",
+    "@midnightntwrk/ledger-v9": "1.0.1"
   }
 }
