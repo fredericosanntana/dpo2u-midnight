@@ -20,7 +20,7 @@
 
 **{7}** DPO2U breaks the trap. The score stays private. The proof is public. One API call generates a zero-knowledge attestation, sealed on Stellar. The regulator doesn't believe — it verifies.
 
-**{8}** ▸ *adapted* — We are an MCP that transforms law into code. Rules become circuits. Evidence becomes on-chain attestations. Audits become real-time cryptographic verification. And on Midnight, DPO2U's self-funding agent is already live: it stakes NIGHT, consumes DUST, and seals attestations with selective disclosure. We turned it into a paymaster — **Dust Comply**. NIGHT holders delegate their idle DUST to our pool, keeping custody of their tokens, and DPO2U seals compliance for any dApp, for free. The ecosystem's accumulated DUST, managed by DPO2U to confer compliance.
+**{8}** ▸ *adapted* — We are an MCP that transforms law into code. Rules become circuits. Evidence becomes on-chain attestations. Audits become real-time cryptographic verification. And on Midnight, DPO2U's self-funding agent is already live: it holds NIGHT, designates where its DUST goes, consumes DUST, and seals attestations with selective disclosure. We turned it into a paymaster — **Dust Comply**. NIGHT holders delegate their idle DUST to our pool, keeping custody of their tokens, and DPO2U seals compliance for any dApp, for free. The ecosystem's accumulated DUST, managed by DPO2U to confer compliance.
 
 **{9}** We operate across 24 jurisdictions. Serving sixty-seven countries, spanning privacy regimes and AI governance frameworks. Accessible via any wallet, smart contract, or AI agent. We are the only protocol that seals both regimes, enabling regulated, institutional real-world assets.
 
