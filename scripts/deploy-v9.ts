@@ -9,6 +9,9 @@
  * (see scripts/lib/midnight-v9.ts). Every contract gets owner_commit = owner_commitment(owner secret);
  * TravelRuleGate also takes its threshold (TRAVEL_RULE_THRESHOLD_CENTS, default 100000 = R$ 1.000,00).
  * Results go to deployment-<network>-v9.json (one entry per contract, merged with earlier runs).
+ * Each entry also records dustSpent: the wallet's DUST balance drop across that deploy. DUST keeps
+ * generating while the deploy runs, so this slightly UNDER-states the fee; it is a measurement for
+ * cost planning, not an exact fee.
  * Builds come from build/ (bash scripts/compile.sh, compactc 0.36.0).
  */
 import 'dotenv/config';
@@ -19,7 +22,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { WebSocket } from 'ws';
 import { deployContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
-import { networkConfig, openWallet, ensureDust, makeProviders, masterSeedHex } from './lib/midnight-v9.js';
+import * as Rx from 'rxjs';
+import { networkConfig, openWallet, ensureDust, makeProviders, masterSeedHex, dustBalance } from './lib/midnight-v9.js';
 import { ownerSecret, ownerCommit } from './owner.js';
 
 // @ts-expect-error WebSocket polyfill for graphql-ws in Node
@@ -89,6 +93,8 @@ async function main() {
 
   for (const p of plan) {
     if (out.contracts[p.name]?.accessControl === 'owner-v1') { console.log(`  ${p.name}: already deployed at ${out.contracts[p.name].contractAddress}, skipping`); continue; }
+    const dustBefore = dustBalance(await Rx.firstValueFrom(w.facade.state()));
+    const t0 = Date.now();
     const providers = makeProviders(w, p.zk, `${p.name}-v9`);
     const compiled = (CompiledContract.make(p.name, p.mod.Contract) as any).pipe(
       (CompiledContract as any).withWitnesses(witnessesFor(p.name, secret)),
@@ -98,10 +104,12 @@ async function main() {
       compiledContract: compiled, privateStateId: `${p.name}PrivateState`, initialPrivateState: {}, args: p.args,
     });
     const d = c.deployTxData.public;
+    const dustAfter = dustBalance(await Rx.firstValueFrom(w.facade.state()));
     out.contracts[p.name] = { contractAddress: String(d.contractAddress), txId: d.txId, blockHeight: d.blockHeight,
-      deployedAt: new Date().toISOString(), compiler: 'compactc 0.36.0', accessControl: 'owner-v1' };
+      deployedAt: new Date().toISOString(), compiler: 'compactc 0.36.0', accessControl: 'owner-v1',
+      dustSpent: String(dustBefore - dustAfter), dustBefore: String(dustBefore), seconds: Math.round((Date.now() - t0) / 1000) };
     fs.writeFileSync(OUT, JSON.stringify(out, null, 2) + '\n');
-    console.log(`  ${p.name}: ${d.contractAddress} (block ${d.blockHeight})`);
+    console.log(`  ${p.name}: ${d.contractAddress} (block ${d.blockHeight}, DUST spent ~${dustBefore - dustAfter})`);
   }
   await w.facade.stop?.();
 }

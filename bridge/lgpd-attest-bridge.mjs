@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// lgpd-attest-bridge.mjs — ponte host → MCP para submit_lgpd_attestation (Midnight PREVIEW).
+// lgpd-attest-bridge.mjs — ponte host → MCP para submit_lgpd_attestation (Midnight; rede em BRIDGE_MIDNIGHT_NETWORK).
 //
 // O container do MCP não tem a seed nem o proof server; esta ponte roda no host,
 // recebe o payload "prepared" do MCP e chama o executor attest-lgpd-v9 (seed em
@@ -23,7 +23,9 @@
 //
 // Config (env, via systemd EnvironmentFile):
 //   BRIDGE_HOST, BRIDGE_PORT (8788), BRIDGE_TOKEN_FILE, COMPLIANCE_REGISTRY_ADDRESS,
-//   BRIDGE_EXECUTOR (scripts/run-attest-lgpd-v9.sh), BRIDGE_RATE_PER_HOUR (6)
+//   BRIDGE_EXECUTOR (scripts/run-attest-lgpd-v9.sh), BRIDGE_RATE_PER_HOUR (6),
+//   BRIDGE_MIDNIGHT_NETWORK (preview | preprod | mainnet; padrão preview). Em mainnet o executor só
+//   roda com a trava de scripts/lib/midnight-v9.ts (CONFIRM_MAINNET, BLOCKFROST_PROJECT_ID, ...).
 //   BRIDGE_AVAX_ADAPTER, BRIDGE_AVAX_KEY_FILE, BRIDGE_AVAX_REGISTRY (padrão Fuji 0xc997…C4cE),
 //   BRIDGE_AVAX_USE_CASE (lgpd_attestation_v1), BRIDGE_AVAX_VALIDITY_DAYS (90), BRIDGE_AVAX_RPC_URL
 
@@ -42,9 +44,11 @@ const PORT = Number(process.env.BRIDGE_PORT || 8788);
 const CONTRACT = process.env.COMPLIANCE_REGISTRY_ADDRESS || '';
 const EXECUTOR = process.env.BRIDGE_EXECUTOR || join(ROOT, 'scripts', 'run-attest-lgpd-v9.sh');
 const RATE = Number(process.env.BRIDGE_RATE_PER_HOUR || 6);
+const MIDNIGHT_NET = process.env.BRIDGE_MIDNIGHT_NETWORK || 'preview';
 const MAX_BODY = 512 * 1024;
 
 if (HOST === '0.0.0.0' || HOST === '::') { console.error('BRIDGE_HOST público recusado'); process.exit(2); }
+if (!['preview', 'preprod', 'mainnet'].includes(MIDNIGHT_NET)) { console.error('BRIDGE_MIDNIGHT_NETWORK inválida'); process.exit(2); }
 if (!/^[0-9a-f]{64}$/.test(CONTRACT)) { console.error('COMPLIANCE_REGISTRY_ADDRESS ausente ou inválido'); process.exit(2); }
 const TOKEN = readFileSync(process.env.BRIDGE_TOKEN_FILE || '/root/.config/dpo2u/lgpd-bridge.token', 'utf8').trim();
 if (TOKEN.length < 32) { console.error('token curto demais'); process.exit(2); }
@@ -104,7 +108,7 @@ function runExecutor(payload) {
       cwd: ROOT,
       timeout: 25 * 60_000,
       maxBuffer: 16 * 1024 * 1024,
-      env: { ...process.env, COMPLIANCE_REGISTRY_ADDRESS: CONTRACT, MIDNIGHT_NETWORK: 'preview', ALLOW_DEPLOY: '0' },
+      env: { ...process.env, COMPLIANCE_REGISTRY_ADDRESS: CONTRACT, MIDNIGHT_NETWORK: MIDNIGHT_NET, ALLOW_DEPLOY: '0' },
     }, (err, out) => {
       if (err) return rej(new Error(`executor falhou (rc=${err.code ?? '?'})`));
       const last = String(out).trim().split('\n').reverse().find((l) => l.trim().startsWith('{'));
@@ -184,7 +188,7 @@ function send(res, code, obj) {
 
 export const server = http.createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/health') {
-    return send(res, 200, { ok: true, network: 'preview', contract: CONTRACT, avalanche: AVAX.adapter && AVAX.keyFile ? { network: 'fuji', registry: AVAX.registry, useCase: AVAX.useCase, validityDays: AVAX.validityDays } : null, queue: queued, busy });
+    return send(res, 200, { ok: true, network: MIDNIGHT_NET, contract: CONTRACT, avalanche: AVAX.adapter && AVAX.keyFile ? { network: 'fuji', registry: AVAX.registry, useCase: AVAX.useCase, validityDays: AVAX.validityDays } : null, queue: queued, busy });
   }
   if (req.method !== 'POST' || req.url !== '/attest') return send(res, 404, { error: 'not found' });
   if (!authOk(req.headers.authorization)) { log('auth negada'); return send(res, 401, { error: 'unauthorized' }); }
@@ -215,7 +219,7 @@ export const server = http.createServer((req, res) => {
       const out = {};
       for (const c of chains) {
         try {
-          out[c] = c === 'midnight' ? { status: 'submitted', network: 'preview', ...(await runExecutor(body.payload)) } : await runAvalanche(body.payload);
+          out[c] = c === 'midnight' ? { status: 'submitted', network: MIDNIGHT_NET, ...(await runExecutor(body.payload)) } : await runAvalanche(body.payload);
           log('gravado', { manifest: tag, chain: c, txId: out[c].txId, block: out[c].blockHeight });
         } catch (e) {
           out[c] = { status: 'failed', error: String(e.message).slice(0, 200) };

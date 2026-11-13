@@ -68,7 +68,7 @@ const NETWORKS: Record<string, { networkId: string; cfg: NetCfg }> = {
 };
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
-const buildPath = (name: string) => path.resolve(__dirname, '..', 'build', name);
+const buildPath = (name: string) => path.resolve(__dirname, '..', '..', 'build', name);
 
 // ── Keys + wallet (midnight-js 4.x) ────────────────────────────────────────
 function deriveKeys(seed: string) {
@@ -83,7 +83,7 @@ function deriveKeys(seed: string) {
 
 // Reuse the daemon's persistent wallet checkpoint (SOTA #3) so deploys skip the ~13min cold sync too.
 // Read-only: the agent daemon owns/updates the checkpoint; deploy just restores from it.
-function ckptPaths() { const d = path.resolve(__dirname, '..', `wallet-checkpoint/${getNetworkId()}`); return { shielded: path.join(d, 'shielded.json'), unshielded: path.join(d, 'unshielded.json'), dust: path.join(d, 'dust.json') }; }
+function ckptPaths() { const d = path.resolve(__dirname, '..', '..', `wallet-checkpoint/${getNetworkId()}`); return { shielded: path.join(d, 'shielded.json'), unshielded: path.join(d, 'unshielded.json'), dust: path.join(d, 'dust.json') }; }
 function hasCheckpoint() { const p = ckptPaths(); return fs.existsSync(p.shielded) && fs.existsSync(p.unshielded) && fs.existsSync(p.dust); }
 const readBlob = (p: string) => fs.readFileSync(p, 'utf8');   // serializeState() is a JSON STRING — pass raw to restore()
 
@@ -295,7 +295,7 @@ async function main() {
   const providers = makeProviders(walletProvider, cfg, zkPath, `${name}-state`, addr);
 
   // Keep earlier deployments in the record (never drop an address that is still on chain).
-  const recPath = path.resolve(__dirname, '..', 'deployment-preview-travelrule.json');
+  const recPath = path.resolve(__dirname, '..', '..', 'deployment-preview-travelrule.json');
   const prior: any = fs.existsSync(recPath) ? JSON.parse(fs.readFileSync(recPath, 'utf8')) : undefined;
   const previous: any[] = prior ? [...(prior.previous ?? []), ...(prior.contractAddress ? [{ ...prior, previous: undefined, note: process.env.PREVIOUS_NOTE ?? 'superseded' }] : [])] : [];
   const out: any = { network: net, wallet: addr, deployedAt: new Date().toISOString(), txs: [] as any[] };

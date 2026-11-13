@@ -112,7 +112,7 @@ async function main() {
   const txId = String(await ctx.wallet.submitTransaction(tx));
   console.log(`  ✓ payment tx ${txId} — REAL NIGHT sent client → agent (EARN)`);
 
-  fs.writeFileSync(path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'client-payment.json'), JSON.stringify({
+  fs.writeFileSync(path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', '..', 'client-payment.json'), JSON.stringify({
     network: getNetworkId(), from: String(ctx.unshieldedKeystore.getBech32Address()), to, amount: amount.toString(), txId, at: new Date().toISOString(),
   }, null, 2));
   console.log('\n✅ EARN proven — client paid the agent real NIGHT. Saved client-payment.json');

@@ -14,9 +14,9 @@
  *   use_case_id = sha256("dpo2u/lgpd-attestation/v1|" + packId); verdict 1 PASS / 0 FAIL / 2 REVIEW;
  *   evidence_hash = manifestHash; metadata_hash = sha256(JSON canônico {attestedAt, packId, reportId, reviewerHash, verdict}).
  *
- * Endereço do contrato: env COMPLIANCE_REGISTRY_ADDRESS > deployment-preview-lgpd-attestations.json >
+ * Endereço do contrato: env COMPLIANCE_REGISTRY_ADDRESS > deployment-<rede>-lgpd-attestations.json >
  * deploy novo (só com ALLOW_DEPLOY=1). Seed só por env (MIDNIGHT_SEED), nunca impresso.
- * Checkpoint da carteira em wallet-checkpoint/preview-v9/ (600).
+ * Checkpoint da carteira em wallet-checkpoint/<rede>-v9/ (600). Rede via MIDNIGHT_NETWORK (padrão preview).
  */
 import 'dotenv/config';
 import * as path from 'node:path';
@@ -35,6 +35,7 @@ import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-j
 import { createLedger9WalletProvider, createLedger9MidnightProvider } from '@midnight-ntwrk/midnight-js-types';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
 import { ownerSecret, ownerWitnesses, ownerCommit } from './owner.js';
+import { networkConfig } from './lib/midnight-v9.js';
 import { ContractState } from '@midnight-ntwrk/compact-runtime';
 import { WalletFacade, WalletEntrySchema, mergeWalletEntries } from '@midnight-ntwrk/wallet-sdk-facade';
 import { InMemoryTransactionHistoryStorage } from '@midnight-ntwrk/wallet-sdk-abstractions';
@@ -46,16 +47,15 @@ import { UnshieldedWallet, createKeystore, PublicKey } from '@midnight-ntwrk/wal
 // @ts-expect-error WebSocket polyfill para o graphql-ws do wallet sync
 globalThis.WebSocket = WebSocket;
 
-const NETWORK_ID = 'preview';
-const CFG = {
-  indexer: 'https://indexer.preview.midnight.network/api/v4/graphql',
-  indexerWS: 'wss://indexer.preview.midnight.network/api/v4/graphql/ws',
-  node: 'https://rpc.preview.midnight.network',
-  proofServer: process.env.PROOF_SERVER_URL ?? 'http://127.0.0.1:6311',
-};
+// Rede: MIDNIGHT_NETWORK (preview | preprod | mainnet; padrão preview). Mainnet só passa pela trava de
+// scripts/lib/midnight-v9.ts. O proof server deste executor roda na 6311 por padrão (proof-server 9.0.1).
+process.env.PROOF_SERVER_URL ??= 'http://127.0.0.1:6311';
+const NET = networkConfig();
+const NETWORK_ID = NET.networkId;
+const CFG = { indexer: NET.indexer, indexerWS: NET.indexerWS, node: NET.node, proofServer: NET.proofServer };
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const OUT = path.join(ROOT, 'deployment-preview-lgpd-attestations.json');
-const CK = path.join(ROOT, 'wallet-checkpoint', 'preview-v9');
+const OUT = path.join(ROOT, `deployment-${NET.name}-lgpd-attestations.json`);
+const CK = path.join(ROOT, 'wallet-checkpoint', `${NET.name}-v9`);
 // Artefatos do compactc 0.36.0: LGPD_ZK_DIR > build-v9/ (worktree LGPD) > build/ (branch feat/midnight-ledger-v9, compile.sh 0.36.0).
 const ZK = process.env.LGPD_ZK_DIR
   ?? (fs.existsSync(path.join(ROOT, 'build-v9', 'ComplianceRegistry')) ? path.join(ROOT, 'build-v9', 'ComplianceRegistry') : path.join(ROOT, 'build', 'ComplianceRegistry'));
@@ -151,7 +151,6 @@ async function ensureDust(ctx: { wallet: any; keystore: any }, state: any) {
 
 async function main() {
   const ComplianceRegistry: any = await import(pathToFileURL(path.join(ZK, 'contract', 'index.js')).href);
-  if (process.env.MIDNIGHT_NETWORK && process.env.MIDNIGHT_NETWORK !== 'preview') throw new Error('preview only');
   const seed = process.env.MIDNIGHT_SEED;
   if (!seed) throw new Error('MIDNIGHT_SEED not set');
   const raw = await readStdin();
@@ -201,7 +200,7 @@ async function main() {
   const providers: any = {
     privateStateProvider: levelPrivateStateProvider({
       privateStateStoreName: 'ComplianceRegistry-v9-state',
-      privateStoragePasswordProvider: () => process.env.PRIVATE_STATE_PASSWORD ?? 'dpo2u-local-dev-private-state-pw-2026',
+      privateStoragePasswordProvider: () => process.env.PRIVATE_STATE_PASSWORD ?? (NET.name === 'mainnet' ? (() => { throw new Error('PRIVATE_STATE_PASSWORD required on mainnet'); })() : 'dpo2u-local-dev-private-state-pw-2026'),
       accountId: addr,
     } as any),
     publicDataProvider: indexerPublicDataProvider(CFG.indexer, CFG.indexerWS),
@@ -214,14 +213,14 @@ async function main() {
   const compiled = (CompiledContract.make('ComplianceRegistry', (ComplianceRegistry as any).Contract) as any).pipe(
     (CompiledContract as any).withWitnesses(ownerWitnesses(ownerSecret(seed))), (CompiledContract as any).withCompiledFileAssets(ZK));
 
-  const out = fs.existsSync(OUT) ? JSON.parse(fs.readFileSync(OUT, 'utf8')) : { network: 'preview', attestations: [] };
+  const out = fs.existsSync(OUT) ? JSON.parse(fs.readFileSync(OUT, 'utf8')) : { network: NET.name, attestations: [] };
   // Only reuse a recorded contract deployed with access control; the older owner-less one cannot be called with this build.
   const recorded = out.complianceRegistry?.accessControl === 'owner-v1' ? out.complianceRegistry.contractAddress : undefined;
   let contractAddress: string | undefined = process.env.COMPLIANCE_REGISTRY_ADDRESS ?? recorded;
   let c: any;
   if (!contractAddress) {
-    if (process.env.ALLOW_DEPLOY !== '1') throw new Error('ComplianceRegistry sem endereço no preview atual; rode com ALLOW_DEPLOY=1');
-    log('[deploy] ComplianceRegistry (preview, ledger v9)');
+    if (process.env.ALLOW_DEPLOY !== '1') throw new Error(`ComplianceRegistry sem endereço em ${NET.name}; rode com ALLOW_DEPLOY=1`);
+    log(`[deploy] ComplianceRegistry (${NET.name}, ledger v9)`);
     c = await (deployContract as any)(providers, { compiledContract: compiled, privateStateId: 'ComplianceRegistryPS', initialPrivateState: {}, args: [ownerCommit(ComplianceRegistry, ownerSecret(seed))] });
     const d = c.deployTxData.public;
     contractAddress = String(d.contractAddress);

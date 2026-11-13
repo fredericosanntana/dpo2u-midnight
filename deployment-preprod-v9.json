@@ -1,0 +1,39 @@
+{
+  "network": "preprod",
+  "ledger": "v9",
+  "contracts": {
+    "ComplianceRegistry": {
+      "contractAddress": "815417fb90eb1eb5a9be1d908302aefb32112c9b9130dc45dbda9a477b923504",
+      "txId": "00fb2fa0d9bd06ade4baaf0e35064008470a57ab77ee74e3c86776ba8a5a4f5027",
+      "blockHeight": 3404165,
+      "deployedAt": "2026-11-13T12:49:38.676Z",
+      "compiler": "compactc 0.36.0",
+      "accessControl": "owner-v1",
+      "dustSpent": "10660575194065606",
+      "dustBefore": "25000512554000000000",
+      "seconds": 24
+    },
+    "TravelRuleGate": {
+      "contractAddress": "fdb80609b5fa3a746133a43a3a7914ce19687c4787e4dc097e08d6cf195b627a",
+      "txId": "003a1e952e6be4560dbf307ad020ccf6b298bedeaf8e00cdc4f1491d21f3f34046",
+      "blockHeight": 3404169,
+      "deployedAt": "2026-11-13T12:50:03.601Z",
+      "compiler": "compactc 0.36.0",
+      "accessControl": "owner-v1",
+      "dustSpent": "8173023749242193",
+      "dustBefore": "24989851978805934394",
+      "seconds": 25
+    },
+    "PsavPassport": {
+      "contractAddress": "154a09c750df7b1b83c9d1e670f4c14596e3476b7190f9dc10c97e7412c08c70",
+      "txId": "001616e8f8ec03d56fb53b876c7be1451b9b2871a24377fc963ae8e45688017d4f",
+      "blockHeight": 3404173,
+      "deployedAt": "2026-11-13T12:50:26.849Z",
+      "compiler": "compactc 0.36.0",
+      "accessControl": "owner-v1",
+      "dustSpent": "11880356982329611",
+      "dustBefore": "24981678955056692201",
+      "seconds": 23
+    }
+  }
+}

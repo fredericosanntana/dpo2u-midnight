@@ -10,7 +10,13 @@
  *   - DPO2U_OWNER_SECRET is set explicitly (no owner secret derived from the wallet seed)
  *   - PRIVATE_STATE_PASSWORD is set (no default password)
  * Mainnet has no faucet: ensureDust only registers NIGHT the wallet already holds.
+ * Wallet state is checkpointed per seed and network (see openWallet), so the hours-long first sync
+ * on preprod/mainnet happens once.
  */
+import fs from 'node:fs';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import * as Rx from 'rxjs';
 import { Either } from 'effect';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
@@ -39,21 +45,46 @@ export function networkConfig(name: string = process.env.MIDNIGHT_NETWORK ?? 'pr
         indexerWS: 'wss://indexer.preview.midnight.network/api/v4/graphql/ws',
         node: 'https://rpc.preview.midnight.network' };
     case 'preprod':
-      return { name, networkId: 'preprod', proofServer: PROOF_SERVER(),
-        indexer: 'https://indexer.preprod.midnight.network/api/v4/graphql',
-        indexerWS: 'wss://indexer.preprod.midnight.network/api/v4/graphql/ws',
-        node: 'https://rpc.preprod.midnight.network' };
-    case 'mainnet': {
+      // Midnight-hosted preprod endpoints were retired on 2026-10-09 too; Blockfrost only.
+      return blockfrost(name, 'preprod');
+    case 'mainnet':
       assertMainnetAllowed();
-      const q = `?project_id=${encodeURIComponent(process.env.BLOCKFROST_PROJECT_ID!)}`;
-      // https://docs.midnight.network/guides/networks-and-environments (Blockfrost is the mainnet provider)
-      return { name, networkId: 'mainnet', proofServer: PROOF_SERVER(),
-        indexer: `https://midnight-mainnet.blockfrost.io/api/v0${q}`,
-        indexerWS: `wss://midnight-mainnet.blockfrost.io/api/v0/ws${q}`,
-        node: `https://rpc.midnight-mainnet.blockfrost.io${q}` };
-    }
+      return blockfrost(name, 'mainnet');
     default:
       throw new Error(`Unknown MIDNIGHT_NETWORK "${name}" (preview | preprod | mainnet)`);
+  }
+}
+
+/**
+ * Blockfrost endpoints (https://docs.midnight.network/guides/networks-and-environments). The
+ * project id goes in the query string because the Midnight SDK cannot set headers. Project ids are
+ * per network (nightpreprod… / nightmainnet…), and the token is masked in everything this process logs.
+ */
+function blockfrost(name: NetworkName, net: 'preprod' | 'mainnet'): NetCfg {
+  const id = (process.env.BLOCKFROST_PROJECT_ID ?? '').trim();
+  if (!id) throw new Error(`BLOCKFROST_PROJECT_ID is required for ${net} (Midnight-hosted endpoints were retired)`);
+  if (!id.startsWith(`night${net}`)) throw new Error(`BLOCKFROST_PROJECT_ID is not a ${net} project id (expected prefix night${net})`);
+  maskInLogs(id);
+  const q = `?project_id=${encodeURIComponent(id)}`;
+  return { name, networkId: net, proofServer: PROOF_SERVER(),
+    indexer: `https://midnight-${net}.blockfrost.io/api/v0${q}`,
+    indexerWS: `wss://midnight-${net}.blockfrost.io/api/v0/ws${q}`,
+    node: `https://rpc.midnight-${net}.blockfrost.io${q}` };
+}
+
+let masked = false;
+/** Replaces the secret with *** in console output and uncaught error text (URLs in errors carry it). */
+function maskInLogs(secret: string): void {
+  if (masked) return;
+  masked = true;
+  const scrub = (a: unknown) => {
+    if (typeof a === 'string') return a.split(secret).join('***');
+    if (a instanceof Error) { a.message = a.message.split(secret).join('***'); if (a.stack) a.stack = a.stack.split(secret).join('***'); return a; }
+    return a;
+  };
+  for (const k of ['log', 'info', 'warn', 'error', 'debug'] as const) {
+    const orig = console[k].bind(console);
+    console[k] = (...args: unknown[]) => orig(...args.map(scrub));
   }
 }
 
@@ -72,13 +103,50 @@ export function masterSeedHex(): string {
   return s;
 }
 
-export type V9Wallet = { facade: WalletFacade; keystore: any; state: any; net: NetCfg; address: string };
+export type V9Wallet = { facade: WalletFacade; keystore: any; state: any; net: NetCfg; address: string; checkpoint?: string };
 
-export async function openWallet(net: NetCfg, opts: { syncTimeoutMs?: number } = {}): Promise<V9Wallet> {
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+
+/**
+ * Checkpoint dir for one seed on one network: wallet-checkpoint/<net>-v9/<sha256(seed)[:12]>/ (700, files 600,
+ * gitignored). The first sync on preprod/mainnet scans the whole chain (hours for the DUST wallet), so the
+ * state is saved every CHECKPOINT_EVERY_MS during sync and again once synced; the next run restores it
+ * and only syncs the delta.
+ */
+function checkpointDir(net: NetCfg, seedHex: string): string {
+  const tag = createHash('sha256').update(`dpo2u/checkpoint/${seedHex}`).digest('hex').slice(0, 12);
+  return path.join(ROOT, 'wallet-checkpoint', `${net.name}-v9`, tag);
+}
+const PARTS = ['shielded', 'unshielded', 'dust'] as const;
+
+export async function saveCheckpoint(w: { facade: any; checkpoint?: string }): Promise<void> {
+  if (!w.checkpoint) return;
+  try {
+    fs.mkdirSync(w.checkpoint, { recursive: true, mode: 0o700 });
+    for (const k of PARTS) {
+      const blob = await w.facade[k].serializeState();
+      const tmp = path.join(w.checkpoint, `${k}.json.tmp`);
+      fs.writeFileSync(tmp, typeof blob === 'string' ? blob : JSON.stringify(blob), { mode: 0o600 });
+      fs.renameSync(tmp, path.join(w.checkpoint, `${k}.json`));
+    }
+    console.log('[wallet] checkpoint saved');
+  } catch (e: any) { console.log(`[wallet] checkpoint failed: ${e?.message ?? e}`); }
+}
+
+/**
+ * Opens and syncs a wallet. `seedHex` overrides MIDNIGHT_SEED (e.g. a derived paymaster account seed).
+ * Sync timeout: opts.syncTimeoutMs, else WALLET_SYNC_TIMEOUT_MS, else 30 min. A timed-out sync keeps
+ * its last checkpoint, so re-running continues from there.
+ */
+export async function openWallet(net: NetCfg, opts: { syncTimeoutMs?: number; seedHex?: string; label?: string; checkpoint?: boolean } = {}): Promise<V9Wallet> {
   setNetworkId(net.networkId as any);
-  const seeds = WalletSeeds.fromMasterSeed(Buffer.from(masterSeedHex(), 'hex'));
+  const seedHex = opts.seedHex ?? masterSeedHex();
+  const seeds = WalletSeeds.fromMasterSeed(Buffer.from(seedHex, 'hex'));
   const keystore = createKeystore({ kind: 'schnorr', secret: seeds.unshielded } as any, getNetworkId() as any);
   const address = String((keystore as any).getBech32Address?.() ?? (keystore as any).getAddress?.() ?? '');
+  const ck = opts.checkpoint === false ? undefined : checkpointDir(net, seedHex);
+  const restoring = !!ck && PARTS.every((k) => fs.existsSync(path.join(ck, `${k}.json`)));
+  const blob = (k: string) => fs.readFileSync(path.join(ck!, `${k}.json`), 'utf8');
   const configuration = {
     networkId: getNetworkId(),
     indexerClientConnection: { indexerHttpUrl: net.indexer, indexerWsUrl: net.indexerWS },
@@ -90,17 +158,36 @@ export async function openWallet(net: NetCfg, opts: { syncTimeoutMs?: number } =
   };
   const facade = await WalletFacade.init({
     configuration: configuration as any,
-    shielded: (c: any) => ShieldedWallet(c).startWithSeed(seeds.shielded),
-    unshielded: (c: any) => UnshieldedWallet(c).startWithPublicKey(PublicKey.fromKeyStore(keystore)),
-    dust: (c: any) => DustWallet(c).startWithSeed(seeds.dust),
+    shielded: (c: any) => (restoring ? ShieldedWallet(c).restore(blob('shielded')) : ShieldedWallet(c).startWithSeed(seeds.shielded)),
+    unshielded: (c: any) => (restoring ? UnshieldedWallet(c).restore(blob('unshielded')) : UnshieldedWallet(c).startWithPublicKey(PublicKey.fromKeyStore(keystore))),
+    dust: (c: any) => (restoring ? DustWallet(c).restore(blob('dust')) : DustWallet(c).startWithSeed(seeds.dust)),
   } as any);
   await facade.start(seeds);
-  console.log(`[wallet] ${net.name}: ${address} — syncing...`);
-  const state: any = await Rx.firstValueFrom(
-    facade.state().pipe(Rx.filter((s: any) => s.isSynced === true), Rx.timeout({ first: opts.syncTimeoutMs ?? 30 * 60_000 })),
-  );
-  console.log('[wallet] synced');
-  return { facade, keystore, state, net, address };
+  const label = opts.label ? ' ' + opts.label : '';
+  console.log(`[wallet${label}] ${net.name}: ${address} — ${restoring ? 'restored checkpoint, syncing delta' : 'syncing from genesis'}...`);
+  const w = { facade, keystore, net, address, checkpoint: ck };
+  const every = Number(process.env.CHECKPOINT_EVERY_MS ?? 10 * 60_000);
+  const timer = ck ? setInterval(() => { void saveCheckpoint(w); }, every) : undefined;
+  const progress = facade.state().pipe(Rx.throttleTime(60_000)).subscribe((s: any) => {
+    const p = (x: any) => x?.state?.progress ?? x?.progress;
+    const fmt = (x: any) => { const q = p(x); return q ? `${q.appliedIndex ?? q.appliedId ?? '?'}/${q.highestRelevantWalletIndex ?? q.highestIndex ?? '?'}` : '?'; };
+    console.log(`[wallet${label}] sync shielded ${fmt(s.shielded)} dust ${fmt(s.dust)} synced=${s.isSynced}`);
+  });
+  const timeoutMs = opts.syncTimeoutMs ?? Number(process.env.WALLET_SYNC_TIMEOUT_MS ?? 30 * 60_000);
+  try {
+    const state: any = await Rx.firstValueFrom(
+      facade.state().pipe(Rx.filter((s: any) => s.isSynced === true), Rx.timeout({ first: timeoutMs })),
+    );
+    console.log(`[wallet${label}] synced`);
+    await saveCheckpoint(w);
+    return { ...w, state };
+  } catch (e) {
+    await saveCheckpoint(w);
+    throw e;
+  } finally {
+    if (timer) clearInterval(timer);
+    progress.unsubscribe();
+  }
 }
 
 export const dustBalance = (st: any): bigint => { try { return BigInt(st.dust.balance(new Date())); } catch { return 0n; } };
