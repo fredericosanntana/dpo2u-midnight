@@ -135,6 +135,18 @@ export function checkApproverAgainstLedger(gate: any, secret: Uint8Array, L: { o
   if (!Buffer.from(gate.pureCircuits.approver_commitment(secret)).equals(Buffer.from(L.approver_commit))) throw new Error('This secret does not open the gate approver_commit');
 }
 
+/** Gate ledger from a midnight-js 5 queryContractState read (serialized state -> ledger view). */
+export function gateLedgerOf(Gate: any, read: any, ContractStateCls: any) {
+  if (!read) throw new Error('no contract state at this address');
+  return Gate.ledger(read.contractState.deserialize({ v9: ContractStateCls }).data);
+}
+
+/** Provider public key {x, y} (decimal strings or numbers) -> JubjubPoint. */
+export function parseProviderKey(j: any): { x: bigint; y: bigint } {
+  if (!/^\d+$/.test(String(j?.x)) || !/^\d+$/.test(String(j?.y))) throw new Error('provider key must be { "x": "<decimal>", "y": "<decimal>" }');
+  return { x: BigInt(j.x), y: BigInt(j.y) };
+}
+
 /** Grant state from the public ledger (isGrantActive without a transaction). */
 export function grantStatus(L: any, grantId: Uint8Array, nowSec: number) {
   const known = L.grant_scope.member(grantId);
@@ -147,23 +159,23 @@ export function grantStatus(L: any, grantId: Uint8Array, nowSec: number) {
 }
 
 // ── plan ──
-export const COMMANDS = ['attest-self', 'issue-passport', 'evaluate', 'release', 'grant', 'approve', 'revoke', 'status'] as const;
+export const COMMANDS = ['attest-self', 'issue-passport', 'register-provider', 'revoke-provider', 'evaluate', 'release', 'grant', 'approve', 'revoke', 'status'] as const;
 export type Command = (typeof COMMANDS)[number];
 
 const CONTRACT_OF: Record<Command, string> = {
-  'attest-self': 'ComplianceRegistry', 'issue-passport': 'PsavPassport',
+  'attest-self': 'ComplianceRegistry', 'issue-passport': 'PsavPassport', 'register-provider': GATE, 'revoke-provider': GATE,
   evaluate: GATE, release: GATE, grant: GATE, approve: GATE, revoke: GATE, status: GATE,
 };
 const CIRCUIT_OF: Record<Command, string> = {
-  'attest-self': 'attestCompliance', 'issue-passport': 'issuePassport',
+  'attest-self': 'attestCompliance', 'issue-passport': 'issuePassport', 'register-provider': 'registerSanctionsProvider', 'revoke-provider': 'revokeSanctionsProvider',
   evaluate: 'evaluateTransfer', release: 'releaseTransfer', grant: 'grantDisclosure', approve: 'approveDisclosure', revoke: 'revokeDisclosure', status: '(ledger read: isGrantActive)',
 };
 const CROSS_OF: Partial<Record<Command, string>> = {
-  evaluate: 'PsavPassport.isValid(beneficiary vasp_id) when the VASP is not in attested_vasps',
+  evaluate: 'PsavPassport.isValid(beneficiary vasp_id) when the VASP is not in attested_vasps; signed sanctions list checked in-circuit',
   release: 'ComplianceRegistry.hasAttestation(self_company_id) must be 1',
 };
 const KEY_OF: Record<Command, string> = {
-  'attest-self': 'owner', 'issue-passport': 'owner', evaluate: 'owner', release: 'owner', grant: 'owner',
+  'attest-self': 'owner', 'issue-passport': 'owner', 'register-provider': 'owner', 'revoke-provider': 'owner', evaluate: 'owner', release: 'owner', grant: 'owner',
   approve: 'approver (own key, never the owner\'s)', revoke: 'owner', status: 'none (read only)',
 };
 

@@ -9,7 +9,10 @@
  *                   --score N (private) --threshold N --context LABEL --evidence HEX|LABEL
  *   issue-passport  PsavPassport.issuePassport, tier 0 (machine-only), one machine rule PASS
  *                   --passport-id ID (= the counterparty vasp_id) [--pack LABEL --pack-version V]
- *   evaluate        evaluateTransfer --transfer ID --policy HEX|LABEL --witness-file FILE(600)
+ *   register-provider  registerSanctionsProvider --provider-id ID --provider-key FILE ({x, y} decimal; re-registering rotates)
+ *   revoke-provider    revokeSanctionsProvider --provider-id ID
+ *   evaluate        evaluateTransfer --transfer ID --policy HEX|LABEL --witness-file FILE(600) --sanctions-list FILE|-
+ *                   (signed list payload, docs/TRAVEL-RULE-DISCLOSURE.md; '-' reads it from stdin)
  *   release         releaseTransfer --transfer ID
  *   grant           grantDisclosure --grant ID --transfer ID --supervisor ID --scope N --ttl SEC --purpose HEX|LABEL
  *   approve         approveDisclosure --grant ID   (approver key: DPO2U_APPROVER_SECRET on testnets,
@@ -33,7 +36,9 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { WebSocket } from 'ws';
 import { findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
-import { encodeContractAddress } from '@midnight-ntwrk/compact-runtime';
+import { encodeContractAddress, ContractState } from '@midnight-ntwrk/compact-runtime';
+import fs from 'node:fs';
+import { fromPayload } from './lib/sanctions-list.js';
 import { ZKConfigRegistry } from '@midnight-ntwrk/midnight-js-types';
 import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
@@ -41,7 +46,7 @@ import { networkConfig, openWallet, ensureDust, makeProviders, masterSeedHex, ty
 import { ownerSecret, scoreSalt, setScoreSalt, ownerWitnesses } from './owner.js';
 import {
   GATE, COMMANDS, type Command, type CalleeName, readGateDeployment, moduleProviderFor, zkDirs, buildDir,
-  b32, hashArg, idArg, hex, readTransferWitness, resolveApproverSecret, checkApproverAgainstLedger, grantStatus, plan,
+  b32, hashArg, idArg, hex, readTransferWitness, resolveApproverSecret, checkApproverAgainstLedger, grantStatus, plan, gateLedgerOf, parseProviderKey,
 } from './lib/travel-rule-v10.js';
 
 // @ts-expect-error WebSocket polyfill for graphql-ws in Node
@@ -56,6 +61,7 @@ const { values, positionals } = parseArgs({
     transfer: { type: 'string' }, policy: { type: 'string' }, 'witness-file': { type: 'string' },
     grant: { type: 'string' }, supervisor: { type: 'string' }, scope: { type: 'string' }, ttl: { type: 'string' }, purpose: { type: 'string' },
     'approver-secret-stdin': { type: 'boolean', default: false }, 'as-owner': { type: 'boolean', default: false },
+    'sanctions-list': { type: 'string' }, 'provider-id': { type: 'string' }, 'provider-key': { type: 'string' },
     score: { type: 'string' }, threshold: { type: 'string' }, context: { type: 'string' }, evidence: { type: 'string' },
     'passport-id': { type: 'string' }, pack: { type: 'string' }, 'pack-version': { type: 'string' },
   },
@@ -82,8 +88,8 @@ function argsFor(c: Command): { show: Record<string, unknown>; call: unknown[] }
     }
     case 'evaluate': {
       const t = idArg(need('transfer')), p = hashArg(need('policy'));
-      need('witness-file');
-      return { show: { transfer_id: hex(t), policy_hash: hex(p), witness_file: values['witness-file'] }, call: [t, p] };
+      need('witness-file'); need('sanctions-list');
+      return { show: { transfer_id: hex(t), policy_hash: hex(p), witness_file: values['witness-file'], sanctions_list: values['sanctions-list'] }, call: [t, p] };
     }
     case 'release': { const t = idArg(need('transfer')); return { show: { transfer_id: hex(t) }, call: [t] }; }
     case 'grant': {
@@ -93,6 +99,11 @@ function argsFor(c: Command): { show: Record<string, unknown>; call: unknown[] }
         call: [g, t, s, BigInt(need('scope')), BigInt(exp), p] };
     }
     case 'approve': case 'revoke': { const g = idArg(need('grant')); return { show: { grant_id: hex(g) }, call: [g] }; }
+    case 'register-provider': {
+      const id = idArg(need('provider-id')), key = parseProviderKey(JSON.parse(fs.readFileSync(need('provider-key'), 'utf8')));
+      return { show: { provider_id: hex(id), key: { x: key.x.toString(), y: key.y.toString() } }, call: [id, key] };
+    }
+    case 'revoke-provider': { const id = idArg(need('provider-id')); return { show: { provider_id: hex(id) }, call: [id] }; }
     case 'status': return { show: { transfer: values.transfer ?? null, grant: values.grant ?? null }, call: [] };
   }
 }
@@ -130,7 +141,7 @@ async function main() {
     if (cmd !== 'status' && (await ensureDust(w)) === 0n) throw new Error('No DUST in the wallet');
     const Gate = await import(pathToFileURL(path.join(buildDir(ROOT, GATE), 'contract', 'index.js')).href);
     const providers = crossProviders(w, d.links);
-    const readGate = async () => Gate.ledger((await providers.publicDataProvider.queryContractState(d.gate)).data);
+    const readGate = async () => gateLedgerOf(Gate, await providers.publicDataProvider.queryContractState(d.gate), ContractState);
 
     // The gate's on-chain links must be the addresses we resolve modules for.
     const L0 = await readGate();
@@ -145,7 +156,8 @@ async function main() {
       if (values.transfer) {
         const t = idArg(values.transfer);
         out.transfer = L0.status.member(t)
-          ? { status: Number(L0.status.lookup(t)), fail_reason: Number(L0.fail_reason.lookup(t)), policy_hash: hex(L0.verdict_policy.lookup(t)) }
+          ? { status: Number(L0.status.lookup(t)), fail_reason: Number(L0.fail_reason.lookup(t)), policy_hash: hex(L0.verdict_policy.lookup(t)),
+              sanctions: { list_root: hex(L0.verdict_sanctions_root.lookup(t)), provider_id: hex(L0.verdict_sanctions_provider.lookup(t)), valid_until: Number(L0.verdict_sanctions_valid_until.lookup(t)) } }
           : { status: 0 };
       }
       if (values.grant) out.grant = grantStatus(L0, idArg(values.grant), now);
@@ -172,6 +184,7 @@ async function main() {
       if (cmd === 'attest-self') setScoreSalt(scoreSalt(owner!, a.call[4] as Uint8Array));
     } else {
       const wit = cmd === 'evaluate' ? readTransferWitness(values['witness-file']!) : undefined;
+      const list = cmd === 'evaluate' ? fromPayload(JSON.parse(values['sanctions-list'] === '-' ? await readStdin() : fs.readFileSync(values['sanctions-list']!, 'utf8'))) : undefined;
       target = (await join(providers, GATE, d.gate, {
         owner_secret: owner ? (x: any) => [x.privateState, owner] : refuse('owner_secret'),
         approver_secret: approverSecret ? (x: any) => [x.privateState, approverSecret] : refuse('approver_secret'),
@@ -179,6 +192,7 @@ async function main() {
         beneficiary_data: wit ? (x: any) => [x.privateState, wit.b] : refuse('beneficiary_data'),
         transfer_amount: wit ? (x: any) => [x.privateState, wit.amount] : refuse('transfer_amount'),
         sanctions_clear: wit ? (x: any) => [x.privateState, wit.clear] : refuse('sanctions_clear'),
+        sanctions_list: list ? (x: any) => [x.privateState, list] : refuse('sanctions_list'),
       })).c;
     }
 
@@ -196,7 +210,12 @@ async function main() {
     const after: any = {};
     if (cmd === 'evaluate' || cmd === 'release') {
       const t = a.call[0] as Uint8Array;
-      after.transfer = { status: Number(L.status.lookup(t)), fail_reason: Number(L.fail_reason.lookup(t)), policy_hash: hex(L.verdict_policy.lookup(t)) };
+      after.transfer = { status: Number(L.status.lookup(t)), fail_reason: Number(L.fail_reason.lookup(t)), policy_hash: hex(L.verdict_policy.lookup(t)),
+        sanctions: { list_root: hex(L.verdict_sanctions_root.lookup(t)), provider_id: hex(L.verdict_sanctions_provider.lookup(t)), valid_until: Number(L.verdict_sanctions_valid_until.lookup(t)) } };
+    }
+    if (cmd === 'register-provider' || cmd === 'revoke-provider') {
+      const id = a.call[0] as Uint8Array;
+      after.provider = { registered: L.sanctions_provider_key.member(id), revoked: L.sanctions_provider_revoked.member(id) };
     }
     if (cmd === 'grant' || cmd === 'approve' || cmd === 'revoke') after.grant = grantStatus(L, a.call[0] as Uint8Array, Math.floor(Date.now() / 1000));
     console.log(JSON.stringify({ ok: true, command: cmd, contract: p.contract, address: p.address, circuit, result: r?.private?.result === undefined ? null : String(r.private.result),

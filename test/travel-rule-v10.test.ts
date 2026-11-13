@@ -9,15 +9,18 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createCircuitContext, createConstructorContext, encodeContractAddress } from '@midnight-ntwrk/compact-runtime';
+import { createCircuitContext, createConstructorContext, encodeContractAddress, ContractState } from '@midnight-ntwrk/compact-runtime';
+import { newProviderKey, signSanctionsList, sanctionsListRoot } from '../scripts/lib/sanctions-list.js';
 import * as Gate from '../build/TravelRuleGate/contract/index.js';
 import * as Passport from '../build/PsavPassport/contract/index.js';
 import * as Registry from '../build/ComplianceRegistry/contract/index.js';
 import { simAddress, contractRef, asDeployed, SIM_BLOCK_HASH } from './helpers.js';
 import {
   readGateDeployment, moduleProviderFor, zkDirs, plan, b32, hashArg, idArg, hex,
-  parseTransferWitness, resolveApproverSecret, checkApproverAgainstLedger, grantStatus,
+  parseTransferWitness, resolveApproverSecret, checkApproverAgainstLedger, grantStatus, gateLedgerOf, parseProviderKey,
 } from '../scripts/lib/travel-rule-v10.js';
+
+
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const CPK = '0'.repeat(64);
@@ -26,6 +29,9 @@ const GATE = simAddress(0x6a7e), PASSPORT = simAddress(0x9a55), REGISTRY = simAd
 const OWNER = b32('owner-secret-test-only'), APPROVER = b32('approver-secret-test-only');
 const SELF = b32('company:example-vasp');
 const PASSPORT_VASP = 'vasp:with-passport';
+const PROVIDER_ID = idArg('provider:fictitious');
+const PROVIDER = newProviderKey();
+const LIST = signSanctionsList(Gate as any, PROVIDER.sk, { provider_id: PROVIDER_ID, list_root: sanctionsListRoot(['11'.repeat(32)]), issued_at: BigInt(T0 - 3600), valid_until: BigInt(T0 + 86_400) });
 
 function depFile(entry: Record<string, unknown>): string {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'trv10-'));
@@ -57,9 +63,14 @@ async function chain() {
     originator_data: (x: any) => [x.privateState, x.privateState.o], beneficiary_data: (x: any) => [x.privateState, x.privateState.b],
     transfer_amount: (x: any) => [x.privateState, 250_000n], sanctions_clear: (x: any) => [x.privateState, true],
     owner_secret: (x: any) => [x.privateState, OWNER], approver_secret: (x: any) => [x.privateState, x.privateState.approver ?? APPROVER],
+    sanctions_list: (x: any) => [x.privateState, LIST],
   } as any);
-  const gInit = (await gate.initialState(createConstructorContext({}, CPK), Gate.pureCircuits.owner_commitment(OWNER), 100_000n,
+  const gInit0 = (await gate.initialState(createConstructorContext({}, CPK), Gate.pureCircuits.owner_commitment(OWNER), 100_000n,
     contractRef(PASSPORT), contractRef(REGISTRY), SELF, Gate.pureCircuits.approver_commitment(APPROVER))).currentContractState;
+  // the sanctions-list provider is registered before any evaluation (what `register-provider` does on chain)
+  const regd = await gate.circuits.registerSanctionsProvider(createCircuitContext({ circuitId: 'r', contractAddress: GATE, coinPublicKeyOrZswapState: CPK, contractState: gInit0, privateState: {}, time: T0 } as any), PROVIDER_ID, PROVIDER.pk);
+  const gInit: any = new ContractState();
+  gInit.data = regd.context.callContext.currentQueryContext.state;
   // The SAME module provider the CLI hands the SDK, with a state provider standing in for the indexer.
   const crossContract = { stateProvider: { getContractState: async (_h: string, a: string) => states[a] }, moduleProvider: moduleProviderFor(ROOT, { PsavPassport: PASSPORT, ComplianceRegistry: REGISTRY }) };
   const mk = (state: any, ps: any) => createCircuitContext({ circuitId: 't', contractAddress: GATE, coinPublicKeyOrZswapState: CPK, contractState: state, privateState: ps, time: T0, parentBlockHash: SIM_BLOCK_HASH, crossContract } as any);
@@ -180,5 +191,27 @@ describe('travel-rule-v10: witnesses, grant status, plan', () => {
     assert.deepEqual(gr.zkSources, ['build/TravelRuleGate']);
     assert.match(plan(ROOT, d, 'approve', {}).key, /never the owner/);
     assert.equal(plan(ROOT, d, 'attest-self', {}).address, REGISTRY);
+  });
+
+  it('provider key parsing and the register-provider plan', () => {
+    assert.deepEqual(parseProviderKey({ x: '12', y: 34 }), { x: 12n, y: 34n });
+    assert.throws(() => parseProviderKey({ x: 'abc', y: '1' }), /decimal/);
+    const d = readGateDeployment(ROOT, 'preview', depFile(V10));
+    const p = plan(ROOT, d, 'register-provider', {});
+    assert.equal(p.circuit, 'registerSanctionsProvider');
+    assert.equal(p.key, 'owner');
+    assert.equal(plan(ROOT, d, 'revoke-provider', {}).circuit, 'revokeSanctionsProvider');
+    assert.match(String(plan(ROOT, d, 'evaluate', {}).crossContract), /signed sanctions list/);
+  });
+
+  it('gate ledger is read from the deserialized v9 contract state (midnight-js 5 read shape)', async () => {
+    const { gInit } = await chain();
+    let asked: any;
+    const read = { contractState: { deserialize: (o: any) => { asked = o; return gInit; } } };
+    const L = gateLedgerOf(Gate, read, ContractState);
+    assert.equal(asked.v9, ContractState);
+    assert.equal(hex(L.passport.bytes), hex(encodeContractAddress(PASSPORT)));
+    assert.equal(L.sanctions_provider_key.member(PROVIDER_ID), true);
+    assert.throws(() => gateLedgerOf(Gate, null, ContractState), /no contract state/);
   });
 });
