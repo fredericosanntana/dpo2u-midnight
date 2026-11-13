@@ -6,6 +6,9 @@ import CompactStandardLibrary;
 // (witness, never on chain) and passes owner_commit = owner_commitment(owner_secret) to the
 // constructor. Same pattern as TravelRuleGate / PsavPassport.
 witness owner_secret(): Bytes<32>;
+// Fresh random salt per attestation, kept off-chain by the attesting agent. Lets the company
+// (or an auditor it chooses) later open the score commitment without the score ever being public.
+witness score_salt(): Bytes<32>;
 export ledger owner_commit: Bytes<32>;
 
 constructor(owner_commit_: Bytes<32>) {
@@ -40,6 +43,8 @@ export ledger attestation_dids: Map<Bytes<32>, Bytes<32>>;       // company_id -
 export ledger attestation_cids: Map<Bytes<32>, Bytes<32>>;       // company_id -> policy CID
 export ledger attestation_thresholds: Map<Bytes<32>, Uint<8>>;   // company_id -> public threshold met
 export ledger attestation_contexts: Map<Bytes<32>, Bytes<32>>;   // company_id -> public anti-replay context
+export ledger attestation_evidence: Map<Bytes<32>, Bytes<32>>;   // company_id -> hash of the evidence behind the score
+export ledger attestation_score_commit: Map<Bytes<32>, Bytes<32>>; // company_id -> persistentCommit(score, salt); hiding
 export ledger used_contexts: Map<Bytes<32>, Uint<8>>;            // Set semantics (no Set type in 0.29.0)
 export ledger attestation_count: Counter;
 
@@ -58,7 +63,8 @@ export circuit attestCompliance(
   policy_cid: Bytes<32>,
   threshold: Uint<8>,
   context: Bytes<32>,
-  score: Uint<8>
+  score: Uint<8>,
+  evidence_hash: Bytes<32>
 ): [] {
   assert_owner();
   // Anti-replay: a given context (org||jurisdiction||nonce) may be sealed only once.
@@ -74,12 +80,25 @@ export circuit attestCompliance(
   attestation_cids.insert(disclose(company_id), disclose(policy_cid));
   attestation_thresholds.insert(disclose(company_id), disclose(threshold));
   attestation_contexts.insert(disclose(company_id), disclose(context));
+  attestation_evidence.insert(disclose(company_id), disclose(evidence_hash));
+  // Hiding commitment: binds the exact score to this attestation without revealing it.
+  attestation_score_commit.insert(disclose(company_id), disclose(score_commitment(score, score_salt())));
   attestation_count.increment(1);
 }
 
+// score_commit = persistentCommit(score, salt). Whoever holds the salt can show the score matches.
+export pure circuit score_commitment(score: Uint<8>, salt: Bytes<32>): Bytes<32> {
+  return persistentCommit<Uint<8>>(score, salt);
+}
+
 // Non-leaking reads. There is intentionally no getComplianceScore — the score is private.
+// Returns 0 for an unknown company (also called cross-contract by TravelRuleGate.releaseTransfer).
 export circuit hasAttestation(company_id: Bytes<32>): Uint<8> {
-  return attestation_verdicts.lookup(disclose(company_id));
+  if (attestation_verdicts.member(disclose(company_id))) {
+    return attestation_verdicts.lookup(disclose(company_id));
+  } else {
+    return 0 as Uint<8>;
+  }
 }
 
 export circuit getAttestationThreshold(company_id: Bytes<32>): Uint<8> {
