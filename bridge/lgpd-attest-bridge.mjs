@@ -28,6 +28,8 @@
 //   roda com a trava de scripts/lib/midnight-v9.ts (CONFIRM_MAINNET, BLOCKFROST_PROJECT_ID, ...).
 //   BRIDGE_AVAX_ADAPTER, BRIDGE_AVAX_KEY_FILE, BRIDGE_AVAX_REGISTRY (padrão Fuji 0xc997…C4cE),
 //   BRIDGE_AVAX_USE_CASE (lgpd_attestation_v1), BRIDGE_AVAX_VALIDITY_DAYS (90), BRIDGE_AVAX_RPC_URL
+//   DPO2U_REVIEWER_SALT (32 bytes hex): o reviewerHash vai ao metadata como sha256(salt || reviewerHash)
+//   (bridge/reviewer-salt.mjs). Obrigatório em mainnet: sem ele a ponte não sobe. Repassado ao executor.
 
 import http from 'node:http';
 import { readFileSync } from 'node:fs';
@@ -37,6 +39,7 @@ import { dirname, join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { fileURLToPath } from 'node:url';
+import { reviewerSalt, lgpdMetadata } from './reviewer-salt.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const HOST = process.env.BRIDGE_HOST || '127.0.0.1';
@@ -49,6 +52,8 @@ const MAX_BODY = 512 * 1024;
 
 if (HOST === '0.0.0.0' || HOST === '::') { console.error('BRIDGE_HOST público recusado'); process.exit(2); }
 if (!['preview', 'preprod', 'mainnet'].includes(MIDNIGHT_NET)) { console.error('BRIDGE_MIDNIGHT_NETWORK inválida'); process.exit(2); }
+let REVIEWER_SALT;
+try { REVIEWER_SALT = reviewerSalt(MIDNIGHT_NET); } catch (e) { console.error(e.message); process.exit(2); }
 if (!/^[0-9a-f]{64}$/.test(CONTRACT)) { console.error('COMPLIANCE_REGISTRY_ADDRESS ausente ou inválido'); process.exit(2); }
 const TOKEN = readFileSync(process.env.BRIDGE_TOKEN_FILE || '/root/.config/dpo2u/lgpd-bridge.token', 'utf8').trim();
 if (TOKEN.length < 32) { console.error('token curto demais'); process.exit(2); }
@@ -153,7 +158,7 @@ async function avalancheDriver() {
 }
 
 export function avalancheArgs(payload, nowSec = Math.floor(Date.now() / 1000)) {
-  const meta = { attestedAt: payload.attestedAt, packId: payload.packId, reportId: payload.reportId, reviewerHash: payload.reviewerHash, verdict: payload.verdict };
+  const meta = lgpdMetadata(payload, REVIEWER_SALT);
   return {
     evidenceHashHex: '0x' + payload.manifestHash,
     subjectHex: '0x' + payload.subject,
