@@ -131,7 +131,7 @@ describe('E6: one TravelRuleGate per institution', () => {
     const a = (n: number) => n.toString(16).padStart(64, '0');
     const dep: any = { network: 'preview', contracts: { PsavPassport: { contractAddress: a(2) }, ComplianceRegistry: { contractAddress: a(3) },
       TravelRuleGate: { contractAddress: a(1), codeVersion: 'v10', links: { PsavPassport: a(2), ComplianceRegistry: a(3) } } } };
-    recordInstitutionGate(dep, 'vasp-alpha', { contractAddress: a(9), codeVersion: 'v10', accessControl: 'owner-v1', links: { PsavPassport: a(2), ComplianceRegistry: a(3) }, institution: 'vasp-alpha' });
+    recordInstitutionGate(dep, 'vasp-alpha', { contractAddress: a(9), codeVersion: 'v10', accessControl: 'owner-v2', links: { PsavPassport: a(2), ComplianceRegistry: a(3) }, institution: 'vasp-alpha' });
     assert.equal(institutionGate(dep, 'vasp-alpha').contractAddress, a(9));
     const f = path.join(tmp(), 'dep.json'); fs.writeFileSync(f, JSON.stringify(dep));
     const g = readGateDeployment(ROOT, 'preview', f, 'vasp-alpha');

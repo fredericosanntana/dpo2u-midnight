@@ -67,3 +67,11 @@ const signature = jubjubSchnorrSign(new CompactTypeVector(4, CompactTypeField), 
 `signSanctionsList` / `toPayload` in `scripts/lib/sanctions-list.ts` do exactly this. The list root is `sha256("dpo2u/sanctions-list/v1" || sorted unique entry hashes)` (`sanctionsListRoot`).
 
 Known limits: sanctions non-membership is VASP-attested (not proven in-circuit), but bound to a signed, unexpired list; the counterparty VASP id is deliberately public (and is the PsavPassport id it is checked against); "viewing key" here is an application-level disclosure key (HKDF per grant) plus on-chain grant metadata, not a Midnight wallet viewing key. The v10 gate is not deployed on any network yet.
+
+## Hardening 2026-11-13 (see docs/REVIEW-2026-11-13.md)
+
+- **Field openings carry a blinding, not the party salt.** The vault hands out `{ value, blinding }` with `blinding = field_blinding(party salt, label)`, and the supervisor checks it with `field_commit_blinded(value, blinding)`. With the party salt itself, the supervisor could derive the other fields' blindings.
+- **Four eyes is checked in the circuit.** `approveDisclosure` refuses an approver secret that opens `owner_commit`. The constructor's `approver_commit != owner_commit` cannot catch `approver_commitment(owner_secret)`, because the two commitments use different domains.
+- **Release re-checks the screening.** `releaseTransfer` refuses if the list behind the verdict has expired, or if its provider was revoked since the verdict. In that case, evaluate again.
+- **Party salts.** `evaluateTransfer` refuses zero salts and identical salts for the two parties.
+- **`owner_commitment` is domain-tagged per contract.** Deployments marked `accessControl: owner-v1` must be redeployed (`owner-v2`).

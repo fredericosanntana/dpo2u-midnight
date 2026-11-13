@@ -8,7 +8,7 @@
  *
  * Runs on preview | preprod | mainnet through scripts/lib/midnight-v9.ts (MIDNIGHT_NETWORK,
  * same mainnet guard as every v9 script). Contracts come from deployment-<network>-v9.json and
- * must be owner-gated (accessControl owner-v1); the controller signs as owner.
+ * must be owner-gated (accessControl owner-v2: per-contract tagged owner_commitment); the controller signs as owner.
  *
  * Accounts: account 0 is MIDNIGHT_SEED itself; account N > 0 uses
  * sha256("dpo2u/paymaster/account/" + N || seed). These addresses differ from the old v8 HD
@@ -131,7 +131,7 @@ export function deploymentAddress(network: string, name: string): string {
   if (!fs.existsSync(file)) throw new Error(`${file} missing: deploy with scripts/deploy-v9.ts first`);
   const c = JSON.parse(fs.readFileSync(file, 'utf8')).contracts?.[name];
   if (!c?.contractAddress) throw new Error(`${name} not in ${file}`);
-  if (c.accessControl !== 'owner-v1') throw new Error(`${name} in ${file} was deployed without access control; redeploy`);
+  if (c.accessControl !== 'owner-v2') throw new Error(`${name} in ${file} was deployed without access control or with the untagged owner_commitment (owner-v1); redeploy`);
   if (V10_CONTRACTS.has(name) && c.codeVersion !== CODE_VERSION) throw new Error(`${name} in ${file} is the pre-${CODE_VERSION} layout; redeploy with scripts/deploy-v9.ts`);
   return c.contractAddress;
 }

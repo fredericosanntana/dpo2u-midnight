@@ -13,11 +13,12 @@ constructor(owner_commit_: Bytes<32>) {
 }
 
 export pure circuit owner_commitment(secret: Bytes<32>): Bytes<32> {
-  return persistentHash<Bytes<32>>(secret);
+  // Domain-tagged per contract: the same secret gives a different owner_commit in each contract.
+  return persistentHash<Vector<3, Bytes<32>>>([pad(32, "dpo2u/owner/v1"), pad(32, "AgentWalletFactory"), secret]);
 }
 
 circuit assert_owner(): [] {
-  assert(persistentHash<Bytes<32>>(owner_secret()) == owner_commit, "Only the contract owner can do this");
+  assert(owner_commitment(owner_secret()) == owner_commit, "Only the contract owner can do this");
 }
 
 export ledger agent_wallets: Map<Bytes<32>, Bytes<32>>;

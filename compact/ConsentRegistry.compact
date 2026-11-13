@@ -13,11 +13,12 @@ constructor(owner_commit_: Bytes<32>) {
 }
 
 export pure circuit owner_commitment(secret: Bytes<32>): Bytes<32> {
-  return persistentHash<Bytes<32>>(secret);
+  // Domain-tagged per contract: the same secret gives a different owner_commit in each contract.
+  return persistentHash<Vector<3, Bytes<32>>>([pad(32, "dpo2u/owner/v1"), pad(32, "ConsentRegistry"), secret]);
 }
 
 circuit assert_owner(): [] {
-  assert(persistentHash<Bytes<32>>(owner_secret()) == owner_commit, "Only the contract owner can do this");
+  assert(owner_commitment(owner_secret()) == owner_commit, "Only the contract owner can do this");
 }
 
 // subject_id for this contract: persistentHash([salt, identifier_hash]). identifier_hash is the
@@ -51,6 +52,17 @@ export pure circuit subject_key(identifier_hash: Bytes<32>, salt: Bytes<32>): By
 //   1 = active       (consent granted and current)
 //   2 = revoked      (consent withdrawn, Art. 8 §5)
 
+// Only the five purpose bits above are defined; anything else is refused (0x1F = all five).
+circuit assert_purposes(purposes: Uint<8>): [] {
+  assert(purposes > 0 as Uint<8>, "Must grant at least one purpose");
+  assert(purposes <= 0x1F as Uint<8>, "Unknown purpose bit (defined: 0x01..0x10)");
+}
+
+circuit assert_active(subject_id: Bytes<32>): [] {
+  assert(consent_status.member(disclose(subject_id)), "No consent record found for this subject");
+  assert(consent_status.lookup(disclose(subject_id)) == 1, "Consent is not active (revoked): grant it again to re-consent");
+}
+
 export ledger consent_status: Map<Bytes<32>, Uint<8>>;
 export ledger consent_purposes: Map<Bytes<32>, Uint<8>>;
 export ledger consent_policy_version: Map<Bytes<32>, Uint<8>>;
@@ -66,7 +78,7 @@ export circuit grantConsent(
   policy_version: Uint<8>
 ): [] {
   assert_owner();
-  assert(purposes > 0 as Uint<8>, "Must grant at least one purpose");
+  assert_purposes(purposes);
   assert(policy_version > 0 as Uint<8>, "Policy version must be specified");
   consent_status.insert(disclose(subject_id), disclose(1 as Uint<8>));
   consent_purposes.insert(disclose(subject_id), disclose(purposes));
@@ -76,26 +88,29 @@ export circuit grantConsent(
 
 // Revoke ALL consent for a data subject (LGPD Art. 8 §5 — must be as easy as granting).
 // Sets status=2, clears purposes. Record is retained for audit (revocation is itself an event).
+// Only an ACTIVE consent can be revoked: revoking twice is refused, so total_revocations counts
+// real revocations.
 export circuit revokeConsent(subject_id: Bytes<32>): [] {
   assert_owner();
-  assert(consent_status.member(disclose(subject_id)), "No consent record found for this subject");
+  assert_active(subject_id);
   consent_status.insert(disclose(subject_id), disclose(2 as Uint<8>));
   consent_purposes.insert(disclose(subject_id), disclose(0 as Uint<8>));
   total_revocations.increment(1);
 }
 
 // Update consented purposes without full revocation (e.g. uncheck marketing, keep essential).
-// Requires an existing consent record. Use revokeConsent to remove all purposes.
+// Requires an ACTIVE consent: a revoked consent is not silently reactivated here (re-consent goes
+// through grantConsent, which is counted). Use revokeConsent to remove all purposes.
 export circuit updateConsentPurposes(
   subject_id: Bytes<32>,
   new_purposes: Uint<8>,
   policy_version: Uint<8>
 ): [] {
   assert_owner();
-  assert(consent_status.member(disclose(subject_id)), "No consent record found for this subject");
+  assert_active(subject_id);
   assert(new_purposes > 0 as Uint<8>, "Must keep at least one purpose; use revokeConsent to fully revoke");
+  assert_purposes(new_purposes);
   assert(policy_version > 0 as Uint<8>, "Policy version must be specified");
-  consent_status.insert(disclose(subject_id), disclose(1 as Uint<8>));
   consent_purposes.insert(disclose(subject_id), disclose(new_purposes));
   consent_policy_version.insert(disclose(subject_id), disclose(policy_version));
 }

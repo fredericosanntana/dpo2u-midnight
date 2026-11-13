@@ -89,7 +89,7 @@ const CONTRACTS: Record<string, (c: ArgCtx) => unknown[]> = {
 };
 
 /** An entry is current when it has access control and, for contracts changed in v10, the v10 code. */
-const isCurrent = (name: string, e: any) => e?.accessControl === 'owner-v1' && (!V10_CONTRACTS.has(name) || e?.codeVersion === CODE_VERSION);
+const isCurrent = (name: string, e: any) => e?.accessControl === 'owner-v2' && (!V10_CONTRACTS.has(name) || e?.codeVersion === CODE_VERSION);
 
 const { values } = parseArgs({
   options: { only: { type: 'string' }, all: { type: 'boolean', default: false }, 'dry-run': { type: 'boolean', default: false }, plan: { type: 'boolean', default: false },
@@ -116,7 +116,7 @@ function witnessesFor(name: string, secret: Uint8Array) {
 
 async function main() {
   const net = networkConfig();
-  const secret = ownerSecret(masterSeedHex());
+  const secret = ownerSecret(masterSeedHex(), net.name);
   const OUT = path.join(ROOT, `deployment-${net.name}-v9.json`);
   const out = fs.existsSync(OUT) ? JSON.parse(fs.readFileSync(OUT, 'utf8')) : { network: net.name, ledger: 'v9', contracts: {} };
 
@@ -168,7 +168,7 @@ async function main() {
     const d = c.deployTxData.public;
     const dustAfter = dustBalance(await Rx.firstValueFrom(w.facade.state()));
     const entry: Record<string, unknown> = { contractAddress: String(d.contractAddress), txId: d.txId, blockHeight: d.blockHeight,
-      deployedAt: new Date().toISOString(), compiler: 'compactc 0.36.0', accessControl: 'owner-v1',
+      deployedAt: new Date().toISOString(), compiler: 'compactc 0.36.0', accessControl: 'owner-v2',
       ...(V10_CONTRACTS.has(p.name) ? { codeVersion: CODE_VERSION } : {}),
       ...(p.name === 'TravelRuleGate' ? { links: { PsavPassport: addressOf('PsavPassport'), ComplianceRegistry: addressOf('ComplianceRegistry') } } : {}),
       dustSpent: String(dustBefore - dustAfter), dustBefore: String(dustBefore), seconds: Math.round((Date.now() - t0) / 1000) };

@@ -13,11 +13,12 @@ constructor(owner_commit_: Bytes<32>) {
 }
 
 export pure circuit owner_commitment(secret: Bytes<32>): Bytes<32> {
-  return persistentHash<Bytes<32>>(secret);
+  // Domain-tagged per contract: the same secret gives a different owner_commit in each contract.
+  return persistentHash<Vector<3, Bytes<32>>>([pad(32, "dpo2u/owner/v1"), pad(32, "PaymentGateway"), secret]);
 }
 
 circuit assert_owner(): [] {
-  assert(persistentHash<Bytes<32>>(owner_secret()) == owner_commit, "Only the contract owner can do this");
+  assert(owner_commitment(owner_secret()) == owner_commit, "Only the contract owner can do this");
 }
 
 export ledger protocol_treasury: Counter;
@@ -51,12 +52,19 @@ export circuit getTotalNightDeposited(): Uint<64> {
 // layer). The NIGHT NEVER leaves the holder's custody and delegation is revocable — this
 // ledger only records the delegated capacity so LP revenue shares are auditable on-chain.
 export ledger delegated_night: Map<Bytes<32>, Uint<64>>;   // holder_id -> NIGHT delegated (STAR units)
-export ledger delegator_count: Counter;                    // distinct holders currently delegating
+export ledger delegator_count: Counter;                    // distinct holders currently delegating (amount > 0)
+
+// Active = recorded with a non-zero amount (revoke sets it to 0).
+circuit delegation_active(holder: Bytes<32>): Boolean {
+  return delegated_night.member(disclose(holder)) && delegated_night.lookup(disclose(holder)) > 0;
+}
 
 export circuit registerDustDelegation(holder: Bytes<32>, night_amount: Uint<64>): [] {
   assert_owner();
   assert(night_amount > 0 as Uint<64>, "Delegation must be greater than zero");
-  if (!delegated_night.member(disclose(holder))) {
+  // counted on first registration AND on re-registration after a revoke; an update of an active
+  // delegation does not count again
+  if (!delegation_active(holder)) {
     delegator_count.increment(1);
   }
   delegated_night.insert(disclose(holder), disclose(night_amount));
@@ -66,8 +74,9 @@ export circuit registerDustDelegation(holder: Bytes<32>, night_amount: Uint<64>)
 // capacity to zero; the holder keeps their NIGHT throughout.
 export circuit revokeDustDelegation(holder: Bytes<32>): [] {
   assert_owner();
-  assert(delegated_night.member(disclose(holder)), "No active delegation for holder");
+  assert(delegation_active(holder), "No active delegation for holder");
   delegated_night.insert(disclose(holder), disclose(0 as Uint<64>));
+  delegator_count.decrement(1);
 }
 
 export circuit getDelegatedNight(holder: Bytes<32>): Uint<64> {

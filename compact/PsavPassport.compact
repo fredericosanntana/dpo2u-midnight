@@ -76,7 +76,8 @@ constructor(owner_commit_: Bytes<32>) {
 }
 
 export pure circuit owner_commitment(secret: Bytes<32>): Bytes<32> {
-  return persistentHash<Bytes<32>>(secret);
+  // Domain-tagged per contract: the same secret gives a different owner_commit in each contract.
+  return persistentHash<Vector<3, Bytes<32>>>([pad(32, "dpo2u/owner/v1"), pad(32, "PsavPassport"), secret]);
 }
 
 // Salted, domain-separated commitment (label keeps partner/evidence/reviewer/consent apart).
@@ -85,8 +86,13 @@ export pure circuit labeled_commit(v: Bytes<32>, salt: Bytes<32>, label: Bytes<3
   return persistentCommit<Bytes<32>>(v, s);
 }
 
+// The SPSAV sponsor's public identity: domain-tagged, so it never equals an owner_commit made from the same secret.
+export pure circuit sponsor_commitment(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([pad(32, "dpo2u/psav/sponsor/v1"), secret]);
+}
+
 circuit assert_owner(): [] {
-  assert(persistentHash<Bytes<32>>(owner_secret()) == owner_commit, "Only the passport issuer can do this");
+  assert(owner_commitment(owner_secret()) == owner_commit, "Only the passport issuer can do this");
 }
 
 circuit window_seconds(t: Uint<8>): Uint<64> {
@@ -212,7 +218,7 @@ export circuit proposeSponsorship(sponsorship_id: Bytes<32>, passport_id: Bytes<
   assert(!sp_status.member(disclose(sponsorship_id)), "Sponsorship id already used");
   assert(status.member(disclose(passport_id)), "Unknown passport");
   assert(min_tier <= 3, "Unknown tier");
-  sp_sponsor.insert(disclose(sponsorship_id), disclose(persistentHash<Bytes<32>>(sponsor_secret())));
+  sp_sponsor.insert(disclose(sponsorship_id), disclose(sponsor_commitment(sponsor_secret())));
   sp_passport.insert(disclose(sponsorship_id), disclose(passport_id));
   sp_min_tier.insert(disclose(sponsorship_id), disclose(min_tier));
   sp_status.insert(disclose(sponsorship_id), disclose(1 as Uint<8>));
@@ -220,9 +226,12 @@ export circuit proposeSponsorship(sponsorship_id: Bytes<32>, passport_id: Bytes<
 
 // The partner consents by opening partner_commit (knowledge of id + salt) and binding a salted
 // consent commitment to this exact sponsorship and sponsor.
-export circuit consentSponsorship(sponsorship_id: Bytes<32>): [] {
+// expected_sponsor = sponsor_commitment of the SPSAV the partner agreed to, off chain. Without it a
+// squatter who proposed the id first would get the partner's consent for itself.
+export circuit consentSponsorship(sponsorship_id: Bytes<32>, expected_sponsor: Bytes<32>): [] {
   assert(sp_status.member(disclose(sponsorship_id)), "Unknown sponsorship");
   assert(sp_status.lookup(disclose(sponsorship_id)) == 1, "Sponsorship is not awaiting consent");
+  assert(sp_sponsor.lookup(disclose(sponsorship_id)) == expected_sponsor, "Sponsor is not the one the partner agreed to");
   const pid = sp_passport.lookup(disclose(sponsorship_id));
   const mine = labeled_commit(partner_id(), commit_salt(), pad(32, "partner"));
   assert(mine == partner_commit.lookup(pid), "Only the passport partner can consent");

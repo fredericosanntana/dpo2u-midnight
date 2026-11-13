@@ -66,6 +66,44 @@ describe('ConsentRegistry (LGPD Art. 7-8)', () => {
     assert.equal((await contract.circuits.getConsentStatus(c3, SUBJECT)).result, 1n);
   });
 
+  it('update only on an ACTIVE consent: a revoked one is not reactivated', async () => {
+    const { contract, ctx } = await setup();
+    const { context: c2 } = await contract.circuits.grantConsent(ctx, SUBJECT, 0x07n, 1n);
+    const { context: c3 } = await contract.circuits.revokeConsent(c2, SUBJECT);
+    await assert.rejects(() => contract.circuits.updateConsentPurposes(c3, SUBJECT, 0x01n, 2n), /Consent is not active/);
+    assert.equal((await contract.circuits.getConsentStatus(c3, SUBJECT)).result, 2n);
+    await assert.rejects(() => contract.circuits.updateConsentPurposes(ctx, SUBJECT, 0x01n, 2n), /No consent record found/);
+  });
+
+  it('revoke only on an ACTIVE consent: a second revoke is refused and not counted', async () => {
+    const { contract, ctx } = await setup();
+    const { context: c2 } = await contract.circuits.grantConsent(ctx, SUBJECT, 0x07n, 1n);
+    const { context: c3 } = await contract.circuits.revokeConsent(c2, SUBJECT);
+    await assert.rejects(() => contract.circuits.revokeConsent(c3, SUBJECT), /Consent is not active/);
+    assert.equal(ledger(c3.callContext.currentQueryContext.state).total_revocations, 1n);
+  });
+
+  it('re-consent after revocation goes through grantConsent (counted)', async () => {
+    const { contract, ctx } = await setup();
+    const { context: c2 } = await contract.circuits.grantConsent(ctx, SUBJECT, 0x07n, 1n);
+    const { context: c3 } = await contract.circuits.revokeConsent(c2, SUBJECT);
+    const { context: c4 } = await contract.circuits.grantConsent(c3, SUBJECT, 0x01n, 2n);
+    const L = ledger(c4.callContext.currentQueryContext.state);
+    assert.equal(L.consent_status.lookup(SUBJECT), 1n);
+    assert.equal(L.total_consents_granted, 2n);
+    assert.equal(L.total_revocations, 1n);
+  });
+
+  it('purposes bitmask: only the five defined bits, never zero', async () => {
+    const { contract, ctx } = await setup();
+    await assert.rejects(() => contract.circuits.grantConsent(ctx, SUBJECT, 0x20n, 1n), /Unknown purpose bit/);
+    await assert.rejects(() => contract.circuits.grantConsent(ctx, SUBJECT, 0x81n, 1n), /Unknown purpose bit/);
+    const { context: c2 } = await contract.circuits.grantConsent(ctx, SUBJECT, 0x1Fn, 1n);
+    await assert.rejects(() => contract.circuits.updateConsentPurposes(c2, SUBJECT, 0x40n, 2n), /Unknown purpose bit/);
+    await assert.rejects(() => contract.circuits.updateConsentPurposes(c2, SUBJECT, 0n, 2n), /Must keep at least one purpose/);
+    await assert.rejects(() => contract.circuits.updateConsentPurposes(c2, SUBJECT, 0x01n, 0n), /Policy version must be specified/);
+  });
+
   it('returns 0 status for an unknown subject', async () => {
     const { contract, ctx } = await setup();
     assert.equal((await contract.circuits.getConsentStatus(ctx, padTo32Bytes('nobody'))).result, 0n);

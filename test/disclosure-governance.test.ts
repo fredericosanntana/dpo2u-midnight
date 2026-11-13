@@ -7,7 +7,7 @@ import { randomBytes } from 'node:crypto';
 import { DisclosureGovernance, purposeHash, type DataSource } from '../src/disclosure/governance.js';
 
 const vault: DataSource = {
-  open: (t, p, f) => (t === 't1' ? { value: `${p}:${f}:fictitious`, salt: 'salt-' + f } : undefined),
+  open: (t, p, f) => (t === 't1' ? { value: `${p}:${f}:fictitious`, blinding: 'blinding-' + f } : undefined),
 };
 function mk(t0 = 1_000) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'disc-'));

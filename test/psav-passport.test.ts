@@ -223,6 +223,7 @@ describe('PsavPassport', () => {
     const s = await setup(ps);
     const SID = b32('sponsorship-1');
     const r = await issue(s, s.ctx);
+    const SPONSOR = pureCircuits.sponsor_commitment(ps.sponsorSecret);
     await assert.rejects(() => s.contract.circuits.proposeSponsorship(r.context, SID, b32('nope'), 1n), /Unknown passport/);
     const p = await s.contract.circuits.proposeSponsorship(r.context, SID, PID, 1n);
     assert.equal(L(p.context).sp_status.lookup(SID), 1n);
@@ -230,19 +231,21 @@ describe('PsavPassport', () => {
     await assert.rejects(() => s.contract.circuits.proposeSponsorship(p.context, SID, PID, 1n), /already used/);
     // a different party (wrong id/salt) cannot consent
     const wrong = s.mk(p.context.callContext.currentQueryContext.state, base({ partnerId: b32('someone-else') }));
-    await assert.rejects(() => s.contract.circuits.consentSponsorship(wrong, SID), /Only the passport partner/);
+    await assert.rejects(() => s.contract.circuits.consentSponsorship(wrong, SID, SPONSOR), /Only the passport partner/);
     const spsavAsPartner = s.mk(p.context.callContext.currentQueryContext.state, base({ partnerId: ps.sponsorSecret }));
-    await assert.rejects(() => s.contract.circuits.consentSponsorship(spsavAsPartner, SID), /Only the passport partner/);
-    // the partner consents
+    await assert.rejects(() => s.contract.circuits.consentSponsorship(spsavAsPartner, SID, SPONSOR), /Only the passport partner/);
+    // the partner consents, naming the sponsor it agreed to; another sponsor (e.g. a squatter) is refused
     const partnerView = s.mk(p.context.callContext.currentQueryContext.state, ps);
-    const c = await s.contract.circuits.consentSponsorship(partnerView, SID);
+    await assert.rejects(() => s.contract.circuits.consentSponsorship(partnerView, SID, pureCircuits.sponsor_commitment(b32('squatter'))), /Sponsor is not the one the partner agreed to/);
+    const c = await s.contract.circuits.consentSponsorship(partnerView, SID, SPONSOR);
     const l = L(c.context);
     assert.equal(l.sp_status.lookup(SID), 2n);
     assert.notDeepEqual(l.sp_consent_commit.lookup(SID), ZERO);
     assert.equal((await s.contract.circuits.isSponsorshipActive(c.context, SID)).result, true);
-    await assert.rejects(() => s.contract.circuits.consentSponsorship(c.context, SID), /not awaiting consent/);
+    await assert.rejects(() => s.contract.circuits.consentSponsorship(c.context, SID, SPONSOR), /not awaiting consent/);
     // the sponsor is a commitment, not the secret
-    assert.deepEqual(l.sp_sponsor.lookup(SID), pureCircuits.owner_commitment(ps.sponsorSecret));
+    assert.deepEqual(l.sp_sponsor.lookup(SID), pureCircuits.sponsor_commitment(ps.sponsorSecret));
+    assert.notDeepEqual(l.sp_sponsor.lookup(SID), pureCircuits.owner_commitment(ps.sponsorSecret));
     assert.ok(!String(c.context.callContext.currentQueryContext.state).includes(hex(ps.sponsorSecret)));
     // passport leaves valid -> sponsorship inactive (suspension, expiry)
     const sus = await s.contract.circuits.suspendPassport(c.context, PID);
@@ -251,13 +254,13 @@ describe('PsavPassport', () => {
     assert.equal((await s.contract.circuits.isSponsorshipActive(late, SID)).result, false);
     // min tier above the passport tier never activates
     const hi = await s.contract.circuits.proposeSponsorship(r.context, b32('sponsorship-hi'), PID, 3n);
-    const hic = await s.contract.circuits.consentSponsorship(s.mk(hi.context.callContext.currentQueryContext.state, ps), b32('sponsorship-hi'));
+    const hic = await s.contract.circuits.consentSponsorship(s.mk(hi.context.callContext.currentQueryContext.state, ps), b32('sponsorship-hi'), SPONSOR);
     assert.equal((await s.contract.circuits.isSponsorshipActive(hic.context, b32('sponsorship-hi'))).result, false);
     // a FAIL passport never sponsors
     const f = await setup(base(rules([1, 2], [2, 1])));
     const fr = await issue(f, f.ctx);
     const fp = await f.contract.circuits.proposeSponsorship(fr.context, SID, PID, 0n);
-    const fc = await f.contract.circuits.consentSponsorship(f.mk(fp.context.callContext.currentQueryContext.state, base(rules([1, 2], [2, 1]))), SID);
+    const fc = await f.contract.circuits.consentSponsorship(f.mk(fp.context.callContext.currentQueryContext.state, base(rules([1, 2], [2, 1]))), SID, pureCircuits.sponsor_commitment(base(rules([1, 2], [2, 1])).sponsorSecret));
     assert.equal((await f.contract.circuits.isSponsorshipActive(fc.context, SID)).result, false);
   });
 

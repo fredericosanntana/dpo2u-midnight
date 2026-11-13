@@ -311,6 +311,52 @@ describe('TravelRuleGate', () => {
     assert.notDeepEqual(pureCircuits.root_of(forged, cAcct, cDoc, cVasp), root);
   });
 
+  it('DISCLOSURE: the opening carries one field blinding, not the party salt; it reproduces field_commit', () => {
+    const o = base().o;
+    const bl = pureCircuits.field_blinding(o.salt, b32('name'));
+    assert.deepEqual(pureCircuits.field_commit_blinded(o.name_hash, bl), pureCircuits.field_commit(o.name_hash, o.salt, b32('name')));
+    // the name blinding does not open another field
+    assert.notDeepEqual(pureCircuits.field_commit_blinded(o.account_hash, bl), pureCircuits.field_commit(o.account_hash, o.salt, b32('account')));
+  });
+
+  // ── hardening 2026-11-13 ──
+  it('HARDENING: party salts must be non-zero and different', async () => {
+    const zero = await setup(base({ o: { ...party('orig', true), salt: ZERO } }));
+    const a = await zero.contract.circuits.attestVasp(zero.ctx, BENEF_VASP);
+    await assert.rejects(() => zero.contract.circuits.evaluateTransfer(zero.mk(st(a)), TID, POLICY), /Party salt must not be zero/);
+    const same = base();
+    same.b = { ...same.b, salt: same.o.salt };
+    const s2 = await setup(same);
+    const a2 = await s2.contract.circuits.attestVasp(s2.ctx, BENEF_VASP);
+    await assert.rejects(() => s2.contract.circuits.evaluateTransfer(s2.mk(st(a2)), TID, POLICY), /salts must differ/);
+  });
+
+  it('HARDENING: release re-checks the screening: list expired or provider revoked since the verdict -> refused', async () => {
+    const { contract, ctx, mk } = await setup(base());
+    const a = await contract.circuits.attestVasp(ctx, BENEF_VASP);
+    const r = await contract.circuits.evaluateTransfer(mk(st(a)), TID, POLICY);
+    await assert.rejects(() => contract.circuits.releaseTransfer(mk(st(r), base(), T0 + DAY), TID), /Sanctions list behind the verdict expired/);
+    const rv = await contract.circuits.revokeSanctionsProvider(mk(st(r)), PROVIDER);
+    await assert.rejects(() => contract.circuits.releaseTransfer(mk(st(rv)), TID), /Sanctions provider revoked since the verdict/);
+    const ok = await contract.circuits.releaseTransfer(mk(st(r), base(), T0 + DAY - 1), TID);
+    assert.equal(ledger(st(ok)).status.lookup(TID), 3n);
+  });
+
+  it('HARDENING: four eyes in-circuit: an approver_commit built from the OWNER secret still cannot approve', async () => {
+    const contract = new Contract<PS>(witnesses as any);
+    const cross = crossContract({ [PASSPORT]: { state: await passportState(), module: Passport }, [REGISTRY]: { state: await registryState(true), module: Registry } });
+    // the constructor check passes: different domains, so the two commitments differ
+    const { currentContractState } = await contract.initialState(createConstructorContext(base(), CPK), pureCircuits.owner_commitment(OWNER_SECRET), THRESHOLD,
+      contractRef(PASSPORT), contractRef(REGISTRY), SELF_COMPANY, pureCircuits.approver_commitment(OWNER_SECRET));
+    const mk = (state: any, p: PS = base({ approver: OWNER_SECRET })) => createCircuitContext({ circuitId: 't', contractAddress: GATE, coinPublicKeyOrZswapState: CPK, contractState: state, privateState: p, time: T0, parentBlockHash: SIM_BLOCK_HASH, crossContract: cross } as any);
+    const reg = await contract.circuits.registerSanctionsProvider(mk(currentContractState), PROVIDER, PROVIDER_KEY.pk);
+    const a = await contract.circuits.attestVasp(mk(st(reg)), BENEF_VASP);
+    const r = await contract.circuits.evaluateTransfer(mk(st(a)), TID, POLICY);
+    const G = b32('grant-1');
+    const g = await contract.circuits.grantDisclosure(mk(st(r)), G, TID, b32('supervisor:BCB'), 1n, BigInt(T0 + 3600), PURPOSE);
+    await assert.rejects(() => contract.circuits.approveDisclosure(mk(st(g)), G), /The owner key cannot approve a disclosure/);
+  });
+
   // ── signed sanctions lists (v10-signed-sanctions) ──
   it('SANCTIONS: the verdict records the signed list root, provider and valid_until', async () => {
     const { contract, ctx, mk } = await setup(base());
