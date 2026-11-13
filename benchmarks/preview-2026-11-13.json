@@ -1,0 +1,515 @@
+{
+  "kind": "attestation-benchmark",
+  "generatedAt": "2026-11-13T22:32:50.562Z",
+  "network": "preview",
+  "runs": 10,
+  "workloads": [
+    "attestCompliance",
+    "attestUseCase"
+  ],
+  "skipped": [],
+  "blocks": {
+    "first": 98846,
+    "last": 98923,
+    "note": "blocks of the first and last measured tx"
+  },
+  "versions": {
+    "contracts": {
+      "ComplianceRegistry": {
+        "compiler": "0.36.0",
+        "compilerCommit": "b5d9e4dfc532fe47011c4f6296e254f4853eb469",
+        "language": "0.28.0",
+        "runtime": "0.21.0"
+      },
+      "TravelRuleGate": {
+        "compiler": "0.36.0",
+        "compilerCommit": "b5d9e4dfc532fe47011c4f6296e254f4853eb469",
+        "language": "0.28.0",
+        "runtime": "0.21.0"
+      },
+      "PsavPassport": {
+        "compiler": "0.36.0",
+        "compilerCommit": "b5d9e4dfc532fe47011c4f6296e254f4853eb469",
+        "language": "0.28.0",
+        "runtime": "0.21.0"
+      }
+    },
+    "compactRuntime": "0.21.0",
+    "midnightJsContracts": "5.0.0",
+    "ledger": "1.0.1",
+    "node": "v22.22.0",
+    "proofServer": "9.0.1"
+  },
+  "proofServerHardware": {
+    "cpuModel": "AMD EPYC 9354P 32-Core Processor",
+    "cpuCount": 8,
+    "memGiB": 31,
+    "arch": "x64",
+    "platform": "linux 6.17.0-41-generic",
+    "source": "this host (proof server is local)"
+  },
+  "conversion": {
+    "specksPerDust": "1000000000000000",
+    "dustPerNight": 5,
+    "nightUsd": null,
+    "nightUsdSource": null,
+    "nightUsdDate": null,
+    "basis": "Declared parameters, not market data: specksPerDust and dustPerNight (DUST capacity per NIGHT held) as passed or defaulted; NIGHT price only as passed with source and date. DUST itself is not transferable and has no price."
+  },
+  "summary": {
+    "attestCompliance": {
+      "runs": 10,
+      "ok": 10,
+      "failed": 0,
+      "latency_ms": {
+        "p50": 24022,
+        "p95": 24099,
+        "min": 23052,
+        "max": 24099
+      },
+      "dust_per_tx_specks": {
+        "balance_delta_median": null,
+        "estimate_median": "579089150345943",
+        "balance_delta_samples": 0,
+        "estimate_samples": 10
+      },
+      "converted": {
+        "balance_delta_median": null,
+        "estimate_median": {
+          "specks": "579089150345943",
+          "dust": 0.579089150345943,
+          "night_held_equivalent": 0.1158178300691886,
+          "usd": null
+        }
+      }
+    },
+    "attestUseCase": {
+      "runs": 10,
+      "ok": 10,
+      "failed": 0,
+      "latency_ms": {
+        "p50": 24033,
+        "p95": 29388,
+        "min": 24010,
+        "max": 29388
+      },
+      "dust_per_tx_specks": {
+        "balance_delta_median": null,
+        "estimate_median": "609112445188842",
+        "balance_delta_samples": 0,
+        "estimate_samples": 10
+      },
+      "converted": {
+        "balance_delta_median": null,
+        "estimate_median": {
+          "specks": "609112445188842",
+          "dust": 0.609112445188842,
+          "night_held_equivalent": 0.1218224890377684,
+          "usd": null
+        }
+      }
+    }
+  },
+  "deployBaseline": {
+    "source": "deployment-preview-v9.json",
+    "network": "preview",
+    "kind": "deploy-baseline",
+    "note": "Imported as measured at deploy time (wallet DUST balance drop across each deploy; under-states the fee because DUST keeps generating). Deploy cost, not attestation cost.",
+    "contracts": {
+      "ComplianceRegistry": {
+        "dustSpent_specks": "11681764937970903",
+        "seconds": 20,
+        "blockHeight": 98175,
+        "deployedAt": "2026-11-13T21:17:21.006Z",
+        "converted": {
+          "specks": "11681764937970903",
+          "dust": 11.681764937970904,
+          "night_held_equivalent": 2.336352987594181,
+          "usd": null
+        }
+      },
+      "TravelRuleGate": {
+        "dustSpent_specks": "13836521816594403",
+        "seconds": 19,
+        "blockHeight": 98181,
+        "deployedAt": "2026-11-13T21:17:56.723Z",
+        "converted": {
+          "specks": "13836521816594403",
+          "dust": 13.836521816594404,
+          "night_held_equivalent": 2.767304363318881,
+          "usd": null
+        }
+      },
+      "PsavPassport": {
+        "dustSpent_specks": "12219609304980755",
+        "seconds": 17,
+        "blockHeight": 98178,
+        "deployedAt": "2026-11-13T21:17:38.115Z",
+        "converted": {
+          "specks": "12219609304980755",
+          "dust": 12.219609304980755,
+          "night_held_equivalent": 2.4439218609961513,
+          "usd": null
+        }
+      },
+      "ConsentRegistry": {
+        "dustSpent_specks": "9489327915343263",
+        "seconds": 17,
+        "blockHeight": 98184,
+        "deployedAt": "2026-11-13T21:18:14.123Z",
+        "converted": {
+          "specks": "9489327915343263",
+          "dust": 9.489327915343264,
+          "night_held_equivalent": 1.8978655830686528,
+          "usd": null
+        }
+      },
+      "DataSubjectRights": {
+        "dustSpent_specks": "13590276614327551",
+        "seconds": 19,
+        "blockHeight": 98187,
+        "deployedAt": "2026-11-13T21:18:32.804Z",
+        "converted": {
+          "specks": "13590276614327551",
+          "dust": 13.590276614327552,
+          "night_held_equivalent": 2.7180553228655104,
+          "usd": null
+        }
+      },
+      "DataAuditLog": {
+        "dustSpent_specks": "13161101908171790",
+        "seconds": 17,
+        "blockHeight": 98190,
+        "deployedAt": "2026-11-13T21:18:50.208Z",
+        "converted": {
+          "specks": "13161101908171790",
+          "dust": 13.16110190817179,
+          "night_held_equivalent": 2.632220381634358,
+          "usd": null
+        }
+      },
+      "SolvencyRegistry": {
+        "dustSpent_specks": "5668052761018791",
+        "seconds": 18,
+        "blockHeight": 98193,
+        "deployedAt": "2026-11-13T21:19:08.646Z",
+        "converted": {
+          "specks": "5668052761018791",
+          "dust": 5.668052761018791,
+          "night_held_equivalent": 1.1336105522037583,
+          "usd": null
+        }
+      },
+      "LgpdKitRegistry": {
+        "dustSpent_specks": "2749938711176520",
+        "seconds": 24,
+        "blockHeight": 98197,
+        "deployedAt": "2026-11-13T21:19:32.726Z",
+        "converted": {
+          "specks": "2749938711176520",
+          "dust": 2.74993871117652,
+          "night_held_equivalent": 0.549987742235304,
+          "usd": null
+        }
+      },
+      "LegalSourceManifest": {
+        "dustSpent_specks": "4775373664319545",
+        "seconds": 17,
+        "blockHeight": 98200,
+        "deployedAt": "2026-11-13T21:19:50.037Z",
+        "converted": {
+          "specks": "4775373664319545",
+          "dust": 4.775373664319545,
+          "night_held_equivalent": 0.9550747328639091,
+          "usd": null
+        }
+      },
+      "TrustStackRegistry": {
+        "dustSpent_specks": "5648352000276179",
+        "seconds": 19,
+        "blockHeight": 98203,
+        "deployedAt": "2026-11-13T21:20:08.754Z",
+        "converted": {
+          "specks": "5648352000276179",
+          "dust": 5.648352000276179,
+          "night_held_equivalent": 1.1296704000552358,
+          "usd": null
+        }
+      },
+      "AgentRegistry": {
+        "dustSpent_specks": "5263187793406867",
+        "seconds": 24,
+        "blockHeight": 98207,
+        "deployedAt": "2026-11-13T21:20:32.936Z",
+        "converted": {
+          "specks": "5263187793406867",
+          "dust": 5.263187793406867,
+          "night_held_equivalent": 1.0526375586813734,
+          "usd": null
+        }
+      },
+      "AgentWalletFactory": {
+        "dustSpent_specks": "3648590986968024",
+        "seconds": 24,
+        "blockHeight": 98211,
+        "deployedAt": "2026-11-13T21:20:56.738Z",
+        "converted": {
+          "specks": "3648590986968024",
+          "dust": 3.648590986968024,
+          "night_held_equivalent": 0.7297181973936049,
+          "usd": null
+        }
+      },
+      "ComplianceEscrow": {
+        "dustSpent_specks": "12429333818060888",
+        "seconds": 18,
+        "blockHeight": 98214,
+        "deployedAt": "2026-11-13T21:21:14.318Z",
+        "converted": {
+          "specks": "12429333818060888",
+          "dust": 12.429333818060888,
+          "night_held_equivalent": 2.4858667636121776,
+          "usd": null
+        }
+      },
+      "ComplianceEscrowV2": {
+        "dustSpent_specks": "8173633282785783",
+        "seconds": 19,
+        "blockHeight": 98217,
+        "deployedAt": "2026-11-13T21:21:32.944Z",
+        "converted": {
+          "specks": "8173633282785783",
+          "dust": 8.173633282785783,
+          "night_held_equivalent": 1.6347266565571565,
+          "usd": null
+        }
+      },
+      "PaymentGateway": {
+        "dustSpent_specks": "10222841461380526",
+        "seconds": 17,
+        "blockHeight": 98220,
+        "deployedAt": "2026-11-13T21:21:50.240Z",
+        "converted": {
+          "specks": "10222841461380526",
+          "dust": 10.222841461380526,
+          "night_held_equivalent": 2.044568292276105,
+          "usd": null
+        }
+      },
+      "FeeDistributor": {
+        "dustSpent_specks": "8698255213400321",
+        "seconds": 19,
+        "blockHeight": 98223,
+        "deployedAt": "2026-11-13T21:22:09.141Z",
+        "converted": {
+          "specks": "8698255213400321",
+          "dust": 8.698255213400321,
+          "night_held_equivalent": 1.7396510426800642,
+          "usd": null
+        }
+      }
+    }
+  },
+  "samples": [
+    {
+      "workload": "attestCompliance",
+      "i": 0,
+      "ok": true,
+      "ms": 23052,
+      "dustDelta": "-371829786821257",
+      "feeEstimate": "578875213178743",
+      "txId": "008e94eff0272c6bdcb3de8dfd2b44d65559993aee6bb92dc1921566daca16c7d5",
+      "blockHeight": 98846
+    },
+    {
+      "workload": "attestUseCase",
+      "i": 0,
+      "ok": true,
+      "ms": 24033,
+      "dustDelta": "-383041555622310",
+      "feeEstimate": "609005614216042",
+      "txId": "00cf41be4314092210dc4e72dc125c66d0386a963ab607d90e590f08da920a07e1",
+      "blockHeight": 98850
+    },
+    {
+      "workload": "attestCompliance",
+      "i": 1,
+      "ok": true,
+      "ms": 24034,
+      "dustDelta": "-412818122243434",
+      "feeEstimate": "579214707918214",
+      "txId": "00b1db624062077e9da3bb17e99cc90d2946d101ff5632c25fc60ec1bb1ec4f0b4",
+      "blockHeight": 98854
+    },
+    {
+      "workload": "attestUseCase",
+      "i": 1,
+      "ok": true,
+      "ms": 24023,
+      "dustDelta": "-382984196915492",
+      "feeEstimate": "609055803084508",
+      "txId": "004ba6d02e6b9e2476e88d9163ef648b5aa0cf70c2ccd50ba3975d94b97b5159ec",
+      "blockHeight": 98858
+    },
+    {
+      "workload": "attestCompliance",
+      "i": 2,
+      "ok": true,
+      "ms": 24022,
+      "dustDelta": "-413097745939171",
+      "feeEstimate": "578942254060829",
+      "txId": "00de5f0f8dde0bdf17be3d20283b99c37e25b405dea12096401d1d61a7debae7bf",
+      "blockHeight": 98862
+    },
+    {
+      "workload": "attestUseCase",
+      "i": 2,
+      "ok": true,
+      "ms": 24050,
+      "dustDelta": "-383034385783958",
+      "feeEstimate": "609005614216042",
+      "txId": "0013d66916ddd650d5133302bcdcaefa218bb284ef206607861eee49224ecb6104",
+      "blockHeight": 98866
+    },
+    {
+      "workload": "attestCompliance",
+      "i": 3,
+      "ok": true,
+      "ms": 24053,
+      "dustDelta": "-413022640703574",
+      "feeEstimate": "579017359296426",
+      "txId": "0026f3e955bb3291326d2159a40ca0b96b016214a0a8bd1b91ad9288c23e4b2c87",
+      "blockHeight": 98870
+    },
+    {
+      "workload": "attestUseCase",
+      "i": 3,
+      "ok": true,
+      "ms": 24010,
+      "dustDelta": "-382927554811158",
+      "feeEstimate": "609112445188842",
+      "txId": "00fb3c12e52a71165fda112597a9196132abf2e74576e47b47d68ef002bbd242c2",
+      "blockHeight": 98874
+    },
+    {
+      "workload": "attestCompliance",
+      "i": 4,
+      "ok": true,
+      "ms": 24099,
+      "dustDelta": "-412958055274807",
+      "feeEstimate": "579089150345943",
+      "txId": "0080e7c304335ae5c34b1d34224c226b13343a30fac9c351380f6e37a807eaad5a",
+      "blockHeight": 98878
+    },
+    {
+      "workload": "attestUseCase",
+      "i": 4,
+      "ok": true,
+      "ms": 24017,
+      "dustDelta": "-382927554811158",
+      "feeEstimate": "609112445188842",
+      "txId": "002aceb64d70832b45f97527b91e1e6390c948ce4547046ede2d1bbc595d231a14",
+      "blockHeight": 98882
+    },
+    {
+      "workload": "attestCompliance",
+      "i": 5,
+      "ok": true,
+      "ms": 24023,
+      "dustDelta": "-412950849654057",
+      "feeEstimate": "579081944725193",
+      "txId": "0053c8696f9691d5d62cbd46a97cbd2472865d0069151b47397902786aebe2f526",
+      "blockHeight": 98886
+    },
+    {
+      "workload": "attestUseCase",
+      "i": 5,
+      "ok": true,
+      "ms": 24038,
+      "dustDelta": "-382927554811158",
+      "feeEstimate": "609112445188842",
+      "txId": "00d250ce2ad4aba86dbed4726869ff55d19635ec592bb9f2cd12f5ef12e06fe6a2",
+      "blockHeight": 98890
+    },
+    {
+      "workload": "attestCompliance",
+      "i": 6,
+      "ok": true,
+      "ms": 24073,
+      "dustDelta": "-412950849654057",
+      "feeEstimate": "579089150345943",
+      "txId": "0036e2ce406a753bb30314aaeb44d8f4c461554b4832187c9f99b636c1aacc4a69",
+      "blockHeight": 98894
+    },
+    {
+      "workload": "attestUseCase",
+      "i": 6,
+      "ok": true,
+      "ms": 29388,
+      "dustDelta": "-630937554811158",
+      "feeEstimate": "609112445188842",
+      "txId": "0094c62588bbdb516bb5e2bdda877a6e3fbc27fd088f832338fecf71f365222f0d",
+      "blockHeight": 98899
+    },
+    {
+      "workload": "attestCompliance",
+      "i": 7,
+      "ok": true,
+      "ms": 24022,
+      "dustDelta": "-412669830444804",
+      "feeEstimate": "579370169555196",
+      "txId": "00bce1f3484185b4e5a57915c0a4544dac9e6530555efa735aa1edaf7d8c38c388",
+      "blockHeight": 98903
+    },
+    {
+      "workload": "attestUseCase",
+      "i": 7,
+      "ok": true,
+      "ms": 24028,
+      "dustDelta": "-382927554811158",
+      "feeEstimate": "609112445188842",
+      "txId": "00eedb875c1bc40440eae76048c3c1f4e7c0b9b7c352ecb1d0b412a3b7175f14d8",
+      "blockHeight": 98907
+    },
+    {
+      "workload": "attestCompliance",
+      "i": 8,
+      "ok": true,
+      "ms": 24014,
+      "dustDelta": "-412684241686304",
+      "feeEstimate": "579355758313696",
+      "txId": "00de6a0a6124243262c7139bdf7dc8b3975728729df1f5e947e2187aed0bc4b85f",
+      "blockHeight": 98911
+    },
+    {
+      "workload": "attestUseCase",
+      "i": 8,
+      "ok": true,
+      "ms": 24287,
+      "dustDelta": "-382927554811158",
+      "feeEstimate": "609112445188842",
+      "txId": "00a2e6fb3d103291d599c67013911899865bf004387441429996403a485123de4c",
+      "blockHeight": 98915
+    },
+    {
+      "workload": "attestCompliance",
+      "i": 9,
+      "ok": true,
+      "ms": 23783,
+      "dustDelta": "-412950849654057",
+      "feeEstimate": "579089150345943",
+      "txId": "00dc9467f0333e0864f4f60e8c86fc8fde37a87ca1a4ff1b90c56fdeba2dfb573c",
+      "blockHeight": 98919
+    },
+    {
+      "workload": "attestUseCase",
+      "i": 9,
+      "ok": true,
+      "ms": 24097,
+      "dustDelta": "-382927554811158",
+      "feeEstimate": "609105239568092",
+      "txId": "00ddafa7eb840d5626b1ee3831b31a0de5e6655682c5b4d971596adf4e0a697252",
+      "blockHeight": 98923
+    }
+  ]
+}

@@ -1,0 +1,414 @@
+{
+  "kind": "attestation-benchmark",
+  "generatedAt": "2026-11-13T22:44:32.182Z",
+  "network": "preview",
+  "runs": 5,
+  "workloads": [
+    "gate"
+  ],
+  "skipped": [],
+  "blocks": {
+    "first": 98982,
+    "last": 99040,
+    "note": "blocks of the first and last measured tx"
+  },
+  "versions": {
+    "contracts": {
+      "ComplianceRegistry": {
+        "compiler": "0.36.0",
+        "compilerCommit": "b5d9e4dfc532fe47011c4f6296e254f4853eb469",
+        "language": "0.28.0",
+        "runtime": "0.21.0"
+      },
+      "TravelRuleGate": {
+        "compiler": "0.36.0",
+        "compilerCommit": "b5d9e4dfc532fe47011c4f6296e254f4853eb469",
+        "language": "0.28.0",
+        "runtime": "0.21.0"
+      },
+      "PsavPassport": {
+        "compiler": "0.36.0",
+        "compilerCommit": "b5d9e4dfc532fe47011c4f6296e254f4853eb469",
+        "language": "0.28.0",
+        "runtime": "0.21.0"
+      }
+    },
+    "compactRuntime": "0.21.0",
+    "midnightJsContracts": "5.0.0",
+    "ledger": "1.0.1",
+    "node": "v22.22.0",
+    "proofServer": "9.0.1"
+  },
+  "proofServerHardware": {
+    "cpuModel": "AMD EPYC 9354P 32-Core Processor",
+    "cpuCount": 8,
+    "memGiB": 31,
+    "arch": "x64",
+    "platform": "linux 6.17.0-41-generic",
+    "source": "this host (proof server is local)"
+  },
+  "conversion": {
+    "specksPerDust": "1000000000000000",
+    "dustPerNight": 5,
+    "nightUsd": null,
+    "nightUsdSource": null,
+    "nightUsdDate": null,
+    "basis": "Declared parameters, not market data: specksPerDust and dustPerNight (DUST capacity per NIGHT held) as passed or defaulted; NIGHT price only as passed with source and date. DUST itself is not transferable and has no price."
+  },
+  "summary": {
+    "evaluateTransfer": {
+      "runs": 5,
+      "ok": 5,
+      "failed": 0,
+      "latency_ms": {
+        "p50": 54399,
+        "p95": 66726,
+        "min": 53206,
+        "max": 66726
+      },
+      "dust_per_tx_specks": {
+        "balance_delta_median": null,
+        "estimate_median": "809094690232677",
+        "balance_delta_samples": 0,
+        "estimate_samples": 5
+      },
+      "converted": {
+        "balance_delta_median": null,
+        "estimate_median": {
+          "specks": "809094690232677",
+          "dust": 0.809094690232677,
+          "night_held_equivalent": 0.1618189380465354,
+          "usd": null
+        }
+      }
+    },
+    "releaseTransfer": {
+      "runs": 5,
+      "ok": 5,
+      "failed": 0,
+      "latency_ms": {
+        "p50": 24260,
+        "p95": 24379,
+        "min": 24247,
+        "max": 24379
+      },
+      "dust_per_tx_specks": {
+        "balance_delta_median": null,
+        "estimate_median": "673213630065586",
+        "balance_delta_samples": 0,
+        "estimate_samples": 5
+      },
+      "converted": {
+        "balance_delta_median": null,
+        "estimate_median": {
+          "specks": "673213630065586",
+          "dust": 0.673213630065586,
+          "night_held_equivalent": 0.1346427260131172,
+          "usd": null
+        }
+      }
+    }
+  },
+  "deployBaseline": {
+    "source": "deployment-preview-v9.json",
+    "network": "preview",
+    "kind": "deploy-baseline",
+    "note": "Imported as measured at deploy time (wallet DUST balance drop across each deploy; under-states the fee because DUST keeps generating). Deploy cost, not attestation cost.",
+    "contracts": {
+      "ComplianceRegistry": {
+        "dustSpent_specks": "11681764937970903",
+        "seconds": 20,
+        "blockHeight": 98175,
+        "deployedAt": "2026-11-13T21:17:21.006Z",
+        "converted": {
+          "specks": "11681764937970903",
+          "dust": 11.681764937970904,
+          "night_held_equivalent": 2.336352987594181,
+          "usd": null
+        }
+      },
+      "TravelRuleGate": {
+        "dustSpent_specks": "13836521816594403",
+        "seconds": 19,
+        "blockHeight": 98181,
+        "deployedAt": "2026-11-13T21:17:56.723Z",
+        "converted": {
+          "specks": "13836521816594403",
+          "dust": 13.836521816594404,
+          "night_held_equivalent": 2.767304363318881,
+          "usd": null
+        }
+      },
+      "PsavPassport": {
+        "dustSpent_specks": "12219609304980755",
+        "seconds": 17,
+        "blockHeight": 98178,
+        "deployedAt": "2026-11-13T21:17:38.115Z",
+        "converted": {
+          "specks": "12219609304980755",
+          "dust": 12.219609304980755,
+          "night_held_equivalent": 2.4439218609961513,
+          "usd": null
+        }
+      },
+      "ConsentRegistry": {
+        "dustSpent_specks": "9489327915343263",
+        "seconds": 17,
+        "blockHeight": 98184,
+        "deployedAt": "2026-11-13T21:18:14.123Z",
+        "converted": {
+          "specks": "9489327915343263",
+          "dust": 9.489327915343264,
+          "night_held_equivalent": 1.8978655830686528,
+          "usd": null
+        }
+      },
+      "DataSubjectRights": {
+        "dustSpent_specks": "13590276614327551",
+        "seconds": 19,
+        "blockHeight": 98187,
+        "deployedAt": "2026-11-13T21:18:32.804Z",
+        "converted": {
+          "specks": "13590276614327551",
+          "dust": 13.590276614327552,
+          "night_held_equivalent": 2.7180553228655104,
+          "usd": null
+        }
+      },
+      "DataAuditLog": {
+        "dustSpent_specks": "13161101908171790",
+        "seconds": 17,
+        "blockHeight": 98190,
+        "deployedAt": "2026-11-13T21:18:50.208Z",
+        "converted": {
+          "specks": "13161101908171790",
+          "dust": 13.16110190817179,
+          "night_held_equivalent": 2.632220381634358,
+          "usd": null
+        }
+      },
+      "SolvencyRegistry": {
+        "dustSpent_specks": "5668052761018791",
+        "seconds": 18,
+        "blockHeight": 98193,
+        "deployedAt": "2026-11-13T21:19:08.646Z",
+        "converted": {
+          "specks": "5668052761018791",
+          "dust": 5.668052761018791,
+          "night_held_equivalent": 1.1336105522037583,
+          "usd": null
+        }
+      },
+      "LgpdKitRegistry": {
+        "dustSpent_specks": "2749938711176520",
+        "seconds": 24,
+        "blockHeight": 98197,
+        "deployedAt": "2026-11-13T21:19:32.726Z",
+        "converted": {
+          "specks": "2749938711176520",
+          "dust": 2.74993871117652,
+          "night_held_equivalent": 0.549987742235304,
+          "usd": null
+        }
+      },
+      "LegalSourceManifest": {
+        "dustSpent_specks": "4775373664319545",
+        "seconds": 17,
+        "blockHeight": 98200,
+        "deployedAt": "2026-11-13T21:19:50.037Z",
+        "converted": {
+          "specks": "4775373664319545",
+          "dust": 4.775373664319545,
+          "night_held_equivalent": 0.9550747328639091,
+          "usd": null
+        }
+      },
+      "TrustStackRegistry": {
+        "dustSpent_specks": "5648352000276179",
+        "seconds": 19,
+        "blockHeight": 98203,
+        "deployedAt": "2026-11-13T21:20:08.754Z",
+        "converted": {
+          "specks": "5648352000276179",
+          "dust": 5.648352000276179,
+          "night_held_equivalent": 1.1296704000552358,
+          "usd": null
+        }
+      },
+      "AgentRegistry": {
+        "dustSpent_specks": "5263187793406867",
+        "seconds": 24,
+        "blockHeight": 98207,
+        "deployedAt": "2026-11-13T21:20:32.936Z",
+        "converted": {
+          "specks": "5263187793406867",
+          "dust": 5.263187793406867,
+          "night_held_equivalent": 1.0526375586813734,
+          "usd": null
+        }
+      },
+      "AgentWalletFactory": {
+        "dustSpent_specks": "3648590986968024",
+        "seconds": 24,
+        "blockHeight": 98211,
+        "deployedAt": "2026-11-13T21:20:56.738Z",
+        "converted": {
+          "specks": "3648590986968024",
+          "dust": 3.648590986968024,
+          "night_held_equivalent": 0.7297181973936049,
+          "usd": null
+        }
+      },
+      "ComplianceEscrow": {
+        "dustSpent_specks": "12429333818060888",
+        "seconds": 18,
+        "blockHeight": 98214,
+        "deployedAt": "2026-11-13T21:21:14.318Z",
+        "converted": {
+          "specks": "12429333818060888",
+          "dust": 12.429333818060888,
+          "night_held_equivalent": 2.4858667636121776,
+          "usd": null
+        }
+      },
+      "ComplianceEscrowV2": {
+        "dustSpent_specks": "8173633282785783",
+        "seconds": 19,
+        "blockHeight": 98217,
+        "deployedAt": "2026-11-13T21:21:32.944Z",
+        "converted": {
+          "specks": "8173633282785783",
+          "dust": 8.173633282785783,
+          "night_held_equivalent": 1.6347266565571565,
+          "usd": null
+        }
+      },
+      "PaymentGateway": {
+        "dustSpent_specks": "10222841461380526",
+        "seconds": 17,
+        "blockHeight": 98220,
+        "deployedAt": "2026-11-13T21:21:50.240Z",
+        "converted": {
+          "specks": "10222841461380526",
+          "dust": 10.222841461380526,
+          "night_held_equivalent": 2.044568292276105,
+          "usd": null
+        }
+      },
+      "FeeDistributor": {
+        "dustSpent_specks": "8698255213400321",
+        "seconds": 19,
+        "blockHeight": 98223,
+        "deployedAt": "2026-11-13T21:22:09.141Z",
+        "converted": {
+          "specks": "8698255213400321",
+          "dust": 8.698255213400321,
+          "night_held_equivalent": 1.7396510426800642,
+          "usd": null
+        }
+      }
+    }
+  },
+  "samples": [
+    {
+      "workload": "evaluateTransfer",
+      "i": 0,
+      "ok": true,
+      "ms": 66726,
+      "dustDelta": "-1540521654060033",
+      "feeEstimate": "1228923345939967",
+      "txId": "00c1cc38ad60bbae3eed3b7ebacfdc6c01c1ce31cefb4d5bde6509daeb66c9de4a",
+      "blockHeight": 98982
+    },
+    {
+      "workload": "releaseTransfer",
+      "i": 0,
+      "ok": true,
+      "ms": 24247,
+      "dustDelta": "-333437224490472",
+      "feeEstimate": "658602775509528",
+      "txId": "00cf9abc44405e64dd335f202680c6f3c67f251f90c00cf990bad467030ef523ea",
+      "blockHeight": 98986
+    },
+    {
+      "workload": "evaluateTransfer",
+      "i": 1,
+      "ok": true,
+      "ms": 65272,
+      "dustDelta": "-1933696269979964",
+      "feeEstimate": "794413730020036",
+      "txId": "00ce656dfdf5c256911220581832098885467ed29a507873d8c6971308da9f9d31",
+      "blockHeight": 98997
+    },
+    {
+      "workload": "releaseTransfer",
+      "i": 1,
+      "ok": true,
+      "ms": 24379,
+      "dustDelta": "-326412617943653",
+      "feeEstimate": "665627382056347",
+      "txId": "00a558bf457648598a51c6013af5ef5260ca7c1bf6666542d48eeaddc6e2811f91",
+      "blockHeight": 99001
+    },
+    {
+      "workload": "evaluateTransfer",
+      "i": 2,
+      "ok": true,
+      "ms": 54399,
+      "dustDelta": "-1430550014969911",
+      "feeEstimate": "801539985030089",
+      "txId": "0043c4ae41c7154713be1f757b6c1c4ab12e54abe64b4ebe8bb82b8a95e14843bc",
+      "blockHeight": 99010
+    },
+    {
+      "workload": "releaseTransfer",
+      "i": 2,
+      "ok": true,
+      "ms": 24247,
+      "dustDelta": "-360161369934414",
+      "feeEstimate": "673213630065586",
+      "txId": "00052f500d820b8523ee1c010ae398eb7105acd9fa7567da40b01509fcc0b1bcdb",
+      "blockHeight": 99014
+    },
+    {
+      "workload": "evaluateTransfer",
+      "i": 3,
+      "ok": true,
+      "ms": 53206,
+      "dustDelta": "-1381660309767323",
+      "feeEstimate": "809094690232677",
+      "txId": "003da02ab9a1fce598600ba8bdfe515022be8784b6a0067bbbc459259233d60f59",
+      "blockHeight": 99023
+    },
+    {
+      "workload": "releaseTransfer",
+      "i": 3,
+      "ok": true,
+      "ms": 24261,
+      "dustDelta": "-311415761104527",
+      "feeEstimate": "680631400599540",
+      "txId": "00969bdfd3ccc4a742b34d880c37ee665fd52131a118a1b4d503319e19115b9a6d",
+      "blockHeight": 99027
+    },
+    {
+      "workload": "evaluateTransfer",
+      "i": 4,
+      "ok": true,
+      "ms": 53210,
+      "dustDelta": "-1374723394111516",
+      "feeEstimate": "816031605888484",
+      "txId": "0011825febc4ade72890eb2969117ce7b4b340ba750c398e46670e042a177bd836",
+      "blockHeight": 99036
+    },
+    {
+      "workload": "releaseTransfer",
+      "i": 4,
+      "ok": true,
+      "ms": 24260,
+      "dustDelta": "-345016620570901",
+      "feeEstimate": "688358379429099",
+      "txId": "003457ef2a3e0f2e83e3492c0ed91617bb0af57c7f118382eb1a36bad815c5b807",
+      "blockHeight": 99040
+    }
+  ]
+}
