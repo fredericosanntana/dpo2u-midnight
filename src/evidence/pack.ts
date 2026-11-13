@@ -4,11 +4,16 @@
  * disclosure-log.verification.json. Every file is listed in the manifest with its sha256 and
  * the manifest carries a pack root hash over (path, sha256) pairs.
  * Only FICTITIOUS VASPs are accepted in this version: the name must carry "(fictitious)".
+ * With `dueDiligence` the pack also carries due-diligence/ (src/evidence/due-diligence.ts):
+ * architecture, circuit spec generated from the code, data flow, disclosure governance, access
+ * model, exceptions, key management, change record and a CCO checklist whose every item points at
+ * files of the pack; verifyPack then also checks that each referenced file is in the manifest.
  */
 import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { DisclosureGovernance } from '../disclosure/governance.js';
+import { DisclosureGovernance, type LogEntry } from '../disclosure/governance.js';
+import { writeDueDiligence, DD_DIR } from './due-diligence.js';
 
 export const PACK_SCHEMA = 'dpo2u.evidence-pack/1';
 export const PACK_VERSION = '1.0.0';
@@ -34,6 +39,7 @@ export interface PackInput {
   disclosureLogPath: string;
   generatedAt: string;           // ISO
   generator?: { repo_commit?: string };
+  dueDiligence?: { repoRoot: string; governanceDoc?: string };
 }
 
 const sha256File = (p: string) => createHash('sha256').update(fs.readFileSync(p)).digest('hex');
@@ -59,7 +65,8 @@ export function buildPack(i: PackInput) {
 - Generated at: ${i.generatedAt}
 - Attestations: ${i.attestations.length} (${onchain} anchored on-chain, ${i.attestations.length - onchain} from the local contract simulator, labelled per entry in \`source\`)
 - Disclosure log: ${ver.entries} entries, hash-chained, head \`${ver.head}\`
-
+${i.dueDiligence ? `- Due diligence: \`${DD_DIR}/\` (start at \`${DD_DIR}/cco-checklist.md\`)
+` : ''}
 ## Files
 | File | What it is |
 |---|---|
@@ -82,6 +89,13 @@ Recomputes every file hash, the pack root hash, and the disclosure-log chain. An
   fs.writeFileSync(path.join(i.outDir, 'README.md'), readme);
 
   const names = ['attestations.json', 'disclosure-log.jsonl', 'disclosure-log.verification.json', 'README.md'];
+  if (i.dueDiligence) {
+    const entries: LogEntry[] = fs.readFileSync(i.disclosureLogPath, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    names.push(...writeDueDiligence(i.outDir, {
+      repoRoot: i.dueDiligence.repoRoot, governanceDoc: i.dueDiligence.governanceDoc, logEntries: entries,
+      policyHashes: i.attestations.map((a) => a.policy_hash).filter((x): x is string => !!x), generatedAt: i.generatedAt, commit: i.generator?.repo_commit,
+    }));
+  }
   const files = names.map((n) => ({ path: n, sha256: sha256File(path.join(i.outDir, n)), bytes: fs.statSync(path.join(i.outDir, n)).size }));
   const manifest = {
     schema: PACK_SCHEMA,
@@ -91,6 +105,7 @@ Recomputes every file hash, the pack root hash, and the disclosure-log chain. An
     attestation_count: i.attestations.length,
     attestations_onchain: onchain,
     disclosure_log: { entries: ver.entries, head: ver.head, chain_verified: true },
+    ...(i.dueDiligence ? { due_diligence: { dir: DD_DIR, checklist: `${DD_DIR}/cco-checklist.json` } } : {}),
     generator: i.generator ?? {},
     files,
     pack_root: rootOf(files),
@@ -110,6 +125,15 @@ export function verifyPack(dir: string): { ok: boolean; errors: string[] } {
     if (sha256File(p) !== f.sha256) errors.push('hash mismatch ' + f.path);
   }
   if (rootOf(m.files) !== m.pack_root) errors.push('pack_root mismatch');
+  if (m.due_diligence) {
+    // Every checklist item must point at files that are in the manifest (so their hashes were checked above).
+    const listed = new Set<string>([...m.files.map((f: any) => f.path), 'manifest.json']);
+    const cl = path.join(dir, m.due_diligence.checklist);
+    if (!listed.has(m.due_diligence.checklist) || !fs.existsSync(cl)) errors.push('CCO checklist missing from the manifest');
+    else for (const item of JSON.parse(fs.readFileSync(cl, 'utf8'))) {
+      for (const a of item.artifacts) if (!listed.has(a)) errors.push(`checklist item ${item.id}: artifact ${a} not in the manifest`);
+    }
+  }
   const log = DisclosureGovernance.verifyLog(path.join(dir, 'disclosure-log.jsonl'));
   if (!log.ok) errors.push('disclosure log chain: ' + log.error);
   else if (log.head !== m.disclosure_log.head) errors.push('disclosure log head differs from manifest');

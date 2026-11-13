@@ -1,10 +1,14 @@
 /**
- * npx tsx scripts/evidence-pack.ts build  <outDir> [--log <access-log.jsonl>] [--attestations <json>]
+ * npx tsx scripts/evidence-pack.ts build  <outDir> --log <access-log.jsonl> --attestations <json> [--no-due-diligence]
+ *   (due diligence on by default: due-diligence/ from this repo's compact/, build/ keys and docs/DISCLOSURE-GOVERNANCE.md;
+ *    needs bash scripts/compile.sh for the verifier key hashes)
  * npx tsx scripts/evidence-pack.ts verify <packDir>
  * Real VASPs are refused: the name is fixed to "Example VASP Ltda (fictitious)".
  */
 import * as fs from 'node:fs';
 import { execSync } from 'node:child_process';
+import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { buildPack, verifyPack } from '../src/evidence/pack.js';
 
 const [cmd, dir, ...rest] = process.argv.slice(2);
@@ -22,6 +26,7 @@ if (cmd === 'verify') {
   const m = buildPack({
     outDir: dir, vaspName: 'Example VASP Ltda (fictitious)', attestations: JSON.parse(fs.readFileSync(att, 'utf8')),
     disclosureLogPath: log, generatedAt: new Date().toISOString(), generator: { repo_commit: commit },
+    ...(rest.includes('--no-due-diligence') ? {} : { dueDiligence: { repoRoot: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..') } }),
   });
   console.log(JSON.stringify({ out: dir, pack_root: m.pack_root, files: m.files.length }));
 } else {
