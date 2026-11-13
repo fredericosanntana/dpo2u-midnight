@@ -5,11 +5,7 @@
  * The private state is { ownerSecret }, so a test can switch caller with asStranger(ctx).
  * Runtime-specific calls (compact-runtime 0.21 / compactc 0.36) live only in this file.
  */
-import { readdirSync, readFileSync } from 'node:fs';
-import {
-  createCircuitContext, createConstructorContext, dummyContractAddress,
-  ContractOperation, ContractState, encodeContractAddress,
-} from '@midnight-ntwrk/compact-runtime';
+import { createCircuitContext, createConstructorContext, dummyContractAddress } from '@midnight-ntwrk/compact-runtime';
 
 export type OwnerPS = { ownerSecret: Uint8Array; scoreSalt?: Uint8Array };
 
@@ -95,34 +91,5 @@ export function publicStateHex(state: any): string {
   return out.join('|');
 }
 
-// ── Cross-contract calls in the simulator (compact-runtime 0.21) ──
-// A callee must look deployed: a ContractState whose operations carry the verifier keys from
-// build/<name>/keys, served by a stateProvider, plus a moduleProvider mapping its address to the
-// generated module. contract-typed constructor args take { bytes: encodeContractAddress(addr) }.
-
-/** A distinct, non-default 32-byte contract address (hex) for the simulator. */
-export const simAddress = (n: number): string => n.toString(16).padStart(64, '0');
-/** The value a contract-typed constructor argument / ledger field takes. */
-export const contractRef = (addr: string) => ({ bytes: encodeContractAddress(addr) });
-
-/** Ledger state `data` (ChargedState from a circuit result) wrapped as a deployed ContractState with real verifier keys. */
-export function asDeployed(initial: ContractState, data: any, buildName: string): ContractState {
-  const cs = new ContractState();
-  cs.data = data ?? initial.data;
-  const dir = new URL(`../build/${buildName}/keys/`, import.meta.url);
-  for (const f of readdirSync(dir).filter((x) => x.endsWith('.verifier'))) {
-    const op = new ContractOperation();
-    op.verifierKey = new Uint8Array(readFileSync(new URL(f, dir)));
-    cs.setOperation(f.replace(/\.verifier$/, ''), op);
-  }
-  return cs;
-}
-
-/** CircuitContextOptions.crossContract for callees { address: { state, module } }. */
-export function crossContract(callees: Record<string, { state: ContractState; module: any }>) {
-  return {
-    stateProvider: { getContractState: async (_h: string, a: string) => callees[a]?.state },
-    moduleProvider: { resolve: (a: string) => (callees[a] ? async () => callees[a].module : undefined) },
-  };
-}
-export const SIM_BLOCK_HASH = '00'.repeat(32);
+// Cross-contract simulator plumbing lives in scripts/lib (shared with scripts/demo-travel-rule.ts).
+export { simAddress, contractRef, asDeployed, crossContract, SIM_BLOCK_HASH } from '../scripts/lib/sim-cross-contract.js';
