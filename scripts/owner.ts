@@ -2,23 +2,28 @@
  * Owner key for the access-controlled DPO2U contracts.
  *
  * Every contract in compact/ gates its state-changing circuits with
- *   assert(persistentHash(owner_secret()) == owner_commit)
+ *   assert(owner_commitment(owner_secret()) == owner_commit)
  * where owner_secret is a private witness and owner_commit is fixed at deploy time.
+ * owner_commitment is domain-tagged per contract (persistentHash of ["dpo2u/owner/v1", <contract
+ * name>, secret]), so one secret gives a different owner_commit in each contract. Always compute it
+ * with the contract's own pure circuit (ownerCommit below), never with a generic hash.
  *
  * Secret source, in order:
- *   1. DPO2U_OWNER_SECRET: 32-byte hex. Use this on mainnet, kept apart from the wallet seed.
- *   2. Derived from the wallet seed: sha256("dpo2u/owner/v1" || seed). Fine for testnets.
+ *   1. DPO2U_OWNER_SECRET: 32-byte hex, kept apart from the wallet seed. REQUIRED on mainnet.
+ *   2. Testnets only: derived from the wallet seed, sha256("dpo2u/owner/v1" || seed).
  * The secret is never printed or written to disk.
  * Also: the ComplianceRegistry score salt and the TravelRuleGate disclosure approver key (below).
  */
 import { createHash } from 'node:crypto';
 
-export function ownerSecret(seedHex?: string): Uint8Array {
+/** network defaults to MIDNIGHT_NETWORK (the same default as networkConfig). Mainnet never derives from the seed. */
+export function ownerSecret(seedHex?: string, network: string = process.env.MIDNIGHT_NETWORK ?? 'preview'): Uint8Array {
   const explicit = (process.env.DPO2U_OWNER_SECRET ?? '').trim();
   if (explicit) {
     if (!/^[0-9a-fA-F]{64}$/.test(explicit)) throw new Error('DPO2U_OWNER_SECRET must be 32 bytes of hex');
     return new Uint8Array(Buffer.from(explicit, 'hex'));
   }
+  if (network === 'mainnet') throw new Error('Mainnet needs DPO2U_OWNER_SECRET (32 bytes of hex, kept apart from the wallet seed): the owner secret is never derived from the seed on mainnet');
   const seed = (seedHex ?? process.env.MIDNIGHT_SEED ?? '').trim();
   if (!/^[0-9a-fA-F]+$/.test(seed)) throw new Error('Set DPO2U_OWNER_SECRET or MIDNIGHT_SEED to derive the contract owner secret');
   return new Uint8Array(createHash('sha256').update('dpo2u/owner/v1').update(Buffer.from(seed, 'hex')).digest());

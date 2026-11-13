@@ -117,13 +117,18 @@ const logPath = path.join(work, 'disclosure', 'access-log.jsonl');
 const gov = new DisclosureGovernance(randomBytes(32), logPath, () => clock.t);
 const T = hex(ids.pass);
 const fieldMap: Record<string, Uint8Array> = { name: t1.o.name_hash, account: t1.o.account_hash, document: t1.o.doc_hash, vasp: t1.o.vasp_id };
-const vault: DataSource = { open: (t, p, f) => (t === T && p === 'originator' ? { value: hex(fieldMap[f]), salt: hex(t1.o.salt) } : undefined) };
+// The vault hands out one field's value + blinding (field_blinding), never the party salt.
+const vault: DataSource = { open: (t, p, f) => (t === T && p === 'originator' ? { value: hex(fieldMap[f]), blinding: hex(pureCircuits.field_blinding(t1.o.salt, b32(f))) } : undefined) };
 const tok = gov.issue({ grant_id: 'g-BCB-001', supervisor: 'BCB (fictitious demo)', legal_basis: 'Fictitious supervisory inquiry 0001/2026', transfer_ids: [T], parties: ['originator'], scope: 1, expires_at: clock.t + 600 });
 const show = (label: string, r: any) => console.log(`[2] ${label}: ${r.ok ? 'GRANTED fields=' + Object.keys(r.fields).join(',') : 'DENIED ' + r.reason}`);
 show('BCB reads originator.name', gov.access(tok, { transfer_id: T, party: 'originator', fields: ['name'] }, vault));
 show('BCB reads originator.document (out of scope)', gov.access(tok, { transfer_id: T, party: 'originator', fields: ['document'] }, vault));
-// supervisor verifies opened name against the on-chain root
-const cs = (['name', 'account', 'document', 'vasp'] as Field[]).map((f) => pureCircuits.field_commit(fieldMap[f], t1.o.salt, b32(f)));
+// supervisor verifies the opened name against the on-chain root: name from its opening, the other
+// three from the commitments the VASP sends with it (they open nothing)
+const nameOpen: any = gov.access(tok, { transfer_id: T, party: 'originator', fields: ['name'] }, vault);
+const cs = (['name', 'account', 'document', 'vasp'] as Field[]).map((f) => f === 'name'
+  ? pureCircuits.field_commit_blinded(Buffer.from(nameOpen.fields.name.value, 'hex'), Buffer.from(nameOpen.fields.name.blinding, 'hex'))
+  : pureCircuits.field_commit(fieldMap[f], t1.o.salt, b32(f)));
 console.log(`[2] supervisor recomputes originator root from opening: matches on-chain = ${hex(pureCircuits.root_of(cs[0], cs[1], cs[2], cs[3])) === hex(L.originator_root.lookup(ids.pass))}`);
 clock.t += 601;
 show('BCB after expiry (+601s)', gov.access(tok, { transfer_id: T, party: 'originator', fields: ['name'] }, vault));

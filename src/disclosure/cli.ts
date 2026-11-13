@@ -72,7 +72,7 @@ if (cmd === 'init') {
     gov.revoke(v.grant!, v.reason ?? 'unspecified');
     console.log('revoked ' + v.grant);
   } else if (cmd === 'access') {
-    const vault = JSON.parse(fs.readFileSync(v.vault!, 'utf8')) as Record<string, Record<string, Record<string, { value: string; salt: string }>>>;
+    const vault = JSON.parse(fs.readFileSync(v.vault!, 'utf8')) as Record<string, Record<string, Record<string, { value: string; blinding: string }>>>;
     const src: DataSource = { open: (t, p, f) => vault[t]?.[p]?.[f] };
     const r = gov.access(v.token!, { transfer_id: v.transfer!, party: v.party as Party, fields: list(v.fields) as Field[] }, src);
     console.log(JSON.stringify(r));

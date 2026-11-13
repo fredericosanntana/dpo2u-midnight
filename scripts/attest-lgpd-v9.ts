@@ -219,7 +219,7 @@ async function main() {
 
   const out = fs.existsSync(OUT) ? JSON.parse(fs.readFileSync(OUT, 'utf8')) : { network: NET.name, attestations: [] };
   // Only reuse a recorded contract deployed with access control; the older owner-less one cannot be called with this build.
-  const recorded = out.complianceRegistry?.accessControl === 'owner-v1' ? out.complianceRegistry.contractAddress : undefined;
+  const recorded = out.complianceRegistry?.accessControl === 'owner-v2' ? out.complianceRegistry.contractAddress : undefined;
   let contractAddress: string | undefined = process.env.COMPLIANCE_REGISTRY_ADDRESS ?? recorded;
   let c: any;
   if (!contractAddress) {
@@ -228,7 +228,7 @@ async function main() {
     c = await (deployContract as any)(providers, { compiledContract: compiled, privateStateId: 'ComplianceRegistryPS', initialPrivateState: {}, args: [ownerCommit(ComplianceRegistry, ownerSecret(seed))] });
     const d = c.deployTxData.public;
     contractAddress = String(d.contractAddress);
-    out.complianceRegistry = { contractAddress, deployTxId: d.txId, blockHeight: d.blockHeight, deployedAt: new Date().toISOString(), compiler: 'compactc 0.36.0', ledger: 'v9', accessControl: 'owner-v1' };
+    out.complianceRegistry = { contractAddress, deployTxId: d.txId, blockHeight: d.blockHeight, deployedAt: new Date().toISOString(), compiler: 'compactc 0.36.0', ledger: 'v9', accessControl: 'owner-v2' };
     fs.writeFileSync(OUT, JSON.stringify(out, null, 2));
     log(`  ComplianceRegistry ${contractAddress} tx ${d.txId} bloco ${d.blockHeight}`);
   } else {

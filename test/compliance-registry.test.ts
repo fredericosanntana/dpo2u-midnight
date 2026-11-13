@@ -129,6 +129,21 @@ describe('ComplianceRegistry (score-private / proof-public)', () => {
     assert.equal(ledger(context.callContext.currentQueryContext.state).usecase_attestation_count, 1n);
   });
 
+  it('attestUseCase refuses a second verdict on the same evidence_hash (no flip, no count inflation)', async () => {
+    const { contract, ctx } = await setup();
+    const evh = padTo32Bytes('evidence-hash-dup');
+    const { context } = await contract.circuits.attestUseCase(ctx, padTo32Bytes('uc'), 0n, evh, padTo32Bytes('m'));
+    await assert.rejects(() => contract.circuits.attestUseCase(context, padTo32Bytes('uc'), 1n, evh, padTo32Bytes('m')), /already attested for this evidence hash/);
+    assert.equal((await contract.circuits.getUseCaseVerdict(context, evh)).result, 0n);
+    assert.equal(ledger(context.callContext.currentQueryContext.state).usecase_attestation_count, 1n);
+  });
+
+  it('getters return a sentinel for unknown ids instead of reverting', async () => {
+    const { contract, ctx } = await setup();
+    assert.equal((await contract.circuits.getUseCaseVerdict(ctx, padTo32Bytes('unknown'))).result, 255n);
+    assert.equal((await contract.circuits.getAttestationThreshold(ctx, padTo32Bytes('unknown'))).result, 0n);
+  });
+
   it('attestUseCase rejects verdict > 2', async () => {
     const { contract, ctx } = await setup();
     await assert.rejects(

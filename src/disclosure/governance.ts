@@ -50,13 +50,19 @@ export interface LogEntry {
   hash: string;
 }
 
-/** Where the shielded records live (the VASP vault). Returns the opening of one field. */
+/**
+ * Where the shielded records live (the VASP vault). Returns the opening of ONE field: its value and
+ * that field's blinding (TravelRuleGate.field_blinding(party salt, label)), never the party salt,
+ * which would let the reader derive the blindings of the fields outside the grant's scope.
+ * The supervisor checks it with TravelRuleGate.field_commit_blinded(value, blinding).
+ */
+export interface FieldOpening { value: string; blinding: string }
 export interface DataSource {
-  open(transferId: string, party: Party, field: Field): { value: string; salt: string } | undefined;
+  open(transferId: string, party: Party, field: Field): FieldOpening | undefined;
 }
 
 export type AccessResult =
-  | { ok: true; fields: Record<string, { value: string; salt: string }> }
+  | { ok: true; fields: Record<string, FieldOpening> }
   | { ok: false; reason: string };
 
 const GENESIS = '0'.repeat(64);
@@ -182,11 +188,12 @@ export class DisclosureGovernance {
     if (!req.fields.length) return deny('no_fields_requested');
     const outside = req.fields.filter((f) => !(claims.scope & FIELD_BITS[f]));
     if (outside.length) return deny('field_out_of_scope:' + outside.join(','));
-    const out: Record<string, { value: string; salt: string }> = {};
+    const out: Record<string, FieldOpening> = {};
     for (const f of req.fields) {
       const o = src.open(req.transfer_id, req.party, f);
       if (!o) return deny('not_found');
-      out[f] = o;
+      if (typeof o.blinding !== 'string' || !o.blinding) return deny('opening_without_blinding');
+      out[f] = { value: o.value, blinding: o.blinding }; // only these two keys leave the vault
     }
     this.append('ACCESS_GRANTED', claims.grant_id, claims.supervisor, { request: req, legal_basis: claims.legal_basis });
     return { ok: true, fields: out };

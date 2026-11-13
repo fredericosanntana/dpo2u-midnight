@@ -200,7 +200,7 @@ async function main() {
     const c: any = await (deployContract as any)(p, { compiledContract: await compiled(), privateStateId: 'ComplianceRegistryPrivateState', initialPrivateState: {}, args: [commit] });
     const d = c.deployTxData.public;
     const out = { network: 'preview', ledger: 'v9', deployedAt: new Date().toISOString(),
-      contracts: [{ name: 'ComplianceRegistry', contractAddress: d.contractAddress, blockHeight: d.blockHeight, txId: d.txId, accessControl: 'owner-v1' }] };
+      contracts: [{ name: 'ComplianceRegistry', contractAddress: d.contractAddress, blockHeight: d.blockHeight, txId: d.txId, accessControl: 'owner-v2' }] };
     fs.writeFileSync(OUT, JSON.stringify(out, null, 2) + '\n');
     console.log('DEPLOY_RESULT ' + JSON.stringify(out.contracts[0]));
   } else if (cmd === 'attest') {

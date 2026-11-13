@@ -152,7 +152,7 @@ async function main() {
   if (values.plan) { console.log(JSON.stringify({ plan: p }, null, 2)); return; }
 
   const approverSecret = cmd !== 'approve' ? undefined
-    : values['as-owner'] ? ownerSecret(masterSeedHex())
+    : values['as-owner'] ? ownerSecret(masterSeedHex(), net.name)
     : resolveApproverSecret(net.name, { env: process.env.DPO2U_APPROVER_SECRET, stdin: values['approver-secret-stdin'] ? await readStdin() : undefined });
   const w = await openWallet(net);
   try {
@@ -183,7 +183,7 @@ async function main() {
       return;
     }
 
-    const owner = cmd === 'approve' ? undefined : ownerSecret(masterSeedHex());
+    const owner = cmd === 'approve' ? undefined : ownerSecret(masterSeedHex(), net.name);
     if (approverSecret) {
       try { checkApproverAgainstLedger(Gate, approverSecret, L0); }
       catch (e: any) { console.log(JSON.stringify({ ok: false, command: cmd, circuit: p.circuit, error: e.message })); process.exitCode = 2; return; }

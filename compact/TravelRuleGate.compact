@@ -1,4 +1,4 @@
-pragma language_version >= 0.21.0;
+pragma language_version >= 0.28.0;  // JubjubSchnorr, contract-typed ledger fields (compactc 0.36)
 import CompactStandardLibrary;
 
 // TravelRuleGate — FATF R.16 / BCB (Res. 521) Travel Rule gate for a VASP, on Midnight.
@@ -127,13 +127,14 @@ constructor(
   approver_commit = disclose(approver_commit_);
 }
 
-// owner_commit = persistentHash(owner_secret) (computed off-chain by the VASP).
+// owner_commit = owner_commitment(owner_secret) (computed off-chain by the VASP with this pure circuit).
 export pure circuit owner_commitment(secret: Bytes<32>): Bytes<32> {
-  return persistentHash<Bytes<32>>(secret);
+  // Domain-tagged per contract: the same secret gives a different owner_commit in each contract.
+  return persistentHash<Vector<3, Bytes<32>>>([pad(32, "dpo2u/owner/v1"), pad(32, "TravelRuleGate"), secret]);
 }
 
 circuit assert_owner(): [] {
-  assert(persistentHash<Bytes<32>>(owner_secret()) == owner_commit, "Only the VASP owner can do this");
+  assert(owner_commitment(owner_secret()) == owner_commit, "Only the VASP owner can do this");
 }
 
 // approver_commit = approver_commitment(approver_secret), a key held apart from the owner's.
@@ -146,9 +147,19 @@ circuit assert_approver(): [] {
 }
 
 // Salted commitment of ONE field. label separates the fields so each opens independently.
+// To open one field, the VASP hands over the value and that field's BLINDING (field_blinding), never
+// the party salt: with the party salt a supervisor could derive every other field's blinding and test
+// guesses against the other commitments. field_commit_blinded is what the supervisor recomputes.
+export pure circuit field_blinding(salt: Bytes<32>, label: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([salt, label]);
+}
+
+export pure circuit field_commit_blinded(v: Bytes<32>, blinding: Bytes<32>): Bytes<32> {
+  return persistentCommit<Bytes<32>>(v, blinding);
+}
+
 export pure circuit field_commit(v: Bytes<32>, salt: Bytes<32>, label: Bytes<32>): Bytes<32> {
-  const s = persistentHash<Vector<2, Bytes<32>>>([salt, label]);
-  return persistentCommit<Bytes<32>>(v, s);
+  return field_commit_blinded(v, field_blinding(salt, label));
 }
 
 // Root over the four field commitments (verifier recomputes it from 1 opening + 3 commitments).
@@ -208,6 +219,9 @@ export circuit evaluateTransfer(transfer_id: Bytes<32>, policy_hash: Bytes<32>):
   const b = beneficiary_data();
   const amt = transfer_amount();
   const zero = default<Bytes<32>>;
+  // A zero or shared party salt would make the roots guessable or link the two parties.
+  assert(o.salt != zero && b.salt != zero, "Party salt must not be zero");
+  assert(o.salt != b.salt, "Originator and beneficiary salts must differ");
 
   const complete = o.name_hash != zero && o.account_hash != zero
                 && b.name_hash != zero && b.account_hash != zero;
@@ -239,6 +253,9 @@ export circuit releaseTransfer(transfer_id: Bytes<32>): [] {
   assert_owner();
   assert(status.member(disclose(transfer_id)), "Transfer not evaluated");
   assert(status.lookup(disclose(transfer_id)) == 1, "Travel Rule not satisfied: transfer cannot be released");
+  // The screening behind the PASS must still stand at release time (time-of-check / time-of-use).
+  assert(blockTimeLt(verdict_sanctions_valid_until.lookup(disclose(transfer_id))), "Sanctions list behind the verdict expired: evaluate again");
+  assert(!sanctions_provider_revoked.member(verdict_sanctions_provider.lookup(disclose(transfer_id))), "Sanctions provider revoked since the verdict: evaluate again");
   assert(registry.hasAttestation(self_company_id) == 1, "VASP has no compliance attestation in the registry");
   status.insert(disclose(transfer_id), disclose(3 as Uint<8>));
   total_released.increment(1);
@@ -265,6 +282,10 @@ export circuit grantDisclosure(
 // Second key: the approver (not the owner) activates a requested grant.
 export circuit approveDisclosure(grant_id: Bytes<32>): [] {
   assert_approver();
+  // Four eyes, in-circuit: the constructor's approver_commit != owner_commit cannot catch the owner
+  // registering approver_commitment(owner_secret) (different domains), so the approver's secret must
+  // not open the owner commitment.
+  assert(owner_commitment(approver_secret()) != owner_commit, "The owner key cannot approve a disclosure");
   assert(grant_scope.member(disclose(grant_id)), "Unknown grant");
   assert(!grant_revoked.member(disclose(grant_id)), "Grant revoked");
   assert(!grant_approved.member(disclose(grant_id)), "Grant already approved");

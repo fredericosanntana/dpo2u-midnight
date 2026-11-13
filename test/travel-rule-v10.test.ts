@@ -39,7 +39,7 @@ function depFile(entry: Record<string, unknown>): string {
   fs.writeFileSync(f, JSON.stringify({ network: 'preview', contracts: { TravelRuleGate: entry, PsavPassport: { contractAddress: PASSPORT }, ComplianceRegistry: { contractAddress: REGISTRY } } }));
   return f;
 }
-const V10 = { contractAddress: GATE, accessControl: 'owner-v1', codeVersion: 'v10', links: { PsavPassport: PASSPORT, ComplianceRegistry: REGISTRY } };
+const V10 = { contractAddress: GATE, accessControl: 'owner-v2', codeVersion: 'v10', links: { PsavPassport: PASSPORT, ComplianceRegistry: REGISTRY } };
 
 const run = async (c: any, circuit: string, state: any, ps: any, ...args: unknown[]) =>
   (await c.circuits[circuit](createCircuitContext({ circuitId: circuit, contractAddress: simAddress(0xffff), coinPublicKeyOrZswapState: CPK, contractState: state, privateState: ps, time: T0 } as any), ...args)).context.callContext.currentQueryContext.state;

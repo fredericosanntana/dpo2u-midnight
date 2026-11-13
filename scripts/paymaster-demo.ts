@@ -71,7 +71,7 @@ async function main() {
     },
   });
   const net = networkConfig();
-  const secret = ownerSecret(masterSeedHex());
+  const secret = ownerSecret(masterSeedHex(), net.name);
 
   const bar = '='.repeat(70);
   console.log(bar);
