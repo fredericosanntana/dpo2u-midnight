@@ -1,6 +1,25 @@
 pragma language_version >= 0.21.0;
 import CompactStandardLibrary;
 
+// ── Access control (mainnet) ──
+// Every circuit that writes state is owner-only. The deployer keeps owner_secret private
+// (witness, never on chain) and passes owner_commit = owner_commitment(owner_secret) to the
+// constructor. Same pattern as TravelRuleGate / PsavPassport.
+witness owner_secret(): Bytes<32>;
+export ledger owner_commit: Bytes<32>;
+
+constructor(owner_commit_: Bytes<32>) {
+  owner_commit = disclose(owner_commit_);
+}
+
+export pure circuit owner_commitment(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Bytes<32>>(secret);
+}
+
+circuit assert_owner(): [] {
+  assert(persistentHash<Bytes<32>>(owner_secret()) == owner_commit, "Only the contract owner can do this");
+}
+
 // DataAuditLog — LGPD Art. 37 data processing audit trail on Midnight Network
 //
 // LGPD Art. 37 requires controllers and operators to maintain records of
@@ -11,9 +30,8 @@ import CompactStandardLibrary;
 //   - controller_id: Bytes<32> hash of the data controller's DID or registration number.
 //   - actor_id: Bytes<32> hash of the actor (employee, system, third-party) performing the action.
 //     Both IDs are hashed — no PII on-chain.
-//   - block_number: Uint<16> block height at time of event (external timestamp reference).
-//     Use Uint<16> for Compact arithmetic safety; supports blocks up to 65535 (≈ 45 days at 1 block/min).
-//     For longer-lived deployments, pass modular block chunks or use a separate time oracle.
+//   - block_number: Uint<32> block height at time of event (external timestamp reference).
+//     Widened from Uint<16> on 06/11/2026: real preview/mainnet heights exceed 65535 (preview tip ~1.6M).
 //
 // EVENT TYPE CODES (Uint<8>):
 //   1 = data_collection          (new personal data received)
@@ -39,11 +57,12 @@ export ledger breach_events: Counter;
 export circuit logEvent(
   controller_id: Bytes<32>,
   event_type: Uint<8>,
-  block_number: Uint<16>
+  block_number: Uint<32>
 ): [] {
+  assert_owner();
   assert(event_type > 0 as Uint<8>, "Invalid event type: must be 1-9");
   assert(event_type <= 9 as Uint<8>, "Unknown event type: must be 1-9");
-  assert(block_number > 0 as Uint<16>, "Block number required for audit timestamp");
+  assert(block_number > 0 as Uint<32>, "Block number required for audit timestamp");
 
   const prev = events_by_controller.member(disclose(controller_id))
     ? events_by_controller.lookup(disclose(controller_id))
@@ -59,9 +78,10 @@ export circuit logEvent(
 export circuit logDeletionRequest(
   controller_id: Bytes<32>,
   actor_id: Bytes<32>,
-  block_number: Uint<16>
+  block_number: Uint<32>
 ): [] {
-  assert(block_number > 0 as Uint<16>, "Block number required");
+  assert_owner();
+  assert(block_number > 0 as Uint<32>, "Block number required");
 
   const prev = events_by_controller.member(disclose(controller_id))
     ? events_by_controller.lookup(disclose(controller_id))
@@ -78,9 +98,10 @@ export circuit logDeletionRequest(
 export circuit confirmDeletion(
   controller_id: Bytes<32>,
   actor_id: Bytes<32>,
-  block_number: Uint<16>
+  block_number: Uint<32>
 ): [] {
-  assert(block_number > 0 as Uint<16>, "Block number required");
+  assert_owner();
+  assert(block_number > 0 as Uint<32>, "Block number required");
 
   const prev = events_by_controller.member(disclose(controller_id))
     ? events_by_controller.lookup(disclose(controller_id))
@@ -96,9 +117,10 @@ export circuit confirmDeletion(
 // Records event_type=9 and increments dedicated breach counter.
 export circuit logBreachEvent(
   controller_id: Bytes<32>,
-  block_number: Uint<16>
+  block_number: Uint<32>
 ): [] {
-  assert(block_number > 0 as Uint<16>, "Block number required");
+  assert_owner();
+  assert(block_number > 0 as Uint<32>, "Block number required");
 
   const prev = events_by_controller.member(disclose(controller_id))
     ? events_by_controller.lookup(disclose(controller_id))

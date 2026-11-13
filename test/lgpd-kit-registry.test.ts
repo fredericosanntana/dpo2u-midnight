@@ -4,8 +4,8 @@
  */
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { createCircuitContext, dummyContractAddress } from '@midnight-ntwrk/compact-runtime';
-import { Contract, ledger } from '../build/LgpdKitRegistry/contract/index.js';
+import { Contract, ledger, pureCircuits } from '../build/LgpdKitRegistry/contract/index.js';
+import { setupOwned, asStranger, b32, NOT_OWNER } from './helpers.js';
 
 function padTo32Bytes(str: string): Uint8Array {
   const buf = Buffer.alloc(32);
@@ -14,25 +14,13 @@ function padTo32Bytes(str: string): Uint8Array {
 }
 
 function setup() {
-  const contract = new Contract({});
-  const coinPublicKey = '0'.repeat(64) as unknown as string;
-  const { currentContractState, currentPrivateState } = contract.initialState({
-    initialZswapLocalState: { coinPublicKey },
-    initialPrivateState: new Map(),
-  });
-  const ctx = createCircuitContext(
-    dummyContractAddress(),
-    coinPublicKey,
-    currentContractState.data,
-    currentPrivateState ?? new Map(),
-  );
-  return { contract, ctx };
+  return setupOwned(Contract, pureCircuits);
 }
 
 describe('LgpdKitRegistry', () => {
-  it('registers an LGPD kit with hashes + score', () => {
-    const { contract, ctx } = setup();
-    const { context } = contract.circuits.registerLgpdKit(
+  it('registers an LGPD kit with hashes + score', async () => {
+    const { contract, ctx } = await setup();
+    const { context } = await contract.circuits.registerLgpdKit(
       ctx,
       padTo32Bytes('cnpj_12345678000199'),
       padTo32Bytes('bafybeig...dpiadoc'),
@@ -40,16 +28,16 @@ describe('LgpdKitRegistry', () => {
       95n,
       padTo32Bytes('did:midnight:agent:02'),
     );
-    const L = ledger(context.currentQueryContext.state);
+    const L = ledger(context.callContext.currentQueryContext.state);
     assert.equal(L.kit_dpia_hashes.isEmpty(), false);
     assert.equal(L.kit_policy_hashes.isEmpty(), false);
     assert.equal(L.kit_privacy_scores.isEmpty(), false);
     assert.equal(L.kit_auditor_dids.isEmpty(), false);
   });
 
-  it('rejects score > 100', () => {
-    const { contract, ctx } = setup();
-    assert.throws(
+  it('rejects score > 100', async () => {
+    const { contract, ctx } = await setup();
+    await assert.rejects(
       () => contract.circuits.registerLgpdKit(
         ctx, padTo32Bytes('c'), padTo32Bytes('d'), padTo32Bytes('p'), 101n, padTo32Bytes('a'),
       ),
@@ -57,17 +45,24 @@ describe('LgpdKitRegistry', () => {
     );
   });
 
-  it('reads back the company privacy score', () => {
-    const { contract, ctx } = setup();
+  it('reads back the company privacy score', async () => {
+    const { contract, ctx } = await setup();
     const company = padTo32Bytes('score_test_company');
-    const { context } = contract.circuits.registerLgpdKit(
+    const { context } = await contract.circuits.registerLgpdKit(
       ctx, company, padTo32Bytes('d'), padTo32Bytes('p'), 92n, padTo32Bytes('a'),
     );
-    assert.equal(contract.circuits.getCompanyPrivacyScore(context, company).result, 92n);
+    assert.equal((await contract.circuits.getCompanyPrivacyScore(context, company)).result, 92n);
   });
 
-  it('returns 0 for an unknown company', () => {
-    const { contract, ctx } = setup();
-    assert.equal(contract.circuits.getCompanyPrivacyScore(ctx, padTo32Bytes('unknown')).result, 0n);
+  it('returns 0 for an unknown company', async () => {
+    const { contract, ctx } = await setup();
+    assert.equal((await contract.circuits.getCompanyPrivacyScore(ctx, padTo32Bytes('unknown'))).result, 0n);
+  });
+});
+
+describe('LgpdKitRegistry access control', () => {
+  it('rejects a caller that does not hold the owner secret', async () => {
+    const { contract, ctx } = await setup();
+    await assert.rejects(() => contract.circuits.registerLgpdKit(asStranger(ctx), b32('co'), b32('dpia'), b32('pol'), 90n, b32('aud')), NOT_OWNER);
   });
 });

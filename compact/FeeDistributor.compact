@@ -1,6 +1,25 @@
 pragma language_version >= 0.21.0;
 import CompactStandardLibrary;
 
+// ── Access control (mainnet) ──
+// Every circuit that writes state is owner-only. The deployer keeps owner_secret private
+// (witness, never on chain) and passes owner_commit = owner_commitment(owner_secret) to the
+// constructor. Same pattern as TravelRuleGate / PsavPassport.
+witness owner_secret(): Bytes<32>;
+export ledger owner_commit: Bytes<32>;
+
+constructor(owner_commit_: Bytes<32>) {
+  owner_commit = disclose(owner_commit_);
+}
+
+export pure circuit owner_commitment(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Bytes<32>>(secret);
+}
+
+circuit assert_owner(): [] {
+  assert(persistentHash<Bytes<32>>(owner_secret()) == owner_commit, "Only the contract owner can do this");
+}
+
 export ledger expert_fee_pool: Counter;
 export ledger auditor_fee_pool: Counter;
 export ledger total_distributed: Counter;
@@ -10,6 +29,7 @@ export circuit distributeComplianceFee(
   expert_share: Uint<16>,
   auditor_share: Uint<16>
 ): [] {
+  assert_owner();
   assert(expert_share > 0 as Uint<16>, "Expert share must be > 0");
   assert(auditor_share > 0 as Uint<16>, "Auditor share must be > 0");
   // Enforce 40/60 ratio: expert * 3 == auditor * 2
@@ -41,6 +61,7 @@ export ledger lp_shares: Map<Bytes<32>, Uint<64>>;         // lp_id -> accrued r
 export ledger lp_count: Counter;                           // distinct LPs that have accrued a share
 
 export circuit recordLpRevenue(lp_address: Bytes<32>, amount: Uint<16>): [] {
+  assert_owner();
   assert(amount > 0 as Uint<16>, "LP revenue must be greater than zero");
   const prev = lp_shares.member(disclose(lp_address))
     ? lp_shares.lookup(disclose(lp_address))

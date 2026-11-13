@@ -1,6 +1,25 @@
 pragma language_version >= 0.21.0;
 import CompactStandardLibrary;
 
+// ── Access control (mainnet) ──
+// Every circuit that writes state is owner-only. The deployer keeps owner_secret private
+// (witness, never on chain) and passes owner_commit = owner_commitment(owner_secret) to the
+// constructor. Same pattern as TravelRuleGate / PsavPassport.
+witness owner_secret(): Bytes<32>;
+export ledger owner_commit: Bytes<32>;
+
+constructor(owner_commit_: Bytes<32>) {
+  owner_commit = disclose(owner_commit_);
+}
+
+export pure circuit owner_commitment(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Bytes<32>>(secret);
+}
+
+circuit assert_owner(): [] {
+  assert(persistentHash<Bytes<32>>(owner_secret()) == owner_commit, "Only the contract owner can do this");
+}
+
 // DPO2U SolvencyRegistry — Proof-of-Reserve / solvency seal (score-private analog).
 //
 // Midnight port of the Stellar `seal_solvency` (Groth16/BN254 PoR), the VASP spearhead:
@@ -31,6 +50,7 @@ export circuit sealSolvency(
   reserves: Uint<64>,
   liabilities: Uint<64>
 ): [] {
+  assert_owner();
   // Anti-replay: a given context (entity||period||nonce) may be sealed only once.
   assert(!used_contexts.member(disclose(context)), "Replay: solvency context already used");
   // Proof-public predicate: prove reserves cover liabilities WITHOUT disclosing either amount.

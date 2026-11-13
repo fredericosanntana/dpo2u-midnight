@@ -1,15 +1,36 @@
 pragma language_version >= 0.21.0;
 import CompactStandardLibrary;
 
+// ── Access control (mainnet) ──
+// Every circuit that writes state is owner-only. The deployer keeps owner_secret private
+// (witness, never on chain) and passes owner_commit = owner_commitment(owner_secret) to the
+// constructor. Same pattern as TravelRuleGate / PsavPassport.
+witness owner_secret(): Bytes<32>;
+export ledger owner_commit: Bytes<32>;
+
+constructor(owner_commit_: Bytes<32>) {
+  owner_commit = disclose(owner_commit_);
+}
+
+export pure circuit owner_commitment(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Bytes<32>>(secret);
+}
+
+circuit assert_owner(): [] {
+  assert(persistentHash<Bytes<32>>(owner_secret()) == owner_commit, "Only the contract owner can do this");
+}
+
 export ledger protocol_treasury: Counter;
 export ledger total_staked_night: Counter;
 
 export circuit depositToTreasury(amount: Uint<16>): [] {
+  assert_owner();
   assert(amount > 0 as Uint<16>, "Deposit must be greater than zero");
   protocol_treasury.increment(disclose(amount));
 }
 
 export circuit stakeTokens(amount: Uint<16>): [] {
+  assert_owner();
   assert(amount > 0 as Uint<16>, "Stake must be greater than zero");
   total_staked_night.increment(disclose(amount));
 }
@@ -31,6 +52,7 @@ export ledger delegated_night: Map<Bytes<32>, Uint<64>>;   // holder_id -> NIGHT
 export ledger delegator_count: Counter;                    // distinct holders currently delegating
 
 export circuit registerDustDelegation(holder: Bytes<32>, night_amount: Uint<64>): [] {
+  assert_owner();
   assert(night_amount > 0 as Uint<64>, "Delegation must be greater than zero");
   if (!delegated_night.member(disclose(holder))) {
     delegator_count.increment(1);
@@ -41,6 +63,7 @@ export circuit registerDustDelegation(holder: Bytes<32>, night_amount: Uint<64>)
 // Revocation (mirrors deregisterFromDustGeneration at the wallet layer). Sets the recorded
 // capacity to zero; the holder keeps their NIGHT throughout.
 export circuit revokeDustDelegation(holder: Bytes<32>): [] {
+  assert_owner();
   assert(delegated_night.member(disclose(holder)), "No active delegation for holder");
   delegated_night.insert(disclose(holder), disclose(0 as Uint<64>));
 }

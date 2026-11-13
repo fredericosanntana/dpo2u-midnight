@@ -1,6 +1,25 @@
 pragma language_version >= 0.21.0;
 import CompactStandardLibrary;
 
+// ── Access control (mainnet) ──
+// Every circuit that writes state is owner-only. The deployer keeps owner_secret private
+// (witness, never on chain) and passes owner_commit = owner_commitment(owner_secret) to the
+// constructor. Same pattern as TravelRuleGate / PsavPassport.
+witness owner_secret(): Bytes<32>;
+export ledger owner_commit: Bytes<32>;
+
+constructor(owner_commit_: Bytes<32>) {
+  owner_commit = disclose(owner_commit_);
+}
+
+export pure circuit owner_commitment(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Bytes<32>>(secret);
+}
+
+circuit assert_owner(): [] {
+  assert(persistentHash<Bytes<32>>(owner_secret()) == owner_commit, "Only the contract owner can do this");
+}
+
 // DPO2U ComplianceEscrowV2 — conditional payment with REAL native-token (NIGHT) custody.
 //
 // Upgrade of ComplianceEscrow (V1, bookkeeping-only) to actually custody and move value:
@@ -52,6 +71,7 @@ export circuit attestAndRelease(
   context: Bytes<32>,
   score: Uint<8>
 ): [] {
+  assert_owner();
   assert(escrow_status.member(disclose(escrow_id)), "Unknown escrow");
   assert(escrow_status.lookup(disclose(escrow_id)) == 0 as Uint<8>, "Escrow not pending");
   assert(!used_contexts.member(disclose(context)), "Replay: context already used");
@@ -67,6 +87,7 @@ export circuit attestAndRelease(
 }
 
 export circuit refundEscrow(escrow_id: Bytes<32>): [] {
+  assert_owner();
   assert(escrow_status.member(disclose(escrow_id)), "Unknown escrow");
   assert(escrow_status.lookup(disclose(escrow_id)) == 0 as Uint<8>, "Escrow not pending (already settled)");
   const amount = escrow_amounts.lookup(disclose(escrow_id));

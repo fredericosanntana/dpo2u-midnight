@@ -29,13 +29,13 @@ import { HDWallet, Roles } from '@midnight-ntwrk/wallet-sdk-hd';
 import { ShieldedWallet } from '@midnight-ntwrk/wallet-sdk-shielded';
 import { createKeystore, PublicKey, UnshieldedWallet } from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
-import * as ComplianceEscrowV2 from '../build/ComplianceEscrowV2/contract/index.js';
+import * as ComplianceEscrowV2 from '../../build/ComplianceEscrowV2/contract/index.js';
 
 // @ts-expect-error WS polyfill
 globalThis.WebSocket = WebSocket;
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
-const buildPath = (n: string) => path.resolve(__dirname, '..', 'build', n);
+const buildPath = (n: string) => path.resolve(__dirname, '..', '..', 'build', n);
 const hhmmss = () => new Date().toISOString().slice(11, 19);
 const b32 = (s: string) => { const b = Buffer.alloc(32); Buffer.from(s, 'utf-8').copy(b, 0, 0, Math.min(s.length, 32)); return new Uint8Array(b); };
 const sha32 = (s: string) => new Uint8Array(createHash('sha256').update(s).digest());
@@ -179,7 +179,7 @@ async function main() {
   const cr2 = await deployed.callTx.attestAndRelease(escrowId, sha32('ev||' + acc), 70n, sha32('ctx||' + Date.now()), 85n);
   console.log('  ✓ attestAndRelease tx', cr2?.public?.txId, '(block', cr2?.public?.blockHeight, ')');
 
-  fs.writeFileSync(path.resolve(__dirname, '..', 'escrow-v2-result.json'), JSON.stringify({
+  fs.writeFileSync(path.resolve(__dirname, '..', '..', 'escrow-v2-result.json'), JSON.stringify({
     network: getNetworkId(), contractAddress: addr, escrowId: Buffer.from(escrowId).toString('hex'),
     amount: AMOUNT.toString(), createTx: cr1?.public?.txId, releaseTx: cr2?.public?.txId, at: new Date().toISOString(),
   }, null, 2));

@@ -1,6 +1,25 @@
 pragma language_version >= 0.21.0;
 import CompactStandardLibrary;
 
+// ── Access control (mainnet) ──
+// Every circuit that writes state is owner-only. The deployer keeps owner_secret private
+// (witness, never on chain) and passes owner_commit = owner_commitment(owner_secret) to the
+// constructor. Same pattern as TravelRuleGate / PsavPassport.
+witness owner_secret(): Bytes<32>;
+export ledger owner_commit: Bytes<32>;
+
+constructor(owner_commit_: Bytes<32>) {
+  owner_commit = disclose(owner_commit_);
+}
+
+export pure circuit owner_commitment(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Bytes<32>>(secret);
+}
+
+circuit assert_owner(): [] {
+  assert(persistentHash<Bytes<32>>(owner_secret()) == owner_commit, "Only the contract owner can do this");
+}
+
 export ledger agent_count: Counter;
 export ledger agent_statuses: Map<Bytes<32>, Uint<8>>;
 export ledger agent_roles: Map<Bytes<32>, Bytes<32>>;
@@ -9,6 +28,7 @@ export circuit registerAgent(
   agent_did: Bytes<32>,
   role: Bytes<32>
 ): [] {
+  assert_owner();
   agent_statuses.insert(disclose(agent_did), disclose(1 as Uint<8>));
   agent_roles.insert(disclose(agent_did), disclose(role));
   agent_count.increment(1);
@@ -17,6 +37,7 @@ export circuit registerAgent(
 export circuit deactivateAgent(
   agent_did: Bytes<32>
 ): [] {
+  assert_owner();
   assert(agent_statuses.member(disclose(agent_did)), "Agent not registered");
   agent_statuses.insert(disclose(agent_did), disclose(0 as Uint<8>));
 }
