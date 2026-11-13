@@ -15,6 +15,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { CODE_VERSION } from './midnight-v9.js';
+import { institutionGate } from './institutions.js';
 
 export const GATE = 'TravelRuleGate';
 export const CALLEES = ['PsavPassport', 'ComplianceRegistry'] as const;
@@ -25,17 +26,20 @@ export type GateDeployment = {
   gate: string;
   links: Record<CalleeName, string>;
   file: string;
+  institution?: string;
 };
 
 const HEX64 = /^[0-9a-fA-F]{64}$/;
 
 /** Gate + linked addresses from deployment-<net>-v9.json; refuses a pre-v10 gate or missing links. */
-export function readGateDeployment(root: string, network: string, fileOverride?: string): GateDeployment {
+export function readGateDeployment(root: string, network: string, fileOverride?: string, institution?: string): GateDeployment {
   const file = fileOverride ? path.resolve(fileOverride) : path.join(root, `deployment-${network}-v9.json`);
   if (!fs.existsSync(file)) throw new Error(`${file} missing: deploy with scripts/deploy-v9.ts first`);
-  const contracts = JSON.parse(fs.readFileSync(file, 'utf8')).contracts ?? {};
-  const g = contracts[GATE];
-  if (!g?.contractAddress) throw new Error(`${GATE} not in ${file}`);
+  const json = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const contracts = json.contracts ?? {};
+  // --institution <id>: that institution's own gate (institutions.<id>.TravelRuleGate); the callees stay shared.
+  const g = institution ? institutionGate(json, institution) : contracts[GATE];
+  if (!g?.contractAddress) throw new Error(institution ? `institution ${institution} has no ${GATE} in ${file} (deploy-v9.ts --institution ${institution})` : `${GATE} not in ${file}`);
   if (g.codeVersion !== CODE_VERSION) throw new Error(`${GATE} in ${file} is the pre-${CODE_VERSION} layout (no PsavPassport/ComplianceRegistry link); redeploy with scripts/deploy-v9.ts`);
   const links = {} as Record<CalleeName, string>;
   for (const n of CALLEES) {
@@ -43,7 +47,7 @@ export function readGateDeployment(root: string, network: string, fileOverride?:
     if (!a || !HEX64.test(a)) throw new Error(`${GATE} link to ${n} missing in ${file}`);
     links[n] = a.toLowerCase();
   }
-  return { network, gate: String(g.contractAddress).toLowerCase(), links, file };
+  return { network, gate: String(g.contractAddress).toLowerCase(), links, file, ...(institution ? { institution } : {}) };
 }
 
 export const buildDir = (root: string, name: string) => path.join(root, 'build', name);

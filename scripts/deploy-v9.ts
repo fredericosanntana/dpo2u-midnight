@@ -16,6 +16,13 @@
  *   approver_commit   DPO2U_APPROVER_COMMIT, or computed from DPO2U_APPROVER_SECRET; a key apart
  *                     from the owner's (scripts/owner.ts). Testnets may derive it from the seed.
  * So PsavPassport and ComplianceRegistry deploy before TravelRuleGate.
+ *
+ * Per institution (one gate per client, sharing PsavPassport and ComplianceRegistry):
+ *   MIDNIGHT_NETWORK=preview npx tsx scripts/deploy-v9.ts --institution <id> --self-company-id <id> \
+ *       --approver-commit <hex32> [--threshold-cents N] [--plan]
+ * The approver commitment is the institution's (or DPO2U_APPROVER_COMMIT); never a secret, never derived.
+ * Recorded under institutions.<id>.TravelRuleGate (scripts/lib/institutions.ts); travel-rule-v10.ts
+ * selects it with --institution <id>. --plan is an alias of --dry-run.
  * Contracts whose code changed in v10 (V10_CONTRACTS) are redeployed over an older entry; the rest
  * keep the skip-if-deployed rule.
  * Results go to deployment-<network>-v9.json (one entry per contract, merged with earlier runs).
@@ -36,6 +43,7 @@ import * as Rx from 'rxjs';
 import { networkConfig, openWallet, ensureDust, makeProviders, masterSeedHex, dustBalance, V10_CONTRACTS, CODE_VERSION } from './lib/midnight-v9.js';
 import { ownerSecret, ownerCommit, approverCommit } from './owner.js';
 import { encodeContractAddress } from '@midnight-ntwrk/compact-runtime';
+import { institutionGateInputs, institutionGate, recordInstitutionGate } from './lib/institutions.js';
 
 // @ts-expect-error WebSocket polyfill for graphql-ws in Node
 globalThis.WebSocket = WebSocket;
@@ -84,10 +92,13 @@ const CONTRACTS: Record<string, (c: ArgCtx) => unknown[]> = {
 const isCurrent = (name: string, e: any) => e?.accessControl === 'owner-v1' && (!V10_CONTRACTS.has(name) || e?.codeVersion === CODE_VERSION);
 
 const { values } = parseArgs({
-  options: { only: { type: 'string' }, all: { type: 'boolean', default: false }, 'dry-run': { type: 'boolean', default: false } },
+  options: { only: { type: 'string' }, all: { type: 'boolean', default: false }, 'dry-run': { type: 'boolean', default: false }, plan: { type: 'boolean', default: false },
+    institution: { type: 'string' }, 'self-company-id': { type: 'string' }, 'approver-commit': { type: 'string' }, 'threshold-cents': { type: 'string' } },
 });
+const dryRun = values['dry-run'] || values.plan;
+if (values.institution && (values.only || values.all)) throw new Error('--institution deploys only that institution\'s TravelRuleGate; do not combine it with --only/--all');
 const order = Object.keys(CONTRACTS);
-const names = (values.all ? order : (values.only ?? '').split(',').map((s) => s.trim()).filter(Boolean))
+const names = (values.institution ? ['TravelRuleGate'] : values.all ? order : (values.only ?? '').split(',').map((s) => s.trim()).filter(Boolean))
   .sort((a, b) => order.indexOf(a) - order.indexOf(b)); // dependencies first (gate after passport + registry)
 if (!names.length) throw new Error('Pass --only A,B or --all');
 for (const n of names) if (!CONTRACTS[n]) throw new Error(`Unknown contract ${n}`);
@@ -118,11 +129,17 @@ async function main() {
     return { name, zk, mod };
   }));
   // Args are built at deploy time (the gate needs the addresses of contracts deployed just before it).
-  const argsOf = (p: { name: string; mod: any }) => [ownerCommit(p.mod, secret), ...CONTRACTS[p.name]({ net: net.name, secret, mod: p.mod, addressOf })];
-  console.log(`[deploy] ${net.name}: ${plan.map((p) => p.name).join(', ')}`);
-  if (values['dry-run']) {
+  // Institution mode: the gate's args come from the institution (its approver commitment, company id, threshold).
+  const inst = values.institution ? institutionGateInputs({ institution: values.institution, selfCompanyId: values['self-company-id'], approverCommit: values['approver-commit'], thresholdCents: values['threshold-cents'] }) : undefined;
+  const instLinked = (n: string) => { const a = addressOf(n); if (!a) throw new Error(`institution gate needs a current ${n} in ${path.basename(OUT)}: deploy the shared contracts first`); return contractRef(a); };
+  const argsOf = (p: { name: string; mod: any }) => inst
+    ? [ownerCommit(p.mod, secret), inst.thresholdCents, instLinked('PsavPassport'), instLinked('ComplianceRegistry'), b32(inst.selfCompanyId), inst.approverCommit]
+    : [ownerCommit(p.mod, secret), ...CONTRACTS[p.name]({ net: net.name, secret, mod: p.mod, addressOf })];
+  const existing = (name: string) => (values.institution ? institutionGate(out, values.institution) : out.contracts[name]);
+  console.log(`[deploy] ${net.name}: ${plan.map((p) => p.name).join(', ')}${values.institution ? ` for institution ${values.institution}` : ''}`);
+  if (dryRun) {
     for (const p of plan) {
-      if (isCurrent(p.name, out.contracts[p.name])) { console.log(`  ${p.name}: current at ${out.contracts[p.name].contractAddress}, would skip`); continue; }
+      if (isCurrent(p.name, existing(p.name))) { console.log(`  ${p.name}: current at ${existing(p.name).contractAddress}, would skip`); continue; }
       let note: string;
       try { const a = argsOf(p); note = `${a.length} constructor arg(s), owner_commit ${Buffer.from(a[0] as Uint8Array).toString('hex').slice(0, 12)}…`; }
       catch (e: any) { note = names.includes('PsavPassport') || names.includes('ComplianceRegistry') ? `args resolved after its dependencies deploy (${e.message})` : `NOT deployable: ${e.message}`; }
@@ -136,11 +153,11 @@ async function main() {
   if (dust === 0n) throw new Error('No DUST. Register NIGHT for DUST generation and wait (mainnet has no faucet).');
 
   for (const p of plan) {
-    if (isCurrent(p.name, out.contracts[p.name])) { console.log(`  ${p.name}: already deployed at ${out.contracts[p.name].contractAddress}, skipping`); continue; }
+    if (isCurrent(p.name, existing(p.name))) { console.log(`  ${p.name}: already deployed at ${existing(p.name).contractAddress}, skipping`); continue; }
     const args = argsOf(p);
     const dustBefore = dustBalance(await Rx.firstValueFrom(w.facade.state()));
     const t0 = Date.now();
-    const providers = makeProviders(w, p.zk, `${p.name}-v9`);
+    const providers = makeProviders(w, p.zk, values.institution ? `${p.name}-${values.institution}-v9` : `${p.name}-v9`);
     const compiled = (CompiledContract.make(p.name, p.mod.Contract) as any).pipe(
       (CompiledContract as any).withWitnesses(witnessesFor(p.name, secret)),
       (CompiledContract as any).withCompiledFileAssets(p.zk),
@@ -150,11 +167,14 @@ async function main() {
     });
     const d = c.deployTxData.public;
     const dustAfter = dustBalance(await Rx.firstValueFrom(w.facade.state()));
-    out.contracts[p.name] = { contractAddress: String(d.contractAddress), txId: d.txId, blockHeight: d.blockHeight,
+    const entry: Record<string, unknown> = { contractAddress: String(d.contractAddress), txId: d.txId, blockHeight: d.blockHeight,
       deployedAt: new Date().toISOString(), compiler: 'compactc 0.36.0', accessControl: 'owner-v1',
       ...(V10_CONTRACTS.has(p.name) ? { codeVersion: CODE_VERSION } : {}),
       ...(p.name === 'TravelRuleGate' ? { links: { PsavPassport: addressOf('PsavPassport'), ComplianceRegistry: addressOf('ComplianceRegistry') } } : {}),
       dustSpent: String(dustBefore - dustAfter), dustBefore: String(dustBefore), seconds: Math.round((Date.now() - t0) / 1000) };
+    if (inst) recordInstitutionGate(out, values.institution!, { ...entry, institution: values.institution, selfCompanyId: inst.selfCompanyId,
+      approverCommit: Buffer.from(inst.approverCommit).toString('hex'), thresholdCents: String(inst.thresholdCents) });
+    else out.contracts[p.name] = entry;
     fs.writeFileSync(OUT, JSON.stringify(out, null, 2) + '\n');
     console.log(`  ${p.name}: ${d.contractAddress} (block ${d.blockHeight}, DUST spent ~${dustBefore - dustAfter})`);
   }
