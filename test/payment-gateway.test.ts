@@ -1,5 +1,5 @@
 /**
- * PaymentGateway — treasury deposits + $NIGHT staking (Counter pools).
+ * PaymentGateway — treasury deposits + NIGHT deposit bookkeeping (Counter pools).
  * API unchanged from canonical; import path updated to the consolidated build layout.
  */
 import { describe, it } from 'node:test';
@@ -23,15 +23,15 @@ describe('PaymentGateway', () => {
     await assert.rejects(() => contract.circuits.depositToTreasury(ctx, 0n), /Deposit must be greater than zero/);
   });
 
-  it('stakes $NIGHT', async () => {
+  it('books a NIGHT deposit', async () => {
     const { contract, ctx } = await setup();
-    const { context } = await contract.circuits.stakeTokens(ctx, 500n);
-    assert.equal(ledger(context.callContext.currentQueryContext.state).total_staked_night, 500n);
+    const { context } = await contract.circuits.depositNight(ctx, 500n);
+    assert.equal(ledger(context.callContext.currentQueryContext.state).total_night_deposited, 500n);
   });
 
-  it('rejects a zero stake', async () => {
+  it('rejects a zero NIGHT deposit', async () => {
     const { contract, ctx } = await setup();
-    await assert.rejects(() => contract.circuits.stakeTokens(ctx, 0n), /Stake must be greater than zero/);
+    await assert.rejects(() => contract.circuits.depositNight(ctx, 0n), /NIGHT deposit must be greater than zero/);
   });
 
   it('reads treasury balance back', async () => {

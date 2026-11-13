@@ -31,6 +31,12 @@ import CompactStandardLibrary;
 //      Scope = bitmask over the 4 fields per party: 1 name, 2 account, 4 document, 8 vasp.
 //      Opening one field does not open the others (separate salted commitments).
 //
+// SANCTIONS LIST (signed): evaluateTransfer reverts unless the witness sanctions_list is a snapshot
+//   signed (Schnorr/Jubjub) by a provider the owner registered (registerSanctionsProvider; one
+//   active key per id, re-registering rotates it, revokeSanctionsProvider disables it) and the block
+//   time is before its valid_until. The verdict stores verdict_sanctions_root / _provider /
+//   _valid_until. sanctions_clear (not on the list) is still the VASP's statement about that list.
+//
 // REASON CODES: 0 none, 1 missing required party info, 2 missing originator id above
 //   threshold, 3 counterparty VASP not attested, 4 sanctions screening hit (VASP-attested).
 // STATUS: 0 none, 1 PASS, 2 FAIL, 3 RELEASED.
@@ -48,8 +54,22 @@ witness beneficiary_data(): Party;
 witness transfer_amount(): Uint<64>;
 // Result of the VASP's off-chain sanctions screening of both parties (NOT proven in-circuit:
 // a Set.member on a private hash would publish the hash; an in-circuit non-membership proof is
-// a documented follow-up).
+// a documented follow-up). Since v10-signed-sanctions it is tied to a SIGNED list: the screening
+// must name a list root signed by a registered provider (sanctions_list below), still valid at the
+// block time; the verdict records the root, the provider and the list's valid_until.
 witness sanctions_clear(): Boolean;
+
+// A sanctions-list snapshot signed by its provider (Schnorr over Jubjub). The provider signs
+// sanctions_message(list_root, provider_id, issued_at, valid_until) with jubjubSchnorrSign
+// (compact-runtime); the circuit verifies it against the provider's registered key.
+struct SanctionsList {
+  provider_id: Bytes<32>;
+  list_root: Bytes<32>;
+  issued_at: Uint<64>;
+  valid_until: Uint<64>;
+  signature: JubjubSchnorrSignature;
+}
+witness sanctions_list(): SanctionsList;
 witness owner_secret(): Bytes<32>;
 witness approver_secret(): Bytes<32>;
 
@@ -73,6 +93,13 @@ export ledger fail_reason: Map<Bytes<32>, Uint<8>>;
 export ledger originator_root: Map<Bytes<32>, Bytes<32>>;
 export ledger beneficiary_root: Map<Bytes<32>, Bytes<32>>;
 export ledger verdict_policy: Map<Bytes<32>, Bytes<32>>;
+export ledger verdict_sanctions_root: Map<Bytes<32>, Bytes<32>>;
+export ledger verdict_sanctions_provider: Map<Bytes<32>, Bytes<32>>;
+export ledger verdict_sanctions_valid_until: Map<Bytes<32>, Uint<64>>;
+
+// Sanctions-list providers: one active key per provider id (re-registering rotates it).
+export ledger sanctions_provider_key: Map<Bytes<32>, JubjubPoint>;
+export ledger sanctions_provider_revoked: Set<Bytes<32>>;
 export ledger total_pass: Counter;
 export ledger total_fail: Counter;
 export ledger total_released: Counter;
@@ -138,6 +165,36 @@ circuit party_root(p: Party): Bytes<32> {
   );
 }
 
+// The message a provider signs for one list snapshot.
+export pure circuit sanctions_message(list_root: Bytes<32>, provider_id: Bytes<32>, issued_at: Uint<64>, valid_until: Uint<64>): Vector<4, Field> {
+  return [transientHash<Bytes<32>>(list_root), transientHash<Bytes<32>>(provider_id), issued_at as Field, valid_until as Field];
+}
+
+// Registers a provider's public key, or rotates it (the new key replaces the old; a revoked id is reinstated).
+export circuit registerSanctionsProvider(provider_id: Bytes<32>, key: JubjubPoint): [] {
+  assert_owner();
+  sanctions_provider_key.insert(disclose(provider_id), disclose(key));
+  if (sanctions_provider_revoked.member(disclose(provider_id))) {
+    sanctions_provider_revoked.remove(disclose(provider_id));
+  }
+}
+
+export circuit revokeSanctionsProvider(provider_id: Bytes<32>): [] {
+  assert_owner();
+  assert(sanctions_provider_key.member(disclose(provider_id)), "Unknown sanctions provider");
+  sanctions_provider_revoked.insert(disclose(provider_id));
+}
+
+circuit check_sanctions_list(l: SanctionsList): [] {
+  const id = disclose(l.provider_id);
+  assert(sanctions_provider_key.member(id), "Sanctions provider not registered");
+  assert(!sanctions_provider_revoked.member(id), "Sanctions provider revoked");
+  assert(l.valid_until > l.issued_at, "Sanctions list validity window is empty");
+  assert(blockTimeLt(disclose(l.valid_until)), "Sanctions list expired");
+  const ok = jubjubSchnorrVerify<4>(sanctions_message(l.list_root, l.provider_id, l.issued_at, l.valid_until), l.signature, sanctions_provider_key.lookup(id));
+  assert(disclose(ok), "Sanctions list signature invalid");
+}
+
 export circuit attestVasp(vasp_id: Bytes<32>): [] {
   assert_owner();
   attested_vasps.insert(disclose(vasp_id));
@@ -159,6 +216,8 @@ export circuit evaluateTransfer(transfer_id: Bytes<32>, policy_hash: Bytes<32>):
   // Counterparty VASP id is deliberately public (regulatory identity, not customer PII).
   // Attested by this VASP, or holding a valid PsavPassport.
   const vasp_ok = attested_vasps.member(disclose(b.vasp_id)) || passport.isValid(disclose(b.vasp_id));
+  const list = sanctions_list();
+  check_sanctions_list(list);
   const clean = sanctions_clear();
 
   const reason: Uint<8> = !complete ? 1 : (!id_ok ? 2 : (!vasp_ok ? 3 : (!clean ? 4 : 0)));
@@ -169,6 +228,9 @@ export circuit evaluateTransfer(transfer_id: Bytes<32>, policy_hash: Bytes<32>):
   originator_root.insert(disclose(transfer_id), disclose(party_root(o)));
   beneficiary_root.insert(disclose(transfer_id), disclose(party_root(b)));
   verdict_policy.insert(disclose(transfer_id), disclose(policy_hash));
+  verdict_sanctions_root.insert(disclose(transfer_id), disclose(list.list_root));
+  verdict_sanctions_provider.insert(disclose(transfer_id), disclose(list.provider_id));
+  verdict_sanctions_valid_until.insert(disclose(transfer_id), disclose(list.valid_until));
   if (disclose(pass)) { total_pass.increment(1); } else { total_fail.increment(1); }
   return disclose(pass ? 1 : 2);
 }

@@ -21,7 +21,9 @@ circuit assert_owner(): [] {
 }
 
 export ledger protocol_treasury: Counter;
-export ledger total_staked_night: Counter;
+// NIGHT the DPO2U treasury has booked as deposited (app-level bookkeeping). This is not how DUST is
+// generated: DUST comes from holding NIGHT registered for DUST generation (registerNightUtxosForDustGeneration).
+export ledger total_night_deposited: Counter;
 
 export circuit depositToTreasury(amount: Uint<16>): [] {
   assert_owner();
@@ -29,18 +31,18 @@ export circuit depositToTreasury(amount: Uint<16>): [] {
   protocol_treasury.increment(disclose(amount));
 }
 
-export circuit stakeTokens(amount: Uint<16>): [] {
+export circuit depositNight(amount: Uint<16>): [] {
   assert_owner();
-  assert(amount > 0 as Uint<16>, "Stake must be greater than zero");
-  total_staked_night.increment(disclose(amount));
+  assert(amount > 0 as Uint<16>, "NIGHT deposit must be greater than zero");
+  total_night_deposited.increment(disclose(amount));
 }
 
 export circuit getTreasuryBalance(): Uint<64> {
   return protocol_treasury;
 }
 
-export circuit getTotalStaked(): Uint<64> {
-  return total_staked_night;
+export circuit getTotalNightDeposited(): Uint<64> {
+  return total_night_deposited;
 }
 
 // ── DPO2U Paymaster (increment): non-custodial DUST-generation delegation ──

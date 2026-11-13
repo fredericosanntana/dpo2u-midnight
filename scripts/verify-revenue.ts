@@ -31,7 +31,7 @@ try { pg = pgLedger(pgCs.data); } catch { pg = pgLedger(pgCs); }
 try { fd = fdLedger(fdCs.data); } catch { fd = fdLedger(fdCs); }
 
 console.log('PaymentGateway:', addr('PaymentGateway').slice(0, 16), '…');
-console.log(`  treasury (revenue booked): ${pg.protocol_treasury.toString()} | staked: ${pg.total_staked_night.toString()}`);
+console.log(`  treasury (revenue booked): ${pg.protocol_treasury.toString()} | NIGHT deposited: ${pg.total_night_deposited.toString()}`);
 console.log('FeeDistributor:', addr('FeeDistributor').slice(0, 16), '…');
 console.log(`  expert pool: ${fd.expert_fee_pool.toString()} | auditor pool: ${fd.auditor_fee_pool.toString()} | total distributed: ${fd.total_distributed.toString()}`);
 console.log('\nINDEPENDENT VERIFY: on-chain revenue ledger grew with the priced attestation (40/60 split enforced on-chain).');
