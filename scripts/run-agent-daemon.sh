@@ -17,4 +17,5 @@ export PROOF_SERVER_URL="${PROOF_SERVER_URL:-http://127.0.0.1:6300}"
 
 if [ -z "$MIDNIGHT_SEED" ]; then echo "FATAL: MIDNIGHT_SEED not found in $SEED_ENV or $LEGACY_ENV" >&2; exit 1; fi
 
-exec npx tsx scripts/agent.ts --network preview --watch --interval 120
+export MIDNIGHT_NETWORK="${MIDNIGHT_NETWORK:-preview}"
+exec npx tsx scripts/agent.ts --watch --interval 120

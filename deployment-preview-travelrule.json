@@ -1,0 +1,46 @@
+{
+  "network": "preview",
+  "wallet": "mn_addr_preview1jelp33c5gftpr9gl62yynuccsgny8e9cvgh89rfguct7pcmdcjzqlylk84",
+  "deployedAt": "2026-11-06T19:30:07.597Z",
+  "txs": [
+    {
+      "label": "deploy",
+      "txId": "00477213ec5bd8a47d5216ada1772fa2abef335adb5e04613ec34795367aa058cf",
+      "blockHeight": 1628462
+    },
+    {
+      "label": "attestVasp(counterparty-A)",
+      "txId": "0015d7c5d661096f418984d43dc5a7c545fd8df547b90b2a4118338bb118679c58",
+      "blockHeight": 1628466
+    },
+    {
+      "label": "evaluateTransfer(PASS case)",
+      "txId": "00d30ce6f214b525d47c07f18140f0ee0368cfbc506e8451a9d587c5a33f3a984c",
+      "blockHeight": 1628475
+    },
+    {
+      "label": "releaseTransfer(PASS case)",
+      "txId": "006ed9b3e240b4440f9d0c47394fac645041ab0429e8961b45da7419ef585822a2",
+      "blockHeight": 1628479
+    },
+    {
+      "label": "evaluateTransfer(FAIL case)",
+      "txId": "00edcdc3c882d62998b402a0a8760ad0d23051be4967c858de65b372212d8f85b2",
+      "blockHeight": 1628485
+    }
+  ],
+  "contractAddress": "279fa62fdd39064c7e62585105ab1c1589e81eedc4220cde5205ddeccd9d6288",
+  "transfer_ids": {
+    "pass": "7472616e736665722d504153532d303031000000000000000000000000000000",
+    "fail": "7472616e736665722d4641494c2d303032000000000000000000000000000000"
+  },
+  "fail_release": "rejected: Unexpected error executing scoped transaction '<unnamed>': Error: failed assert: Travel Rule not satisfied: transfer cannot be released",
+  "final_state": {
+    "pass_status": "3",
+    "fail_status": "2",
+    "fail_reason": "2",
+    "total_pass": "1",
+    "total_fail": "1",
+    "total_released": "1"
+  }
+}

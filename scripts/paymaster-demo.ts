@@ -1,5 +1,5 @@
 /**
- * DPO2U Paymaster — end-to-end demo on Midnight PREVIEW (the pitch narrative, runnable).
+ * DPO2U Paymaster — end-to-end demo on ledger v9 (MIDNIGHT_NETWORK, default preview).
  *
  * Proves the non-custodial DUST-as-a-Service loop with real on-chain transactions:
  *   1. A NIGHT holder (account 1) REDIRECTS its DUST generation to the controller's dust
@@ -10,15 +10,16 @@
  *      never needed DUST. Usage is metered on-chain (recordSponsoredAttestation).
  *   4. Revenue for that sponsored capacity is booked to the LP (the holder) on FeeDistributor
  *      (recordLpRevenue) — the self-funding loop closes. NIGHT settlement is the existing
- *      client-pays.ts EARN leg (run separately for a full-value demo).
+ *      EARN leg (transferNight in scripts/agent.ts).
  *
  * PREREQUISITES (you provide the funded seed):
- *   - MIDNIGHT_SEED=<hex> with tNIGHT on account 0 (controller) AND account 1 (holder).
- *     Fund both addresses from the preview faucet. Print them with:
- *       MIDNIGHT_SEED=... tsx scripts/print-address.ts --account 0
- *       MIDNIGHT_SEED=... tsx scripts/print-address.ts --account 1
- *   - Proof server running (npm run start-proof-server) and the paymaster increment deployed:
- *       MIDNIGHT_SEED=... npm run deploy:paymaster
+ *   - MIDNIGHT_SEED=<hex> with NIGHT on account 0 (controller) AND account 1 (holder). Account
+ *     seeds are derived in scripts/dust-relay.ts (accountSeedHex); print the addresses with
+ *       MIDNIGHT_SEED=... tsx scripts/dust-relay.ts controller-dust --account 0   (and --account 1)
+ *   - Proof server running and ComplianceRegistry, PaymentGateway, FeeDistributor deployed with
+ *     owner gating by the controller: MIDNIGHT_SEED=... tsx scripts/deploy-v9.ts --only ...
+ *     The controller (account 0) must hold the owner secret (DPO2U_OWNER_SECRET or derived from
+ *     MIDNIGHT_SEED, see scripts/owner.ts). Mainnet: same guard as every v9 script.
  *
  *   MIDNIGHT_SEED=<hex> NODE_OPTIONS=--max-old-space-size=12288 npm run paymaster:demo
  *   flags: --controller-account 0 --holder-account 1 --company acme --jurisdiction BR --score 82 --fee 10
@@ -28,25 +29,22 @@ import { parseArgs } from 'node:util';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
-import { Buffer } from 'buffer';
-import * as Rx from 'rxjs';
-
-import * as ledger from '@midnight-ntwrk/ledger-v8';
-import { setNetworkId, getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
-import { toHex } from '@midnight-ntwrk/midnight-js-utils';
+import { fileURLToPath } from 'node:url';
 
 import * as ComplianceRegistry from '../build/ComplianceRegistry/contract/index.js';
 import * as PaymentGateway from '../build/PaymentGateway/contract/index.js';
 import * as FeeDistributor from '../build/FeeDistributor/contract/index.js';
 
+import { networkConfig, ensureDust, masterSeedHex } from './lib/midnight-v9.js';
+import { ownerSecret } from './owner.js';
 import {
-  NETWORKS, createWallet, waitForSync, dustOf, nightOf, dustAddressString,
+  openAccount, currentState, dustOf, nightOf, dustAddressString,
   delegateDustGeneration, waitForDustPlateau, parseDustAddress,
-  makeWalletProvider, joinContract, idFromString, hhmmss, type WalletCtx,
+  joinContract, idFromString, type WalletCtx,
 } from './dust-relay.js';
 
-const __dirname = path.dirname(new URL(import.meta.url).pathname);
-const repoFile = (f: string) => path.resolve(__dirname, '..', f);
+const repoFile = (f: string) => path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', f);
+const toHex = (b: Uint8Array) => Buffer.from(b).toString('hex');
 
 function b32(s: string): Uint8Array {
   const buf = Buffer.alloc(32);
@@ -72,49 +70,44 @@ async function main() {
       'agent-did': { type: 'string', default: 'did:dpo2u:agent:001' },
     },
   });
-  setNetworkId('preview');
-  const cfg = NETWORKS.preview.cfg;
-  const seed = process.env.MIDNIGHT_SEED;
-  if (!seed) throw new Error('MIDNIGHT_SEED not set');
+  const net = networkConfig();
+  const secret = ownerSecret(masterSeedHex());
 
   const bar = '='.repeat(70);
   console.log(bar);
-  console.log('  DPO2U Paymaster — non-custodial DUST-as-a-Service — E2E demo (preview)');
+  console.log(`  DPO2U Paymaster — non-custodial DUST-as-a-Service — E2E demo (${net.name})`);
   console.log(bar);
 
   // ── Setup: controller + holder wallets ──
   console.log('\n[1/6] Bringing up controller + holder wallets...');
-  const controller: WalletCtx = await createWallet(cfg, seed, Number(values['controller-account']));
-  const holder: WalletCtx = await createWallet(cfg, seed, Number(values['holder-account']));
-  const controllerAddr = String(controller.unshieldedKeystore.getBech32Address());
-  const holderAddr = String(holder.unshieldedKeystore.getBech32Address());
+  const controller: WalletCtx = await openAccount(net, Number(values['controller-account']), 'controller');
+  const holder: WalletCtx = await openAccount(net, Number(values['holder-account']), 'holder');
+  const controllerAddr = controller.address;
+  const holderAddr = holder.address;
   console.log(`  controller: ${controllerAddr}`);
   console.log(`  holder:     ${holderAddr}`);
-  const ctrlState: any = await waitForSync(controller.wallet, 'controller');
-  await waitForSync(holder.wallet, 'holder');
   const controllerDustAddr = await dustAddressString(controller);
   console.log(`  controller dust address (delegation target): ${controllerDustAddr}`);
 
-  const holderNightBefore = nightOf(await Rx.firstValueFrom(holder.wallet.state()));
-  const ctrlDustBefore = dustOf(await Rx.firstValueFrom(controller.wallet.state()));
-  if (holderNightBefore <= 0n) throw new Error(`holder (account ${values['holder-account']}) has 0 NIGHT — fund it from the faucet first.`);
+  const holderNightBefore = nightOf(await currentState(holder));
+  const ctrlDustBefore = dustOf(await currentState(controller));
+  if (holderNightBefore <= 0n) throw new Error(`holder (account ${values['holder-account']}) has 0 NIGHT — fund it first.`);
 
   // ── LEG 1 — non-custodial delegation ──
   console.log('\n[2/6] Holder delegates DUST generation to the controller (keeps its NIGHT)...');
-  const delegateTx = await delegateDustGeneration(holder, parseDustAddress(controllerDustAddr));
-  const holderNightAfter = nightOf(await Rx.firstValueFrom(holder.wallet.state()));
+  const delegateTx = await delegateDustGeneration(holder, parseDustAddress(controllerDustAddr, net));
+  const holderNightAfter = nightOf(await currentState(holder));
   console.log(`  holder NIGHT: before=${holderNightBefore} after=${holderNightAfter}  (custody retained — delta is only the fee)`);
 
   console.log('\n[3/6] Waiting for the controller DUST to build from the delegated NIGHT...');
-  await waitForDustPlateau(controller);
-  const ctrlDustAfter = dustOf(await Rx.firstValueFrom(controller.wallet.state()));
+  const ctrlDustAfter = await waitForDustPlateau(controller);
   console.log(`  controller DUST: before=${ctrlDustBefore} after=${ctrlDustAfter}  (fuel now backed by holder's NIGHT)`);
 
   // ── Join the three paymaster contracts (controller identity) ──
-  const wp = makeWalletProvider(controller, ctrlState);
-  const pg = await joinContract(wp, cfg, controllerAddr, 'PaymentGateway', PaymentGateway);
-  const cr = await joinContract(wp, cfg, controllerAddr, 'ComplianceRegistry', ComplianceRegistry);
-  const fd = await joinContract(wp, cfg, controllerAddr, 'FeeDistributor', FeeDistributor);
+  if (await ensureDust(controller) === 0n) throw new Error('Controller has no DUST to pay the contract calls.');
+  const pg = await joinContract(controller, secret, 'PaymentGateway', PaymentGateway);
+  const cr = await joinContract(controller, secret, 'ComplianceRegistry', ComplianceRegistry);
+  const fd = await joinContract(controller, secret, 'FeeDistributor', FeeDistributor);
 
   const holderId = idFromString(`holder:${holderAddr}`);
   const bigplayerId = idFromString(String(values.bigplayer));
@@ -128,12 +121,12 @@ async function main() {
   // ── LEG 2 — sponsored attestation: controller seals a big-player's compliance, pays DUST ──
   console.log('\n[4/6] Sponsoring a big-player compliance attestation (fee paid from delegated DUST)...');
   const ctxBytes = deriveContext(String(values.company), String(values.jurisdiction));
-  const dustBeforeSeal = dustOf(await Rx.firstValueFrom(controller.wallet.state()));
+  const dustBeforeSeal = dustOf(await currentState(controller));
   const attRes = await cr.callTx.attestCompliance(
     b32(String(values.company)), agentDid, b32('bafy-policy-cid'),
     BigInt(String(values.threshold)), ctxBytes, BigInt(String(values.score)),
   );
-  const dustAfterSeal = dustOf(await Rx.firstValueFrom(controller.wallet.state()));
+  const dustAfterSeal = dustOf(await currentState(controller));
   const dustCost = dustBeforeSeal - dustAfterSeal;
   console.log(`    attestation tx ${attRes?.public?.txId} (block ${attRes?.public?.blockHeight}); DUST cost ${dustCost}`);
 
@@ -150,7 +143,7 @@ async function main() {
   // ── Result ──
   console.log('\n[6/6] Done.');
   const result = {
-    network: getNetworkId(),
+    network: net.name,
     at: new Date().toISOString(),
     controller: controllerAddr,
     controllerDustAddress: controllerDustAddr,
@@ -169,14 +162,14 @@ async function main() {
     sponsoredDustCost: dustCost.toString(),
     context: toHex(ctxBytes),
   };
-  fs.writeFileSync(repoFile('paymaster-demo-result.json'), JSON.stringify(result, null, 2));
+  fs.writeFileSync(repoFile(`paymaster-demo-result-${net.name}.json`), JSON.stringify(result, null, 2));
   console.log('\n' + bar);
-  console.log('  ✅ Paymaster loop proven on preview. Saved paymaster-demo-result.json');
+  console.log(`  ✅ Paymaster loop proven on ${net.name}. Saved paymaster-demo-result-${net.name}.json`);
   console.log(`     · Holder kept its NIGHT (custody): ${holderNightBefore} → ${holderNightAfter}`);
   console.log(`     · Controller sealed the attestation on delegated DUST (cost ${dustCost})`);
   console.log(`     · Verify on-chain state:  MIDNIGHT_SEED=... npm run verify:paymaster`);
   console.log(bar);
-  try { await (controller.wallet as any).close?.(); await (holder.wallet as any).close?.(); } catch { /* ignore */ }
+  try { await controller.facade.stop(); await holder.facade.stop(); } catch { /* ignore */ }
   process.exit(0);
 }
 

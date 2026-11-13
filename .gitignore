@@ -29,3 +29,4 @@ webhook/.key
 # Provenance: keep the live preview deploy record (public addrs, not secret)
 !deployment-preview.json
 !deployment-preview-v9.json
+deployment-preview-psav-passport.secrets.json

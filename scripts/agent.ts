@@ -1,48 +1,38 @@
 /**
- * DPO2U Midnight — Autonomous self-funding compliance agent (MVP: Plan Phases 1+2).
+ * DPO2U Midnight — autonomous self-funding compliance agent, ledger v9 (midnight-js 5 / wallet-sdk 2).
  *
- * WHAT: sync the wallet ONCE, keep it warm, then drain a work queue of compliance
- * attestations, sealing each on the LIVE ComplianceRegistry (score-private ZK via
- * attestCompliance, or generic verdict via attestUseCase). Unattended and idempotent.
+ * WHAT: sync the wallet once, then drain a work queue of compliance attestations, sealing each on the
+ * live owner-gated contracts (ComplianceRegistry, ComplianceEscrow, TrustStackRegistry, ...). The agent's
+ * key is the contracts' owner: it supplies owner_secret (scripts/owner.ts) to every write.
  *
- * SELF-FUNDING WATCHDOG (Phase 2): before every attestation, ensure DUST is above a floor;
- * if not, WAIT for it to regenerate from staked NIGHT (the agent paces itself to its own
- * fuel instead of failing). Every attestation's DUST cost is measured and written to a
- * break-even ledger — real telemetry, not the hardcoded JS simulation.
+ * SELF-FUNDING WATCHDOG: before every attestation, ensure DUST is above a floor; if not, wait for it to
+ * regenerate from the agent's own registered NIGHT. Every attestation's DUST cost is written to a
+ * break-even ledger (agent-ledger.json). There is no faucet fallback: on mainnet the only fuel is NIGHT
+ * the wallet holds, so a long DUST shortfall is reported, not papered over.
  *
- *   npx tsx scripts/agent.ts --network preview --once                    # drain once (cron-friendly)
- *   npx tsx scripts/agent.ts --network preview --watch --interval 120    # daemon, poll every 120s
- *   flags: --queue <path> (default agent-queue.json) --dust-floor <bigint> --seed <hex>
- *   env:   MIDNIGHT_SEED (hex), PROOF_SERVER_URL (default http://127.0.0.1:6300)
- *
- * NOTE: the wallet machinery below is copied from deploy-preprod.ts on purpose — agent.ts
- * stays self-contained and leaves the proven deploy script untouched. Consolidation into a
- * shared midnight-agent-core module is Plan Phase 5.
+ *   MIDNIGHT_NETWORK=preview npx tsx scripts/agent.ts --once
+ *   MIDNIGHT_NETWORK=preview npx tsx scripts/agent.ts --watch --interval 120
+ *   flags: --queue <path> (default agent-queue.json) --dust-floor <bigint> --fee <n>
+ *   env:   MIDNIGHT_SEED, PROOF_SERVER_URL, DPO2U_OWNER_SECRET; mainnet guard in scripts/lib/midnight-v9.ts
+ * Contract addresses come from deployment-<network>-v9.json (scripts/deploy-v9.ts).
  */
 import 'dotenv/config';
 import { parseArgs } from 'node:util';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { Buffer } from 'buffer';
 import { WebSocket } from 'ws';
 import * as Rx from 'rxjs';
 
-import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
-import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
-import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-private-state-provider';
-import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
-import { setNetworkId, getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import { findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { toHex } from '@midnight-ntwrk/midnight-js-utils';
-
-import * as ledger from '@midnight-ntwrk/ledger-v8';
-import { WalletFacade } from '@midnight-ntwrk/wallet-sdk-facade';
-import { DustWallet } from '@midnight-ntwrk/wallet-sdk-dust-wallet';
-import { HDWallet, Roles } from '@midnight-ntwrk/wallet-sdk-hd';
-import { ShieldedWallet } from '@midnight-ntwrk/wallet-sdk-shielded';
-import { createKeystore, PublicKey, UnshieldedWallet } from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
+import * as ledger from '@midnight-ntwrk/ledger-v9';
+import { MidnightBech32m, UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
+import { networkConfig, openWallet, ensureDust, makeProviders, masterSeedHex, dustBalance, type V9Wallet } from './lib/midnight-v9.js';
+import { ownerSecret, ownerWitnesses } from './owner.js';
 
 import * as ComplianceRegistry from '../build/ComplianceRegistry/contract/index.js';
 import * as ComplianceEscrow from '../build/ComplianceEscrow/contract/index.js';
@@ -55,43 +45,11 @@ import * as SolvencyRegistry from '../build/SolvencyRegistry/contract/index.js';
 // @ts-expect-error WebSocket polyfill required for wallet sync (graphql-ws) in Node
 globalThis.WebSocket = WebSocket;
 
-const __dirname = path.dirname(new URL(import.meta.url).pathname);
-const repoFile = (f: string) => path.resolve(__dirname, '..', f);
-const buildPath = (name: string) => path.resolve(__dirname, '..', 'build', name);
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const repoFile = (f: string) => path.resolve(ROOT, f);
+const buildPath = (name: string) => path.resolve(ROOT, 'build', name);
 const hhmmss = () => new Date().toISOString().slice(11, 19);
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-type NetCfg = { indexer: string; indexerWS: string; node: string; proofServer: string; faucetUrl?: string };
-const NETWORKS: Record<string, { networkId: string; cfg: NetCfg }> = {
-  preview: {
-    networkId: 'preview',
-    cfg: {
-      indexer: 'https://indexer.preview.midnight.network/api/v4/graphql',
-      indexerWS: 'wss://indexer.preview.midnight.network/api/v4/graphql/ws',
-      node: 'https://rpc.preview.midnight.network',
-      proofServer: process.env.PROOF_SERVER_URL ?? 'http://127.0.0.1:6300',
-      faucetUrl: 'https://midnight-tmnight-preview.nethermind.dev/',
-    },
-  },
-  preprod: {
-    networkId: 'preprod',
-    cfg: {
-      indexer: 'https://indexer.preprod.midnight.network/api/v4/graphql',
-      indexerWS: 'wss://indexer.preprod.midnight.network/api/v4/graphql/ws',
-      node: 'https://rpc.preprod.midnight.network',
-      proofServer: process.env.PROOF_SERVER_URL ?? 'http://127.0.0.1:6300',
-    },
-  },
-  standalone: {
-    networkId: 'undeployed',
-    cfg: {
-      indexer: 'http://localhost:8088/api/v4/graphql',
-      indexerWS: 'ws://localhost:8088/api/v4/graphql/ws',
-      node: 'ws://localhost:9944',
-      proofServer: process.env.PROOF_SERVER_URL ?? 'http://127.0.0.1:6300',
-    },
-  },
-};
 
 // ── byte helpers ────────────────────────────────────────────────────────────
 function b32(s: string): Uint8Array {
@@ -104,239 +62,65 @@ function hexToBytes32(hex: string): Uint8Array {
   if (!/^[0-9a-fA-F]{64}$/.test(clean)) throw new Error(`hexToBytes32: expected 64 hex chars, got ${clean.length}`);
   return new Uint8Array(Buffer.from(clean, 'hex'));
 }
-// Idempotent anti-replay context = sha256(org || jurisdiction || fresh-nonce). A fresh nonce
-// per call means the loop is repeatable (the old hardcoded ctx reverted on the 2nd run).
+// Anti-replay context = sha256(org || jurisdiction || fresh-nonce); a fresh nonce keeps the loop repeatable.
 function deriveContext(org: string, jurisdiction: string, nonce?: string): Uint8Array {
   const n = nonce ?? randomBytes(16).toString('hex');
   return new Uint8Array(createHash('sha256').update(`${org}||${jurisdiction}||${n}`).digest());
 }
 
-// ── Keys + wallet (midnight-js 4.x) — copied from deploy-preprod.ts ──────────
-function deriveKeys(seed: string) {
-  const hd = HDWallet.fromSeed(Buffer.from(seed, 'hex'));
-  if (hd.type !== 'seedOk') throw new Error('Invalid seed');
-  const result = hd.hdWallet.selectAccount(0)
-    .selectRoles([Roles.Zswap, Roles.NightExternal, Roles.Dust]).deriveKeysAt(0);
-  if (result.type !== 'keysDerived') throw new Error('Key derivation failed');
-  hd.hdWallet.clear();
-  return result.keys;
-}
+const dustOf = dustBalance;
 
-// ── persistent wallet (SOTA gap #3): checkpoint the synced state, restore on restart, sync only
-// the delta. Each facade sub-wallet exposes serializeState()/restore(serialized). Kills the
-// ~13min cold resync. Checkpoints are network-scoped under wallet-checkpoint/<network>/.
-function ckptDir() { return repoFile(`wallet-checkpoint/${getNetworkId()}`); }
-function ckptPaths() { const d = ckptDir(); return { shielded: path.join(d, 'shielded.json'), unshielded: path.join(d, 'unshielded.json'), dust: path.join(d, 'dust.json') }; }
-function hasCheckpoint() { const p = ckptPaths(); return fs.existsSync(p.shielded) && fs.existsSync(p.unshielded) && fs.existsSync(p.dust); }
-// serializeState() returns a (JSON-encoded) STRING; restore() wants that SAME string — do NOT parse.
-function readBlob(p: string): any { return fs.readFileSync(p, 'utf8'); }
-async function writeBlob(p: string, api: any) { const blob = await api.serializeState(); fs.writeFileSync(p, typeof blob === 'string' ? blob : JSON.stringify(blob)); }
-async function checkpoint(ctx: any) {
-  try {
-    fs.mkdirSync(ckptDir(), { recursive: true });
-    const p = ckptPaths();
-    await writeBlob(p.shielded, ctx.wallet.shielded);
-    await writeBlob(p.unshielded, ctx.wallet.unshielded);
-    await writeBlob(p.dust, ctx.wallet.dust);
-    console.log(`[wallet] checkpoint saved (${hhmmss()})`);
-  } catch (e: any) { console.log(`[wallet] checkpoint failed: ${e?.message ?? e}`); }
-}
-
-async function createWallet(cfg: NetCfg, seed: string) {
-  const keys = deriveKeys(seed);
-  const networkId = getNetworkId();
-  const shieldedSecretKeys = ledger.ZswapSecretKeys.fromSeed(keys[Roles.Zswap]);
-  const dustSecretKey = ledger.DustSecretKey.fromSeed(keys[Roles.Dust]);
-  const unshieldedKeystore = createKeystore(keys[Roles.NightExternal], networkId);
-
-  const walletConfig = {
-    networkId,
-    indexerClientConnection: { indexerHttpUrl: cfg.indexer, indexerWsUrl: cfg.indexerWS },
-    provingServerUrl: new URL(cfg.proofServer),
-    relayURL: new URL(cfg.node.replace(/^http/, 'ws')),
-    costParameters: { additionalFeeOverhead: 300_000_000_000_000n, feeBlocksMargin: 5 },
-  };
-
-  const restoring = hasCheckpoint();
-  const p = ckptPaths();
-  if (restoring) console.log('[wallet] checkpoint found — restoring (delta sync only, no cold resync)');
-  const wallet = await WalletFacade.init({
-    configuration: walletConfig as any,
-    shielded: (c: any) => restoring ? ShieldedWallet(c).restore(readBlob(p.shielded)) : ShieldedWallet(c).startWithSecretKeys(shieldedSecretKeys),
-    unshielded: (c: any) => restoring ? UnshieldedWallet(c).restore(readBlob(p.unshielded)) : UnshieldedWallet(c).startWithPublicKey(PublicKey.fromKeyStore(unshieldedKeystore)),
-    dust: (c: any) => restoring ? DustWallet(c).restore(readBlob(p.dust)) : DustWallet(c).startWithSecretKey(dustSecretKey, ledger.LedgerParameters.initialParameters().dust),
-  });
-  await wallet.start(shieldedSecretKeys, dustSecretKey);
-  return { wallet, shieldedSecretKeys, dustSecretKey, unshieldedKeystore };
-}
-
-function signTransactionIntents(
-  tx: { intents?: Map<number, any> },
-  signFn: (payload: Uint8Array) => any,
-  proofMarker: 'proof' | 'pre-proof',
-): void {
-  if (!tx.intents || tx.intents.size === 0) return;
-  for (const segment of tx.intents.keys()) {
-    const intent = tx.intents.get(segment);
-    if (!intent) continue;
-    const cloned = ledger.Intent.deserialize('signature', proofMarker, 'pre-binding', intent.serialize());
-    const sigData = cloned.signatureData(segment);
-    const signature = signFn(sigData);
-    if (cloned.fallibleUnshieldedOffer) {
-      const sigs = cloned.fallibleUnshieldedOffer.inputs.map(
-        (_: any, i: number) => cloned.fallibleUnshieldedOffer!.signatures.at(i) ?? signature);
-      cloned.fallibleUnshieldedOffer = cloned.fallibleUnshieldedOffer.addSignatures(sigs);
-    }
-    if (cloned.guaranteedUnshieldedOffer) {
-      const sigs = cloned.guaranteedUnshieldedOffer.inputs.map(
-        (_: any, i: number) => cloned.guaranteedUnshieldedOffer!.signatures.at(i) ?? signature);
-      cloned.guaranteedUnshieldedOffer = cloned.guaranteedUnshieldedOffer.addSignatures(sigs);
-    }
-    tx.intents.set(segment, cloned);
-  }
-}
-
-function progStr(p: any): string {
-  if (!p || typeof p !== 'object') return '?';
-  const applied = p.appliedIndex ?? p.applied ?? p.synced ?? p.processedIndex;
-  const highest = p.highestIndex ?? p.highestRelevantIndex ?? p.targetIndex ?? p.total;
-  if (applied !== undefined || highest !== undefined) return `${applied ?? '?'}/${highest ?? '?'}`;
-  const gap = p.applyGap ?? p.sourceGap ?? p.lag;
-  return gap !== undefined ? `gap:${gap}` : 'syncing';
-}
-
-async function waitForSync(wallet: any) {
-  console.log('[sync] full sync incl. shielded history (give it RAM + time)...');
-  const nt = ledger.unshieldedToken().raw;
-  const sub = wallet.state().pipe(Rx.throttleTime(10_000)).subscribe((s: any) => {
-    const sh = s.shielded?.state?.progress ?? s.shielded?.progress;
-    const un = s.unshielded?.progress ?? s.unshielded?.state?.progress;
-    const du = s.dust?.state?.progress ?? s.dust?.progress;
-    console.log(`  [${hhmmss()}] synced=${s.isSynced} | shielded ${progStr(sh)} | unshielded ${progStr(un)} | dust ${progStr(du)} | NIGHT:${s.unshielded?.balances?.[nt] ?? 0n}`);
-  });
-  const state = await Rx.firstValueFrom(wallet.state().pipe(Rx.filter((s: any) => s.isSynced)));
-  sub.unsubscribe();
-  console.log('[sync] fully synced.');
-  return state;
-}
-
-const dustOf = (s: any): bigint => { try { return s.dust.balance(new Date()) as bigint; } catch { return 0n; } };
-
-async function ensureDust(ctx: any) {
-  const state: any = await Rx.firstValueFrom(ctx.wallet.state());
-  const nightUtxos = (state.unshielded.availableCoins ?? []).filter((u: any) => !u.meta?.registeredForDustGeneration);
-  if (nightUtxos.length > 0) {
-    console.log(`[dust] registering ${nightUtxos.length} NIGHT UTxO(s) for dust generation...`);
-    const vk = ctx.unshieldedKeystore.getPublicKey();
-    const signFn = (payload: Uint8Array) => ctx.unshieldedKeystore.signData(payload);
-    const recipe = await ctx.wallet.registerNightUtxosForDustGeneration(nightUtxos, vk, signFn);
-    const tx = await ctx.wallet.finalizeRecipe(recipe);
-    const txId = await ctx.wallet.submitTransaction(tx);
-    console.log(`[dust] registration tx submitted: ${txId}`);
-  } else {
-    console.log(`[dust] NIGHT already registered (current balance ${dustOf(state)}).`);
-  }
-  // wait for dust to build toward cap (plateau) so the first attestations are funded.
-  console.log('[dust] waiting for dust to build toward cap (plateau)...');
-  const maxWaitMs = 8 * 60_000;
-  const start = Date.now();
-  let prev = -1n, stable = 0;
-  await new Promise<void>((resolve) => {
-    const sub = ctx.wallet.state().pipe(Rx.throttleTime(15_000)).subscribe((s: any) => {
-      const bal = dustOf(s);
-      const elapsed = Date.now() - start;
-      console.log(`  [dust ${hhmmss()}] balance: ${bal} (elapsed ${Math.round(elapsed / 1000)}s)`);
-      if (prev > 0n && bal > 0n && (bal - prev) * 200n < prev) stable++; else stable = 0;
-      prev = bal;
-      if ((bal > 0n && stable >= 2) || elapsed >= maxWaitMs) { sub.unsubscribe(); resolve(); }
-    });
-  });
-  console.log(`[dust] settled at ${dustOf(await Rx.firstValueFrom(ctx.wallet.state()))}.`);
-}
-
-// Phase-2 watchdog: pace attestations to the agent's own DUST regeneration.
-async function ensureDustFloor(ctx: any, floor: bigint, maxWaitMs = 10 * 60_000): Promise<bigint> {
-  let bal = dustOf(await Rx.firstValueFrom(ctx.wallet.state()));
+// Watchdog: pace attestations to the agent's own DUST regeneration.
+async function ensureDustFloor(ctx: V9Wallet, floor: bigint, maxWaitMs = 10 * 60_000): Promise<bigint> {
+  let bal = dustOf(await Rx.firstValueFrom(ctx.facade.state()));
   if (bal >= floor) return bal;
-  console.log(`[watchdog] DUST ${bal} < floor ${floor} — pausing for regeneration from staked NIGHT...`);
+  console.log(`[watchdog] DUST ${bal} < floor ${floor} — pausing for regeneration from registered NIGHT...`);
   const start = Date.now();
   await new Promise<void>((resolve) => {
-    const sub = ctx.wallet.state().pipe(Rx.throttleTime(15_000)).subscribe((s: any) => {
+    const sub = ctx.facade.state().pipe(Rx.throttleTime(15_000)).subscribe((s: any) => {
       const b = dustOf(s);
       const el = Date.now() - start;
       console.log(`  [watchdog ${hhmmss()}] DUST ${b} (need ${floor}, ${Math.round(el / 1000)}s)`);
       if (b >= floor || el >= maxWaitMs) { sub.unsubscribe(); resolve(); }
     });
   });
-  bal = dustOf(await Rx.firstValueFrom(ctx.wallet.state()));
-  if (bal < floor) console.log(`[watchdog] WARNING: DUST still ${bal} < floor after ${Math.round(maxWaitMs / 1000)}s — NIGHT stake may be too low (top up via faucet).`);
+  bal = dustOf(await Rx.firstValueFrom(ctx.facade.state()));
+  if (bal < floor) throw new Error(`DUST still ${bal} < floor ${floor} after ${Math.round(maxWaitMs / 1000)}s: register more NIGHT for DUST generation`);
   return bal;
 }
 
-function makeWalletProvider(ctx: Awaited<ReturnType<typeof createWallet>>, state: any) {
-  return {
-    getCoinPublicKey: () => state.shielded.coinPublicKey.toHexString(),
-    getEncryptionPublicKey: () => state.shielded.encryptionPublicKey.toHexString(),
-    async balanceTx(tx: any, ttl?: Date) {
-      const recipe = await ctx.wallet.balanceUnboundTransaction(
-        tx,
-        { shieldedSecretKeys: ctx.shieldedSecretKeys, dustSecretKey: ctx.dustSecretKey },
-        { ttl: ttl ?? new Date(Date.now() + 30 * 60 * 1000) },
-      );
-      const signFn = (payload: Uint8Array) => ctx.unshieldedKeystore.signData(payload);
-      signTransactionIntents(recipe.baseTransaction, signFn, 'proof');
-      if (recipe.balancingTransaction) signTransactionIntents(recipe.balancingTransaction, signFn, 'pre-proof');
-      return ctx.wallet.finalizeRecipe(recipe);
-    },
-    submitTx: (tx: any) => ctx.wallet.submitTransaction(tx) as any,
-  };
-}
-
-function makeProviders(walletProvider: any, cfg: NetCfg, zkPath: string, storeName: string, accountId: string) {
-  const zkConfigProvider = new NodeZkConfigProvider(zkPath);
-  return {
-    privateStateProvider: levelPrivateStateProvider({
-      privateStateStoreName: storeName,
-      privateStoragePasswordProvider: () => process.env.PRIVATE_STATE_PASSWORD ?? 'dpo2u-local-dev-private-state-pw-2026',
-      accountId,
-    }),
-    publicDataProvider: indexerPublicDataProvider(cfg.indexer, cfg.indexerWS),
-    zkConfigProvider,
-    proofProvider: httpClientProofProvider(cfg.proofServer, zkConfigProvider),
-    walletProvider,
-    midnightProvider: walletProvider,
-  };
-}
-
-// (B) real value release — documented working unshielded transfer, gated by the on-chain verdict.
-async function transferNight(ctx: any, receiverAddress: any, amount: bigint): Promise<string> {
-  const recipe = await ctx.wallet.transferTransaction(
+// (B) real value release: unshielded NIGHT transfer, gated by the on-chain verdict.
+async function transferNight(ctx: V9Wallet, beneficiary: string, amount: bigint): Promise<string> {
+  // The facade wants an UnshieldedAddress instance, not the bech32 string; decoding also rejects
+  // an address from another network before anything is signed.
+  const receiverAddress = MidnightBech32m.parse(beneficiary).decode(UnshieldedAddress, ctx.net.networkId as any);
+  const recipe = await ctx.facade.transferTransaction(
     [{ type: 'unshielded', outputs: [{ type: ledger.unshieldedToken().raw, receiverAddress, amount }] }],
-    { shieldedSecretKeys: ctx.shieldedSecretKeys, dustSecretKey: ctx.dustSecretKey },
     { ttl: new Date(Date.now() + 30 * 60 * 1000) },
   );
-  const signed = await ctx.wallet.signRecipe(recipe, (p: Uint8Array) => ctx.unshieldedKeystore.signData(p));
-  const tx = await ctx.wallet.finalizeRecipe(signed);
-  return String(await ctx.wallet.submitTransaction(tx));
+  const signed = await ctx.facade.signRecipe(recipe, (p: Uint8Array) => ctx.keystore.signDataAsync(p));
+  return String(await ctx.facade.submitTransaction(await ctx.facade.finalizeRecipe(signed)));
 }
 
-// ── Contract bindings + attestation ─────────────────────────────────────────
+// ── Contract bindings ────────────────────────────────────────────────────────
 function deploymentAddress(network: string, name: string): string {
-  const file = repoFile(`deployment-${network === 'undeployed' || network === 'standalone' ? 'standalone' : network}.json`);
-  const dep = JSON.parse(fs.readFileSync(file, 'utf8'));
-  const addr = dep.contracts?.find((c: any) => c.name === name)?.contractAddress;
-  if (!addr) throw new Error(`${name} address not found in ${file}`);
-  return addr;
+  const file = repoFile(`deployment-${network}-v9.json`);
+  if (!fs.existsSync(file)) throw new Error(`${file} missing: deploy with scripts/deploy-v9.ts first`);
+  const c = JSON.parse(fs.readFileSync(file, 'utf8')).contracts?.[name];
+  if (!c?.contractAddress) throw new Error(`${name} not in ${file}`);
+  if (c.accessControl !== 'owner-v1') throw new Error(`${name} in ${file} was deployed without access control; redeploy`);
+  return c.contractAddress;
 }
 
-async function joinContract(walletProvider: any, cfg: NetCfg, accountId: string, name: string, mod: any, addr: string) {
+async function joinContract(ctx: V9Wallet, secret: Uint8Array, name: string, mod: any) {
   const zkPath = buildPath(name);
-  const compiled = CompiledContract.make(name, mod.Contract).pipe(
-    CompiledContract.withVacantWitnesses, CompiledContract.withCompiledFileAssets(zkPath),
+  const compiled = (CompiledContract.make(name, mod.Contract) as any).pipe(
+    (CompiledContract as any).withWitnesses(ownerWitnesses(secret)),
+    (CompiledContract as any).withCompiledFileAssets(zkPath),
   );
-  const providers = makeProviders(walletProvider, cfg, zkPath, `${name}-state`, accountId);
+  const addr = deploymentAddress(ctx.net.name, name);
   console.log(`[agent] joining ${name} ${addr.slice(0, 16)}…`);
-  return (findDeployedContract as any)(providers as any, {
+  return (findDeployedContract as any)(makeProviders(ctx, zkPath, `${name}-agent`), {
     contractAddress: addr, compiledContract: compiled,
     privateStateId: `${name}PrivateState`, initialPrivateState: {},
   });
@@ -456,7 +240,7 @@ function appendLedger(entry: any) {
   arr.push(entry); fs.writeFileSync(p, JSON.stringify(arr, null, 2));
 }
 
-async function drainOnce(ctx: any, contracts: Contracts, queuePath: string, floor: bigint, fee: number) {
+async function drainOnce(ctx: V9Wallet, contracts: Contracts, queuePath: string, floor: bigint, fee: number) {
   const items = loadQueue(queuePath);
   if (items.length === 0) { console.log('[agent] queue empty.'); return 0; }
   console.log(`[agent] draining ${items.length} item(s)...`);
@@ -468,7 +252,7 @@ async function drainOnce(ctx: any, contracts: Contracts, queuePath: string, floo
     const label = item.escrow_id ?? item.use_case_id ?? item.company_id ?? '(item)';
     try {
       await ensureDustFloor(ctx, floor);                          // Phase-2 watchdog
-      const before = dustOf(await Rx.firstValueFrom(ctx.wallet.state()));
+      const before = dustOf(await Rx.firstValueFrom(ctx.facade.state()));
       const res = await attestItem(contracts, item);
       // (B) conditional payment: the verdict gate passed above → move real NIGHT to the beneficiary.
       let transferTx: string | null = null;
@@ -482,11 +266,11 @@ async function drainOnce(ctx: any, contracts: Contracts, queuePath: string, floo
         revenue = await bookRevenue(contracts, fee);
         console.log(`  [agent] (2b) revenue: fee ${fee} → PaymentGateway treasury + FeeDistributor 40/60 (tx ${revenue.treasuryTx})`);
       }
-      const after = dustOf(await Rx.firstValueFrom(ctx.wallet.state()));
+      const after = dustOf(await Rx.firstValueFrom(ctx.facade.state()));
       const cost = before - after;
       writeQueue(queuePath, remaining);                          // drop processed (idempotent)
       appendLedger({
-        ts: new Date().toISOString(), network: getNetworkId(), kind: res.kind, key: res.key,
+        ts: new Date().toISOString(), network: ctx.net.name, kind: res.kind, key: res.key,
         txId: (res.public as any).txId, blockHeight: (res.public as any).blockHeight,
         transferTx, transferAmount: transferTx ? String(item.transfer_amount) : undefined,
         dustBefore: before.toString(), dustAfter: after.toString(), dustCost: cost.toString(),
@@ -499,7 +283,7 @@ async function drainOnce(ctx: any, contracts: Contracts, queuePath: string, floo
       const msg = e?.message ?? String(e);
       console.log(`[agent] ✗ ${label} FAILED: ${msg}`);
       // leave the item in the queue head; abort this drain so a poison item can't spin.
-      appendLedger({ ts: new Date().toISOString(), network: getNetworkId(), key: label, error: msg });
+      appendLedger({ ts: new Date().toISOString(), network: ctx.net.name, key: label, error: msg });
       break;
     }
   }
@@ -510,61 +294,46 @@ async function drainOnce(ctx: any, contracts: Contracts, queuePath: string, floo
 async function main() {
   const { values } = parseArgs({
     options: {
-      network: { type: 'string', default: process.env.MIDNIGHT_NETWORK ?? 'preview' },
       queue: { type: 'string', default: 'agent-queue.json' },
-      seed: { type: 'string' },
       'dust-floor': { type: 'string', default: '1000000000000000' }, // 1e15
       once: { type: 'boolean', default: false },
       watch: { type: 'boolean', default: false },
       interval: { type: 'string', default: '120' },
-      fee: { type: 'string', default: '10' },   // (2b) per-attestation fee booked to the on-chain revenue ledger (0 disables)
+      fee: { type: 'string', default: '10' },   // (2b) per-attestation fee booked on-chain (0 disables)
     },
   });
-  const net = String(values.network);
-  const entry = NETWORKS[net];
-  if (!entry) { console.error(`Unknown network: ${net}`); process.exit(1); }
-  setNetworkId(entry.networkId);
-  const cfg = entry.cfg;
+  const net = networkConfig();
   const queuePath = repoFile(String(values.queue));
   const floor = BigInt(String(values['dust-floor']));
   const watch = Boolean(values.watch);
   const intervalMs = Math.max(15, Number(values.interval)) * 1000;
+  const secret = ownerSecret(masterSeedHex());
 
   console.log('='.repeat(64));
-  console.log(`  DPO2U Midnight autonomous agent — ${net} (networkId=${entry.networkId})`);
+  console.log(`  DPO2U Midnight autonomous agent — ${net.name} (ledger v9)`);
   console.log(`  queue: ${queuePath} | dust-floor: ${floor} | mode: ${watch ? 'watch' : 'once'}`);
   console.log('='.repeat(64));
 
-  const seed = String(values.seed ?? process.env.MIDNIGHT_SEED ?? '');
-  if (!seed) { console.error('MIDNIGHT_SEED not set'); process.exit(1); }
-
-  const ctx = await createWallet(cfg, seed);
-  const accountId = String(ctx.unshieldedKeystore.getBech32Address());
-  console.log(`  wallet: ${accountId}`);
-  const state: any = await waitForSync(ctx.wallet);
-  const nt = ledger.unshieldedToken().raw;
-  console.log(`  tNIGHT: ${state.unshielded?.balances?.[nt] ?? 0n}`);
+  const ctx = await openWallet(net);
   await ensureDust(ctx);
-  await checkpoint(ctx);   // initial checkpoint after the first full sync → future restarts skip the cold resync
 
-  const walletProvider = makeWalletProvider(ctx, state);
-  const cr = await joinContract(walletProvider, cfg, accountId, 'ComplianceRegistry', ComplianceRegistry, deploymentAddress(net, 'ComplianceRegistry'));
-  const escrow = await joinContract(walletProvider, cfg, accountId, 'ComplianceEscrow', ComplianceEscrow, deploymentAddress(net, 'ComplianceEscrow'));
-  const pg = await joinContract(walletProvider, cfg, accountId, 'PaymentGateway', PaymentGateway, deploymentAddress(net, 'PaymentGateway'));
-  const fd = await joinContract(walletProvider, cfg, accountId, 'FeeDistributor', FeeDistributor, deploymentAddress(net, 'FeeDistributor'));
-  const trust = await joinContract(walletProvider, cfg, accountId, 'TrustStackRegistry', TrustStackRegistry, deploymentAddress(net, 'TrustStackRegistry'));
-  const legal = await joinContract(walletProvider, cfg, accountId, 'LegalSourceManifest', LegalSourceManifest, deploymentAddress(net, 'LegalSourceManifest'));
-  const solvency = await joinContract(walletProvider, cfg, accountId, 'SolvencyRegistry', SolvencyRegistry, deploymentAddress(net, 'SolvencyRegistry'));
-  const contracts: Contracts = { cr, escrow, pg, fd, trust, legal, solvency };
+  const contracts: Contracts = {
+    cr: await joinContract(ctx, secret, 'ComplianceRegistry', ComplianceRegistry),
+    escrow: await joinContract(ctx, secret, 'ComplianceEscrow', ComplianceEscrow),
+    pg: await joinContract(ctx, secret, 'PaymentGateway', PaymentGateway),
+    fd: await joinContract(ctx, secret, 'FeeDistributor', FeeDistributor),
+    trust: await joinContract(ctx, secret, 'TrustStackRegistry', TrustStackRegistry),
+    legal: await joinContract(ctx, secret, 'LegalSourceManifest', LegalSourceManifest),
+    solvency: await joinContract(ctx, secret, 'SolvencyRegistry', SolvencyRegistry),
+  };
   const fee = Number(values.fee);
 
   do {
     await drainOnce(ctx, contracts, queuePath, floor, fee);
-    await checkpoint(ctx);                   // keep the checkpoint current so a restart stays fast
     if (watch) { console.log(`[agent] sleeping ${intervalMs / 1000}s...`); await sleep(intervalMs); }
   } while (watch);
 
-  try { await (ctx.wallet as any).close?.(); } catch { /* ignore */ }
+  try { await ctx.facade.stop?.(); } catch { /* ignore */ }
   process.exit(0);
 }
 

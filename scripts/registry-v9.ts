@@ -7,7 +7,7 @@
  * Env: MIDNIGHT_SEED (hex master seed, never printed), PROOF_SERVER_URL (default :6311, proof-server 9.0.1).
  * Written against midnight-js 5 / wallet-sdk 2 / ledger-v9: the wallet starts from seeds
  * (WalletSeeds.fromMasterSeed), balancing takes no keys and unshielded intents are signed with
- * signRecipe. The old deploy-preprod.ts stays on the v8 stack for the other networks.
+ * signRecipe. The old v8 deploy scripts live in scripts/legacy-v8/ (reference only).
  */
 import fs from 'node:fs';
 import path from 'node:path';
