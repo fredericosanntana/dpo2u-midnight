@@ -40,7 +40,7 @@ export type NetworkName = 'preview' | 'preprod' | 'mainnet';
  * redeploys it and the callers (agent, paymaster) refuse to use it.
  */
 export const CODE_VERSION = 'v10';
-export const V10_CONTRACTS: ReadonlySet<string> = new Set(['ComplianceRegistry', 'TravelRuleGate', 'ConsentRegistry', 'DataSubjectRights']);
+export const V10_CONTRACTS: ReadonlySet<string> = new Set(['ComplianceRegistry', 'TravelRuleGate', 'ConsentRegistry', 'DataSubjectRights', 'PaymentGateway']);
 export type NetCfg = { name: NetworkName; networkId: string; indexer: string; indexerWS: string; node: string; proofServer: string };
 
 const PROOF_SERVER = () => process.env.PROOF_SERVER_URL ?? 'http://127.0.0.1:6300';
