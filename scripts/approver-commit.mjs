@@ -3,7 +3,7 @@
  * Generates the Travel Rule approver key OFF the server and prints its public commitment.
  *
  * Run it on the approver's own computer (not the VPS):
- *   mkdir dpo2u-approver && cd dpo2u-approver
+ *   mkdir dpo2u-approver && cd dpo2u-approver        (PowerShell: run each command on its own line)
  *   npm init -y >/dev/null && npm i @midnight-ntwrk/compact-runtime@0.21.0
  *   curl -fsSLO https://raw.githubusercontent.com/fredericosanntana/dpo2u-midnight/main/scripts/approver-commit.mjs
  *   node approver-commit.mjs            # new random secret
@@ -16,6 +16,7 @@
  *   approver_commitment(secret) = persistentHash<Vector<2, Bytes<32>>>([pad(32, "dpo2u/approver/v1"), secret])
  */
 import { randomBytes } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 import { persistentHash, CompactTypeVector, CompactTypeBytes } from '@midnight-ntwrk/compact-runtime';
 
 const pad32 = (s) => { const b = new Uint8Array(32); b.set(new TextEncoder().encode(s)); return b; };
@@ -42,4 +43,5 @@ async function main() {
   console.log('  ' + hex(approverCommitment(secret)));
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) main().catch((e) => { console.error(e.message); process.exit(1); });
+// pathToFileURL so the direct-run check also matches on Windows (C:\... paths).
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main().catch((e) => { console.error(e.message); process.exit(1); });
