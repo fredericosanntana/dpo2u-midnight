@@ -36,7 +36,7 @@ import * as PaymentGateway from '../build/PaymentGateway/contract/index.js';
 import * as FeeDistributor from '../build/FeeDistributor/contract/index.js';
 
 import { networkConfig, ensureDust, masterSeedHex } from './lib/midnight-v9.js';
-import { ownerSecret } from './owner.js';
+import { ownerSecret, scoreSalt, setScoreSalt } from './owner.js';
 import {
   openAccount, currentState, dustOf, nightOf, dustAddressString,
   delegateDustGeneration, waitForDustPlateau, parseDustAddress,
@@ -122,10 +122,13 @@ async function main() {
   console.log('\n[4/6] Sponsoring a big-player compliance attestation (fee paid from delegated DUST)...');
   const ctxBytes = deriveContext(String(values.company), String(values.jurisdiction));
   const dustBeforeSeal = dustOf(await currentState(controller));
+  // Evidence behind the demo score (fictitious company): hash of the demo inputs, recorded on-chain.
+  const evidenceHash = new Uint8Array(createHash('sha256').update(`paymaster-demo|${values.company}|${values.jurisdiction}|${values.score}`).digest());
+  setScoreSalt(scoreSalt(secret, ctxBytes));
   const attRes = await cr.callTx.attestCompliance(
     b32(String(values.company)), agentDid, b32('bafy-policy-cid'),
-    BigInt(String(values.threshold)), ctxBytes, BigInt(String(values.score)),
-  );
+    BigInt(String(values.threshold)), ctxBytes, BigInt(String(values.score)), evidenceHash,
+  ).finally(() => setScoreSalt(undefined));
   const dustAfterSeal = dustOf(await currentState(controller));
   const dustCost = dustBeforeSeal - dustAfterSeal;
   console.log(`    attestation tx ${attRes?.public?.txId} (block ${attRes?.public?.blockHeight}); DUST cost ${dustCost}`);

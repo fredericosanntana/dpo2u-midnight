@@ -4,7 +4,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { DisclosureGovernance, type DataSource } from '../src/disclosure/governance.js';
+import { DisclosureGovernance, purposeHash, type DataSource } from '../src/disclosure/governance.js';
 
 const vault: DataSource = {
   open: (t, p, f) => (t === 't1' ? { value: `${p}:${f}:fictitious`, salt: 'salt-' + f } : undefined),
@@ -123,5 +123,15 @@ describe('disclosure governance', () => {
     const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'k-')), 'k');
     fs.writeFileSync(f, randomBytes(32).toString('hex'), { mode: 0o644 });
     assert.throws(() => DisclosureGovernance.loadKey(f), /mode 600/);
+  });
+
+  it('ISSUE logs the purpose_hash for TravelRuleGate.grantDisclosure; it binds the legal basis', () => {
+    const { gov } = mk();
+    issue(gov);
+    const e = gov.log().find((x) => x.event === 'ISSUE')!;
+    const terms = { grant_id: 'g-bcb', supervisor: 'BCB', legal_basis: 'Fictitious supervisory request 0001/2026', transfer_ids: ['t1'], parties: ['originator' as const], scope: 1, expires_at: 1_600 };
+    assert.equal(e.detail.purpose_hash, purposeHash(terms));
+    assert.match(String(e.detail.purpose_hash), /^[0-9a-f]{64}$/);
+    assert.notEqual(purposeHash({ ...terms, legal_basis: 'another basis' }), purposeHash(terms));
   });
 });

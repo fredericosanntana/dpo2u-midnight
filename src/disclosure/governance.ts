@@ -7,6 +7,11 @@
  *
  * Field scope uses the same bitmask as compact/TravelRuleGate.compact:
  *   1 name, 2 account, 4 document, 8 vasp  (per party: originator / beneficiary)
+ *
+ * On-chain link (TravelRuleGate v10): the grant's purpose_hash (purposeHash below: sha256 of the
+ * canonical grant terms, legal basis included) is what the owner passes to grantDisclosure, so the
+ * on-chain grant_purpose commits to this exact credential. The on-chain grant only becomes active
+ * after approveDisclosure by the second key; issue the off-chain credential after that approval.
  */
 import { createHash, createHmac, hkdfSync, randomBytes, timingSafeEqual } from 'node:crypto';
 import * as fs from 'node:fs';
@@ -62,6 +67,12 @@ export function canonical(v: unknown): string {
     return '{' + Object.keys(o).sort().map((k) => JSON.stringify(k) + ':' + canonical(o[k])).join(',') + '}';
   }
   return JSON.stringify(v);
+}
+
+/** sha256 of the canonical grant terms (no issued_at): the purpose_hash given to TravelRuleGate.grantDisclosure. */
+export function purposeHash(c: Pick<Claims, 'grant_id' | 'supervisor' | 'legal_basis' | 'transfer_ids' | 'parties' | 'scope' | 'expires_at'>): string {
+  const { grant_id, supervisor, legal_basis, transfer_ids, parties, scope, expires_at } = c;
+  return sha256(canonical({ grant_id, supervisor, legal_basis, transfer_ids, parties, scope, expires_at }));
 }
 
 export class DisclosureGovernance {
@@ -122,7 +133,7 @@ export class DisclosureGovernance {
     const claims: Claims = { ...p, grant_id: p.grant_id ?? 'g-' + randomBytes(6).toString('hex'), issued_at };
     if (this.issued.has(claims.grant_id)) throw new Error('grant_id already used');
     this.issued.set(claims.grant_id, claims);
-    this.append('ISSUE', claims.grant_id, claims.supervisor, { claims, scope_fields: maskFields(claims.scope) });
+    this.append('ISSUE', claims.grant_id, claims.supervisor, { claims, scope_fields: maskFields(claims.scope), purpose_hash: purposeHash(claims) });
     const payload = b64u(canonical(claims));
     return payload + '.' + this.sign(payload);
   }

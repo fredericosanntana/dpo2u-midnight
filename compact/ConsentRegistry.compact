@@ -20,6 +20,13 @@ circuit assert_owner(): [] {
   assert(persistentHash<Bytes<32>>(owner_secret()) == owner_commit, "Only the contract owner can do this");
 }
 
+// subject_id for this contract: persistentHash([salt, identifier_hash]). identifier_hash is the
+// hash of the normalized identifier (e.g. sha256 of the e-mail); salt is a per-controller secret
+// kept off-chain. Same derivation as DataSubjectRights.subject_key.
+export pure circuit subject_key(identifier_hash: Bytes<32>, salt: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([salt, identifier_hash]);
+}
+
 // ConsentRegistry — LGPD/GDPR consent management on Midnight Network
 //
 // Implements consent requirements from:
@@ -27,8 +34,9 @@ circuit assert_owner(): [] {
 //   - GDPR Art. 6(1)(a) and Art. 7 (conditions for consent)
 //
 // DESIGN CHOICES:
-//   - subject_id is a Bytes<32> hash of the data subject identifier (e.g. keccak256(email))
-//     This ensures the contract does NOT store PII on-chain — only its hash.
+//   - subject_id is subject_key(identifier_hash, salt) (pure circuit above): a SALTED hash of
+//     the data subject identifier, with the salt held by the controller off-chain. Never a bare
+//     hash of an e-mail/CPF: those are low-entropy and a bare hash can be reversed by guessing.
 //   - purposes is a Uint<8> bitmask allowing multi-purpose consent in a single tx:
 //       0x01 (1)  = essential_processing
 //       0x02 (2)  = analytics

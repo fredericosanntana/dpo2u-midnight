@@ -33,6 +33,14 @@ import { UnshieldedWallet, createKeystore, PublicKey } from '@midnight-ntwrk/wal
 import { WalletTransaction, ProtocolVersion, InMemoryTransactionHistoryStorage } from '@midnight-ntwrk/wallet-sdk-abstractions';
 
 export type NetworkName = 'preview' | 'preprod' | 'mainnet';
+
+/**
+ * Contracts whose circuits or constructor changed in v10 (pre-mainnet hardening). A deployment
+ * entry for one of these without codeVersion === CODE_VERSION is the old layout: deploy-v9.ts
+ * redeploys it and the callers (agent, paymaster) refuse to use it.
+ */
+export const CODE_VERSION = 'v10';
+export const V10_CONTRACTS: ReadonlySet<string> = new Set(['ComplianceRegistry', 'TravelRuleGate', 'ConsentRegistry', 'DataSubjectRights']);
 export type NetCfg = { name: NetworkName; networkId: string; indexer: string; indexerWS: string; node: string; proofServer: string };
 
 const PROOF_SERVER = () => process.env.PROOF_SERVER_URL ?? 'http://127.0.0.1:6300';

@@ -6,8 +6,18 @@
  *   MIDNIGHT_NETWORK=preview npx tsx scripts/deploy-v9.ts --dry-run --all   # no wallet, prints the plan
  *
  * Mainnet needs CONFIRM_MAINNET=yes, BLOCKFROST_PROJECT_ID, DPO2U_OWNER_SECRET and PRIVATE_STATE_PASSWORD
- * (see scripts/lib/midnight-v9.ts). Every contract gets owner_commit = owner_commitment(owner secret);
- * TravelRuleGate also takes its threshold (TRAVEL_RULE_THRESHOLD_CENTS, default 100000 = R$ 1.000,00).
+ * (see scripts/lib/midnight-v9.ts). Every contract gets owner_commit = owner_commitment(owner secret).
+ * TravelRuleGate (v10) also takes, in order:
+ *   threshold_cents   TRAVEL_RULE_THRESHOLD_CENTS (default 100000 = R$ 1.000,00)
+ *   passport          address of PsavPassport (deployed earlier in this run or in the deployment file)
+ *   registry          address of ComplianceRegistry (same; must be the v10 build)
+ *   self_company_id   TRAVEL_RULE_SELF_COMPANY_ID (required): the company_id this VASP is attested
+ *                     under in the ComplianceRegistry (same 32-byte padding as the agent's b32)
+ *   approver_commit   DPO2U_APPROVER_COMMIT, or computed from DPO2U_APPROVER_SECRET; a key apart
+ *                     from the owner's (scripts/owner.ts). Testnets may derive it from the seed.
+ * So PsavPassport and ComplianceRegistry deploy before TravelRuleGate.
+ * Contracts whose code changed in v10 (V10_CONTRACTS) are redeployed over an older entry; the rest
+ * keep the skip-if-deployed rule.
  * Results go to deployment-<network>-v9.json (one entry per contract, merged with earlier runs).
  * Each entry also records dustSpent: the wallet's DUST balance drop across that deploy. DUST keeps
  * generating while the deploy runs, so this slightly UNDER-states the fee; it is a measurement for
@@ -23,19 +33,38 @@ import { WebSocket } from 'ws';
 import { deployContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
 import * as Rx from 'rxjs';
-import { networkConfig, openWallet, ensureDust, makeProviders, masterSeedHex, dustBalance } from './lib/midnight-v9.js';
-import { ownerSecret, ownerCommit } from './owner.js';
+import { networkConfig, openWallet, ensureDust, makeProviders, masterSeedHex, dustBalance, V10_CONTRACTS, CODE_VERSION } from './lib/midnight-v9.js';
+import { ownerSecret, ownerCommit, approverCommit } from './owner.js';
+import { encodeContractAddress } from '@midnight-ntwrk/compact-runtime';
 
 // @ts-expect-error WebSocket polyfill for graphql-ws in Node
 globalThis.WebSocket = WebSocket;
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+type ArgCtx = { net: string; secret: Uint8Array; mod: any; addressOf: (name: string) => string | undefined };
+
+const b32 = (s: string) => { const b = Buffer.alloc(32); Buffer.from(s, 'utf-8').copy(b, 0, 0, Math.min(s.length, 32)); return new Uint8Array(b); };
+const contractRef = (addr: string) => ({ bytes: encodeContractAddress(addr) });
+function linked(c: ArgCtx, name: string): { bytes: Uint8Array } {
+  const a = c.addressOf(name);
+  if (!a) throw new Error(`TravelRuleGate needs a current ${name} deployed first: add it to --only or deploy it earlier`);
+  return contractRef(a);
+}
+
 /** Contracts and their constructor args after owner_commit. Order = deploy order. */
-const CONTRACTS: Record<string, () => unknown[]> = {
+const CONTRACTS: Record<string, (c: ArgCtx) => unknown[]> = {
   ComplianceRegistry: () => [],
-  TravelRuleGate: () => [BigInt(process.env.TRAVEL_RULE_THRESHOLD_CENTS ?? '100000')],
   PsavPassport: () => [],
+  TravelRuleGate: (c) => {
+    const self = (process.env.TRAVEL_RULE_SELF_COMPANY_ID ?? '').trim();
+    if (!self) throw new Error('TRAVEL_RULE_SELF_COMPANY_ID is required for TravelRuleGate (company_id of this VASP in the ComplianceRegistry)');
+    return [
+      BigInt(process.env.TRAVEL_RULE_THRESHOLD_CENTS ?? '100000'),
+      linked(c, 'PsavPassport'), linked(c, 'ComplianceRegistry'),
+      b32(self), approverCommit(c.mod, c.net, c.secret),
+    ];
+  },
   ConsentRegistry: () => [],
   DataSubjectRights: () => [],
   DataAuditLog: () => [],
@@ -51,10 +80,15 @@ const CONTRACTS: Record<string, () => unknown[]> = {
   FeeDistributor: () => [],
 };
 
+/** An entry is current when it has access control and, for contracts changed in v10, the v10 code. */
+const isCurrent = (name: string, e: any) => e?.accessControl === 'owner-v1' && (!V10_CONTRACTS.has(name) || e?.codeVersion === CODE_VERSION);
+
 const { values } = parseArgs({
   options: { only: { type: 'string' }, all: { type: 'boolean', default: false }, 'dry-run': { type: 'boolean', default: false } },
 });
-const names = values.all ? Object.keys(CONTRACTS) : (values.only ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+const order = Object.keys(CONTRACTS);
+const names = (values.all ? order : (values.only ?? '').split(',').map((s) => s.trim()).filter(Boolean))
+  .sort((a, b) => order.indexOf(a) - order.indexOf(b)); // dependencies first (gate after passport + registry)
 if (!names.length) throw new Error('Pass --only A,B or --all');
 for (const n of names) if (!CONTRACTS[n]) throw new Error(`Unknown contract ${n}`);
 
@@ -75,15 +109,25 @@ async function main() {
   const OUT = path.join(ROOT, `deployment-${net.name}-v9.json`);
   const out = fs.existsSync(OUT) ? JSON.parse(fs.readFileSync(OUT, 'utf8')) : { network: net.name, ledger: 'v9', contracts: {} };
 
+  // Address of a contract as the gate will see it: deployed in this run, else a current entry of the file.
+  const addressOf = (name: string): string | undefined => (isCurrent(name, out.contracts[name]) ? out.contracts[name].contractAddress : undefined);
   const plan = await Promise.all(names.map(async (name) => {
     const zk = path.join(ROOT, 'build', name);
     if (!fs.existsSync(path.join(zk, 'contract', 'index.js'))) throw new Error(`build/${name} missing: run bash scripts/compile.sh`);
     const mod = await import(pathToFileURL(path.join(zk, 'contract', 'index.js')).href);
-    return { name, zk, mod, args: [ownerCommit(mod, secret), ...CONTRACTS[name]()] };
+    return { name, zk, mod };
   }));
+  // Args are built at deploy time (the gate needs the addresses of contracts deployed just before it).
+  const argsOf = (p: { name: string; mod: any }) => [ownerCommit(p.mod, secret), ...CONTRACTS[p.name]({ net: net.name, secret, mod: p.mod, addressOf })];
   console.log(`[deploy] ${net.name}: ${plan.map((p) => p.name).join(', ')}`);
   if (values['dry-run']) {
-    for (const p of plan) console.log(`  ${p.name}: ${p.args.length} constructor arg(s), owner_commit ${Buffer.from(p.args[0] as Uint8Array).toString('hex').slice(0, 12)}…`);
+    for (const p of plan) {
+      if (isCurrent(p.name, out.contracts[p.name])) { console.log(`  ${p.name}: current at ${out.contracts[p.name].contractAddress}, would skip`); continue; }
+      let note: string;
+      try { const a = argsOf(p); note = `${a.length} constructor arg(s), owner_commit ${Buffer.from(a[0] as Uint8Array).toString('hex').slice(0, 12)}…`; }
+      catch (e: any) { note = names.includes('PsavPassport') || names.includes('ComplianceRegistry') ? `args resolved after its dependencies deploy (${e.message})` : `NOT deployable: ${e.message}`; }
+      console.log(`  ${p.name}: ${note}`);
+    }
     return;
   }
 
@@ -92,7 +136,8 @@ async function main() {
   if (dust === 0n) throw new Error('No DUST. Register NIGHT for DUST generation and wait (mainnet has no faucet).');
 
   for (const p of plan) {
-    if (out.contracts[p.name]?.accessControl === 'owner-v1') { console.log(`  ${p.name}: already deployed at ${out.contracts[p.name].contractAddress}, skipping`); continue; }
+    if (isCurrent(p.name, out.contracts[p.name])) { console.log(`  ${p.name}: already deployed at ${out.contracts[p.name].contractAddress}, skipping`); continue; }
+    const args = argsOf(p);
     const dustBefore = dustBalance(await Rx.firstValueFrom(w.facade.state()));
     const t0 = Date.now();
     const providers = makeProviders(w, p.zk, `${p.name}-v9`);
@@ -101,12 +146,14 @@ async function main() {
       (CompiledContract as any).withCompiledFileAssets(p.zk),
     );
     const c: any = await (deployContract as any)(providers, {
-      compiledContract: compiled, privateStateId: `${p.name}PrivateState`, initialPrivateState: {}, args: p.args,
+      compiledContract: compiled, privateStateId: `${p.name}PrivateState`, initialPrivateState: {}, args,
     });
     const d = c.deployTxData.public;
     const dustAfter = dustBalance(await Rx.firstValueFrom(w.facade.state()));
     out.contracts[p.name] = { contractAddress: String(d.contractAddress), txId: d.txId, blockHeight: d.blockHeight,
       deployedAt: new Date().toISOString(), compiler: 'compactc 0.36.0', accessControl: 'owner-v1',
+      ...(V10_CONTRACTS.has(p.name) ? { codeVersion: CODE_VERSION } : {}),
+      ...(p.name === 'TravelRuleGate' ? { links: { PsavPassport: addressOf('PsavPassport'), ComplianceRegistry: addressOf('ComplianceRegistry') } } : {}),
       dustSpent: String(dustBefore - dustAfter), dustBefore: String(dustBefore), seconds: Math.round((Date.now() - t0) / 1000) };
     fs.writeFileSync(OUT, JSON.stringify(out, null, 2) + '\n');
     console.log(`  ${p.name}: ${d.contractAddress} (block ${d.blockHeight}, DUST spent ~${dustBefore - dustAfter})`);

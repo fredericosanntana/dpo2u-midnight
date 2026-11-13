@@ -46,7 +46,7 @@ if (claimThreshold > 0) {
   // score-private: prove score >= claimThreshold, score itself NEVER on-chain.
   items.push({
     type: 'compliance', company_id: company, agent_did: 'did:dpo2u:agent:001',
-    policy_cid: `eval:${evidence_hash.slice(0, 16)}`, threshold: claimThreshold, score,
+    policy_cid: `eval:${evidence_hash.slice(0, 16)}`, threshold: claimThreshold, score, evidence_hash,
     org: company, jurisdiction,
   });
 }

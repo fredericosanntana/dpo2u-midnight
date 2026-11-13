@@ -7,6 +7,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { reviewerSalt, saltedReviewerHash, TESTNET_PUBLIC_SALT } from './reviewer-salt.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const dir = mkdtempSync(join(tmpdir(), 'bridge-'));
@@ -86,8 +87,12 @@ test('avalancheArgs: veredito do registry, origin HUMAN_REVIEWED, validade e met
   assert.equal(a.expiresAt, 1_000_000 + 365 * 86400);
   assert.equal(a.evidenceHashHex, '0x' + mh);
   assert.equal(a.subjectHex, '0x' + 'e'.repeat(64));
-  const meta = { attestedAt: p.attestedAt, packId: p.packId, reportId: p.reportId, reviewerHash: p.reviewerHash, verdict: p.verdict };
+  // reviewerHash entra salgado: sha256(salt || reviewerHash); sem DPO2U_REVIEWER_SALT em testnet, o salt público
+  const salted = createHash('sha256').update(Buffer.from(TESTNET_PUBLIC_SALT, 'hex')).update(Buffer.from(p.reviewerHash, 'hex')).digest('hex');
+  const meta = { attestedAt: p.attestedAt, packId: p.packId, reportId: p.reportId, reviewerHash: salted, verdict: p.verdict };
   assert.equal(a.metadataHashHex, '0x' + createHash('sha256').update(canonical(meta)).digest('hex'));
+  const bare = { ...meta, reviewerHash: p.reviewerHash };
+  assert.notEqual(a.metadataHashHex, '0x' + createHash('sha256').update(canonical(bare)).digest('hex'), 'reviewerHash cru no metadata');
   assert.equal(m.avalancheArgs({ ...p, verdict: 'fail' }, 0).verdict, 2);
   assert.equal(m.avalancheArgs({ ...p, verdict: 'pass' }, 0).verdict, 1);
   assert.equal(m.checkRequest({ payload, manifest, chains: ['avalanche'] }), 'subject (hash hex de 32 bytes) é obrigatório para avalanche');
@@ -111,4 +116,23 @@ test('chains=[midnight,avalanche] sem Avalanche configurada: midnight grava, ava
   } finally {
     p.kill();
   }
+});
+
+// ── reviewerHash salgado (v10) ──
+test('reviewerSalt: mainnet exige DPO2U_REVIEWER_SALT; formato validado; testnet cai no salt público', () => {
+  assert.throws(() => reviewerSalt('mainnet', {}), /DPO2U_REVIEWER_SALT é obrigatório em mainnet/);
+  assert.throws(() => reviewerSalt('preview', { DPO2U_REVIEWER_SALT: 'abc' }), /32 bytes em hex/);
+  const salt = '5'.repeat(64);
+  assert.equal(reviewerSalt('mainnet', { DPO2U_REVIEWER_SALT: salt }), salt);
+  assert.equal(reviewerSalt('preview', {}), TESTNET_PUBLIC_SALT);
+  const h = saltedReviewerHash('d'.repeat(64), salt);
+  assert.equal(h, createHash('sha256').update(Buffer.from(salt + 'd'.repeat(64), 'hex')).digest('hex'));
+  assert.notEqual(h, saltedReviewerHash('d'.repeat(64), '6'.repeat(64)), 'muda com o salt');
+});
+
+test('ponte em mainnet sem DPO2U_REVIEWER_SALT não sobe', async () => {
+  const { p, logs } = await start({ BRIDGE_MIDNIGHT_NETWORK: 'mainnet', DPO2U_REVIEWER_SALT: '' });
+  if (p.exitCode === null) await new Promise((r) => p.on('exit', r));
+  assert.equal(p.exitCode, 2);
+  assert.match(logs(), /DPO2U_REVIEWER_SALT é obrigatório em mainnet/);
 });

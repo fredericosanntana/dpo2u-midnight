@@ -12,7 +12,9 @@
  *
  * Mapeamento em ComplianceRegistry.attestUseCase(use_case_id, verdict, evidence_hash, metadata_hash):
  *   use_case_id = sha256("dpo2u/lgpd-attestation/v1|" + packId); verdict 1 PASS / 0 FAIL / 2 REVIEW;
- *   evidence_hash = manifestHash; metadata_hash = sha256(JSON canônico {attestedAt, packId, reportId, reviewerHash, verdict}).
+ *   evidence_hash = manifestHash; metadata_hash = sha256(JSON canônico {attestedAt, packId, reportId, reviewerHash, verdict}),
+ *   com reviewerHash = sha256(DPO2U_REVIEWER_SALT || reviewerHash do payload) (bridge/reviewer-salt.mjs;
+ *   salt obrigatório em mainnet).
  *
  * Endereço do contrato: env COMPLIANCE_REGISTRY_ADDRESS > deployment-<rede>-lgpd-attestations.json >
  * deploy novo (só com ALLOW_DEPLOY=1). Seed só por env (MIDNIGHT_SEED), nunca impresso.
@@ -36,6 +38,7 @@ import { createLedger9WalletProvider, createLedger9MidnightProvider } from '@mid
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
 import { ownerSecret, ownerWitnesses, ownerCommit } from './owner.js';
 import { networkConfig } from './lib/midnight-v9.js';
+import { reviewerSalt, lgpdMetadata } from '../bridge/reviewer-salt.mjs';
 import { ContractState } from '@midnight-ntwrk/compact-runtime';
 import { WalletFacade, WalletEntrySchema, mergeWalletEntries } from '@midnight-ntwrk/wallet-sdk-facade';
 import { InMemoryTransactionHistoryStorage } from '@midnight-ntwrk/wallet-sdk-abstractions';
@@ -160,7 +163,8 @@ async function main() {
   const useCase = sha(`dpo2u/lgpd-attestation/v1|${p.packId}`);
   const evidence = fromHex(p.manifestHash);
   fromHex(p.reviewerHash);
-  const meta = { attestedAt: p.attestedAt, packId: p.packId, reportId: p.reportId, reviewerHash: p.reviewerHash, verdict: p.verdict };
+  // Salt checked before the wallet opens: mainnet without DPO2U_REVIEWER_SALT stops here.
+  const meta = lgpdMetadata(p, reviewerSalt(process.env.MIDNIGHT_NETWORK ?? 'preview'));
   const metadata = sha(canonicalJson(meta));
 
   const ctx = await createWallet(seed);

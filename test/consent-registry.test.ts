@@ -6,6 +6,8 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
 import { Contract, ledger, pureCircuits } from '../build/ConsentRegistry/contract/index.js';
+import * as DSR from '../build/DataSubjectRights/contract/index.js';
+import { createHash } from 'node:crypto';
 import { setupOwned, asStranger, b32, NOT_OWNER } from './helpers.js';
 
 function padTo32Bytes(str: string): Uint8Array {
@@ -74,5 +76,35 @@ describe('ConsentRegistry access control', () => {
   it('rejects a caller that does not hold the owner secret', async () => {
     const { contract, ctx } = await setup();
     await assert.rejects(() => contract.circuits.grantConsent(asStranger(ctx), b32('subject'), 0x01n, 1n), NOT_OWNER);
+  });
+});
+
+describe('ConsentRegistry subject_key (salted subject id)', () => {
+  const idHash = (email: string) => new Uint8Array(createHash('sha256').update(email.trim().toLowerCase()).digest());
+  const SALT_A = b32('controller-salt-A');
+  const SALT_B = b32('controller-salt-B');
+
+  it('is deterministic for the same identifier and salt', () => {
+    assert.deepEqual(pureCircuits.subject_key(idHash('Titular@Example.com'), SALT_A), pureCircuits.subject_key(idHash('titular@example.com'), SALT_A));
+  });
+
+  it('changes with the salt and differs from the bare identifier hash', () => {
+    const h = idHash('titular@example.com');
+    const a = pureCircuits.subject_key(h, SALT_A);
+    assert.notDeepEqual(a, pureCircuits.subject_key(h, SALT_B));
+    assert.notDeepEqual(a, h);
+    assert.notDeepEqual(a, pureCircuits.subject_key(idHash('other@example.com'), SALT_A));
+  });
+
+  it('matches DataSubjectRights.subject_key, so both contracts index the same subject', () => {
+    const h = idHash('titular@example.com');
+    assert.deepEqual(pureCircuits.subject_key(h, SALT_A), DSR.pureCircuits.subject_key(h, SALT_A));
+  });
+
+  it('works as the subject_id of a consent record', async () => {
+    const { contract, ctx } = await setup();
+    const key = pureCircuits.subject_key(idHash('titular@example.com'), SALT_A);
+    const { context } = await contract.circuits.grantConsent(ctx, key, 0x01n, 1n);
+    assert.equal(ledger(context.callContext.currentQueryContext.state).consent_status.lookup(key), 1n);
   });
 });

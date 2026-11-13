@@ -20,6 +20,11 @@ circuit assert_owner(): [] {
   assert(persistentHash<Bytes<32>>(owner_secret()) == owner_commit, "Only the contract owner can do this");
 }
 
+// Salted subject key; identical to ConsentRegistry.subject_key so both contracts index the same subject.
+export pure circuit subject_key(identifier_hash: Bytes<32>, salt: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([salt, identifier_hash]);
+}
+
 // DataSubjectRights — LGPD Chapter III rights request tracking on Midnight Network
 //
 // Tracks exercise of data subject rights (LGPD Art. 18) and response deadlines (Art. 19).
@@ -46,8 +51,12 @@ circuit assert_owner(): [] {
 //   4 = overdue    (15-day Art. 19 deadline exceeded without response)
 //
 // DESIGN:
-//   request_id: Bytes<32> = keccak256(subject_id || controller_id || req_type || nonce)
-//     Computed off-chain; nonce allows multiple requests of the same type per subject.
+//   subject_id = subject_key(identifier_hash, salt) (pure circuit above; same as ConsentRegistry):
+//     a SALTED hash of the subject identifier, salt held off-chain. Never a bare hash of an
+//     e-mail/CPF (low entropy, reversible by guessing).
+//   request_id: Bytes<32> = sha256(subject_id || controller_id || req_type || nonce)
+//     Computed off-chain from the salted subject_id; nonce allows multiple requests of the same
+//     type per subject.
 //   submitted_block / resolved_block: Uint<32> block numbers (supports up to ~8000 years
 //     at 1 block/minute — avoids the Uint<16> 45-day limit of DataAuditLog).
 //   LGPD Art. 19 deadline = 15 days = 21600 blocks (at 1 block/minute).

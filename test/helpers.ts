@@ -7,7 +7,7 @@
  */
 import { createCircuitContext, createConstructorContext, dummyContractAddress } from '@midnight-ntwrk/compact-runtime';
 
-export type OwnerPS = { ownerSecret: Uint8Array };
+export type OwnerPS = { ownerSecret: Uint8Array; scoreSalt?: Uint8Array };
 
 export const b32 = (s: string): Uint8Array => {
   const x = Buffer.alloc(32);
@@ -19,8 +19,12 @@ export const OWNER_SECRET = b32('dpo2u-owner-secret-test-only');
 export const STRANGER_SECRET = b32('someone-else-entirely');
 export const NOT_OWNER = /Only the contract owner can do this/;
 
+export const SCORE_SALT = b32('score-salt-test-only');
+
+// Superset of witnesses: contracts ignore the ones they do not declare (score_salt is ComplianceRegistry's).
 const witnesses = {
   owner_secret: (c: any) => [c.privateState, (c.privateState as OwnerPS).ownerSecret] as [OwnerPS, Uint8Array],
+  score_salt: (c: any) => [c.privateState, (c.privateState as OwnerPS).scoreSalt ?? SCORE_SALT] as [OwnerPS, Uint8Array],
 };
 
 const COIN_PK = '0'.repeat(64);
@@ -86,3 +90,6 @@ export function publicStateHex(state: any): string {
   walk(state?.state ?? state);
   return out.join('|');
 }
+
+// Cross-contract simulator plumbing lives in scripts/lib (shared with scripts/demo-travel-rule.ts).
+export { simAddress, contractRef, asDeployed, crossContract, SIM_BLOCK_HASH } from '../scripts/lib/sim-cross-contract.js';

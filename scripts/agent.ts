@@ -31,8 +31,8 @@ import { toHex } from '@midnight-ntwrk/midnight-js-utils';
 import * as ledger from '@midnight-ntwrk/ledger-v9';
 import { MidnightBech32m, UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
-import { networkConfig, openWallet, ensureDust, makeProviders, masterSeedHex, dustBalance, type V9Wallet } from './lib/midnight-v9.js';
-import { ownerSecret, ownerWitnesses } from './owner.js';
+import { networkConfig, openWallet, ensureDust, makeProviders, masterSeedHex, dustBalance, V10_CONTRACTS, CODE_VERSION, type V9Wallet } from './lib/midnight-v9.js';
+import { ownerSecret, ownerWitnesses, scoreSalt, setScoreSalt } from './owner.js';
 
 import * as ComplianceRegistry from '../build/ComplianceRegistry/contract/index.js';
 import * as ComplianceEscrow from '../build/ComplianceEscrow/contract/index.js';
@@ -109,6 +109,7 @@ function deploymentAddress(network: string, name: string): string {
   const c = JSON.parse(fs.readFileSync(file, 'utf8')).contracts?.[name];
   if (!c?.contractAddress) throw new Error(`${name} not in ${file}`);
   if (c.accessControl !== 'owner-v1') throw new Error(`${name} in ${file} was deployed without access control; redeploy`);
+  if (V10_CONTRACTS.has(name) && c.codeVersion !== CODE_VERSION) throw new Error(`${name} in ${file} is the pre-${CODE_VERSION} layout; redeploy with scripts/deploy-v9.ts`);
   return c.contractAddress;
 }
 
@@ -143,7 +144,7 @@ type QueueItem = {
   entity_id?: string; report_cid?: string; period?: number; reserves?: number | string; liabilities?: number | string;
 };
 
-type Contracts = { cr: any; escrow: any; pg: any; fd: any; trust: any; legal: any; solvency: any };
+type Contracts = { cr: any; escrow: any; pg: any; fd: any; trust: any; legal: any; solvency: any; ownerSecret: Uint8Array };
 
 // (2b) revenue recognition: book the per-attestation fee on-chain (PaymentGateway treasury = the
 // public revenue ledger) + the 40/60 expert/auditor split (FeeDistributor). Real value-in is EARN
@@ -213,11 +214,18 @@ async function attestItem(c: Contracts, item: QueueItem) {
   if (type === 'compliance') {
     const org = item.org ?? item.company_id ?? 'org';
     const ctxBytes = deriveContext(org, item.jurisdiction ?? 'NA');
-    const r = await c.cr.callTx.attestCompliance(
-      b32(item.company_id ?? org), b32(item.agent_did ?? 'did:dpo2u:agent:001'),
-      b32(item.policy_cid ?? 'bafy-policy-cid'), BigInt(item.threshold ?? 70),
-      ctxBytes, BigInt(item.score ?? 0),
-    );
+    // evidence_hash is recorded on-chain next to the verdict; no evidence, no attestation.
+    if (!item.evidence_hash) throw new Error('compliance item needs evidence_hash (sha256 of the evaluation behind the score)');
+    // score_commit = persistentCommit(score, salt); the salt is re-derivable from the owner secret + context.
+    setScoreSalt(scoreSalt(c.ownerSecret, ctxBytes));
+    let r: any;
+    try {
+      r = await c.cr.callTx.attestCompliance(
+        b32(item.company_id ?? org), b32(item.agent_did ?? 'did:dpo2u:agent:001'),
+        b32(item.policy_cid ?? 'bafy-policy-cid'), BigInt(item.threshold ?? 70),
+        ctxBytes, BigInt(item.score ?? 0), hexToBytes32(item.evidence_hash),
+      );
+    } finally { setScoreSalt(undefined); }
     return { kind: 'compliance', key: item.company_id ?? org, context: toHex(ctxBytes), public: r?.public ?? {} };
   }
   const r = await c.cr.callTx.attestUseCase(
@@ -318,6 +326,7 @@ async function main() {
   await ensureDust(ctx);
 
   const contracts: Contracts = {
+    ownerSecret: secret,
     cr: await joinContract(ctx, secret, 'ComplianceRegistry', ComplianceRegistry),
     escrow: await joinContract(ctx, secret, 'ComplianceEscrow', ComplianceEscrow),
     pg: await joinContract(ctx, secret, 'PaymentGateway', PaymentGateway),

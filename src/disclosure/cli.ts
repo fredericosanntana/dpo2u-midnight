@@ -48,6 +48,9 @@ if (cmd === 'init') {
       scope: scopeMask(list(v.fields) as Field[]), expires_at: now + Number(v.ttl ?? 3600),
     });
     console.log(token);
+    // For TravelRuleGate.grantDisclosure(..., purpose_hash): stderr, so stdout stays the token alone.
+    const issued = gov.log().filter((e) => e.event === 'ISSUE').pop();
+    console.error(`purpose_hash ${String(issued?.detail.purpose_hash)}`);
   } else if (cmd === 'revoke') {
     gov.revoke(v.grant!, v.reason ?? 'unspecified');
     console.log('revoked ' + v.grant);
