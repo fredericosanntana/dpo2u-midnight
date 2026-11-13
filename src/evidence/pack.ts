@@ -32,6 +32,50 @@ export interface Attestation {
   tx_hash: string | null;
 }
 
+/**
+ * What the pack proves and what it does not. Every pack declares it in the manifest; verifyPack
+ * fails without it. Override `scope` only to narrow it further, never to claim more.
+ */
+export const DEFAULT_SCOPE = {
+  text: 'This pack shows that each verdict was produced by the named compiled circuits, from inputs whose hashes are listed here, under the policy version given, and that the disclosure log is intact. It does NOT show that the input data were true or complete, that the policy was current or adequate when applied, or that the processing was lawful; those remain with the VASP, its auditor and the supervisor.',
+  covers: ['circuit execution and verdict integrity', 'binding of each verdict to its policy hash', 'hashes of the inputs used', 'disclosure log integrity'],
+  does_not_cover: ['truthfulness or completeness of input data', 'currency or adequacy of the policy', 'lawfulness of the processing'],
+};
+
+/** One input of the verdicts in this pack: where it came from, when, who signed it (if anyone), its hash. */
+export interface PackInputRecord {
+  name: string;                  // e.g. party_data, sanctions_list, threshold, registry_attestation
+  source: string;                // system / provider / contract it was read from
+  retrievedAt: string;           // ISO 8601
+  signedBy: string | null;       // signer identity or key, null when unsigned (say so, never omit)
+  hash: string;                  // sha256 hex of the input as used
+}
+
+/** Inputs every Travel Rule pack must declare. */
+export const REQUIRED_INPUTS = ['party_data', 'sanctions_list', 'threshold', 'registry_attestation'] as const;
+
+/** Checks scope / policyVersion / inputs; returns the problems (empty = valid). */
+export function checkDeclaredScope(m: { scope?: any; policyVersion?: unknown; inputs?: any }, attestations: { policy_hash?: string }[]): string[] {
+  const e: string[] = [];
+  if (!m.scope || typeof m.scope.text !== 'string' || m.scope.text.trim().length < 40) e.push('scope.text missing (what the proof covers and does not cover)');
+  else if (!/not/i.test(m.scope.text)) e.push('scope.text must state what the proof does NOT cover');
+  if (!('policyVersion' in m)) e.push('policyVersion missing');
+  const hashes = [...new Set(attestations.map((a) => a.policy_hash).filter(Boolean))];
+  if (hashes.length > 1) e.push(`attestations carry ${hashes.length} policy hashes: one pack per policy version`);
+  const want = hashes[0] ?? null;
+  if ('policyVersion' in m && m.policyVersion !== want) e.push(`policyVersion ${String(m.policyVersion)} does not match the verdicts' policy_hash ${String(want)}`);
+  if (!Array.isArray(m.inputs) || m.inputs.length === 0) { e.push('inputs[] missing'); return e; }
+  m.inputs.forEach((x: any, i: number) => {
+    if (!x?.name) e.push(`inputs[${i}].name missing`);
+    if (!x?.source) e.push(`inputs[${i}].source missing`);
+    if (!x?.retrievedAt || Number.isNaN(Date.parse(x.retrievedAt))) e.push(`inputs[${i}].retrievedAt must be an ISO date`);
+    if (!('signedBy' in (x ?? {})) || !(x.signedBy === null || (typeof x.signedBy === 'string' && x.signedBy))) e.push(`inputs[${i}].signedBy must be a signer or null`);
+    if (!/^[0-9a-f]{64}$/.test(String(x?.hash))) e.push(`inputs[${i}].hash must be sha256 hex`);
+  });
+  for (const r of REQUIRED_INPUTS) if (!m.inputs.some((x: any) => x?.name === r)) e.push(`inputs: ${r} not declared`);
+  return e;
+}
+
 export interface PackInput {
   outDir: string;
   vaspName: string;
@@ -40,6 +84,8 @@ export interface PackInput {
   generatedAt: string;           // ISO
   generator?: { repo_commit?: string };
   dueDiligence?: { repoRoot: string; governanceDoc?: string };
+  inputs: PackInputRecord[];     // required: every input behind the verdicts
+  scope?: { text: string; covers?: string[]; does_not_cover?: string[] };
 }
 
 const sha256File = (p: string) => createHash('sha256').update(fs.readFileSync(p)).digest('hex');
@@ -48,6 +94,11 @@ const rootOf = (files: { path: string; sha256: string }[]) =>
 
 export function buildPack(i: PackInput) {
   if (!/\(fictitious\)\s*$/i.test(i.vaspName)) throw new Error('vaspName must end with "(fictitious)": real VASP data is not supported in this version');
+  const scope = i.scope ?? DEFAULT_SCOPE;
+  const policyHashes = [...new Set(i.attestations.map((a) => a.policy_hash).filter((x): x is string => !!x))];
+  const declared = { scope, policyVersion: policyHashes[0] ?? null, inputs: i.inputs };
+  const bad = checkDeclaredScope(declared, i.attestations);
+  if (bad.length) throw new Error('evidence pack scope: ' + bad.join('; '));
   const ver = DisclosureGovernance.verifyLog(i.disclosureLogPath);
   if (!ver.ok) throw new Error('disclosure log failed chain verification: ' + ver.error);
   fs.mkdirSync(i.outDir, { recursive: true });
@@ -63,6 +114,9 @@ export function buildPack(i: PackInput) {
 
 - Pack schema / version: \`${PACK_SCHEMA}\` / \`${PACK_VERSION}\`
 - Generated at: ${i.generatedAt}
+- Scope: ${scope.text}
+- Policy version: ${declared.policyVersion ? '\`' + declared.policyVersion + '\`' : 'none recorded'}
+- Inputs: ${i.inputs.map((x) => `${x.name} (from ${x.source}, ${x.retrievedAt}, ${x.signedBy ? 'signed by ' + x.signedBy : 'unsigned'})`).join('; ')}
 - Attestations: ${i.attestations.length} (${onchain} anchored on-chain, ${i.attestations.length - onchain} from the local contract simulator, labelled per entry in \`source\`)
 - Disclosure log: ${ver.entries} entries, hash-chained, head \`${ver.head}\`
 ${i.dueDiligence ? `- Due diligence: \`${DD_DIR}/\` (start at \`${DD_DIR}/cco-checklist.md\`)
@@ -102,6 +156,7 @@ Recomputes every file hash, the pack root hash, and the disclosure-log chain. An
     pack_version: PACK_VERSION,
     generated_at: i.generatedAt,
     vasp: { name: i.vaspName, fictitious: true },
+    ...declared,
     attestation_count: i.attestations.length,
     attestations_onchain: onchain,
     disclosure_log: { entries: ver.entries, head: ver.head, chain_verified: true },
@@ -119,6 +174,9 @@ export function verifyPack(dir: string): { ok: boolean; errors: string[] } {
   const m = JSON.parse(fs.readFileSync(path.join(dir, 'manifest.json'), 'utf8'));
   if (m.schema !== PACK_SCHEMA) errors.push('unknown schema ' + m.schema);
   if (!m.vasp?.fictitious) errors.push('pack is not marked fictitious');
+  let atts: { policy_hash?: string }[] = [];
+  try { atts = JSON.parse(fs.readFileSync(path.join(dir, 'attestations.json'), 'utf8')); } catch { errors.push('attestations.json unreadable'); }
+  errors.push(...checkDeclaredScope(m, atts));
   for (const f of m.files) {
     const p = path.join(dir, f.path);
     if (!fs.existsSync(p)) { errors.push('missing ' + f.path); continue; }

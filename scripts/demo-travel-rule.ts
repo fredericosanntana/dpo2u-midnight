@@ -10,7 +10,7 @@
  */
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import { createCircuitContext, createConstructorContext } from '@midnight-ntwrk/compact-runtime';
 import { Contract, ledger, pureCircuits } from '../build/TravelRuleGate/contract/index.js';
 import * as Passport from '../build/PsavPassport/contract/index.js';
@@ -130,5 +130,14 @@ console.log('[2] events:', gov.log().map((e) => e.event + (e.detail.reason ? `($
 
 // --- evidence pack
 const packDir = path.join(work, 'evidence-pack');
-const m = buildPack({ outDir: packDir, vaspName: 'Example VASP Ltda (fictitious)', attestations: atts, disclosureLogPath: logPath, generatedAt: new Date().toISOString() });
+// Inputs behind the simulated verdicts (fictitious; hashes of what the simulator was given).
+const sh = (x: string) => createHash('sha256').update(x).digest('hex');
+const at = new Date().toISOString();
+const inputs = [
+  { name: 'party_data', source: 'demo vault (fictitious, simulator witnesses)', retrievedAt: at, signedBy: null, hash: sh(JSON.stringify([t1, t2, t3], (_k, v) => (v instanceof Uint8Array ? hex(v) : typeof v === 'bigint' ? String(v) : v))) },
+  { name: 'sanctions_list', source: 'none: sanctions_clear is the VASP-attested witness in this demo', retrievedAt: at, signedBy: null, hash: sh('sanctions_clear=true') },
+  { name: 'threshold', source: 'TravelRuleGate.threshold_cents (simulator)', retrievedAt: at, signedBy: null, hash: sh(String(L.threshold_cents)) },
+  { name: 'registry_attestation', source: 'ComplianceRegistry.attestation_verdicts (simulator)', retrievedAt: at, signedBy: null, hash: sh(hex(SELF) + ':1') },
+];
+const m = buildPack({ outDir: packDir, vaspName: 'Example VASP Ltda (fictitious)', attestations: atts, disclosureLogPath: logPath, generatedAt: at, inputs });
 console.log('[3] pack_root', m.pack_root, 'files', m.files.length, 'verify', JSON.stringify(verifyPack(packDir)));
