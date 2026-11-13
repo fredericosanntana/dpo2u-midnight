@@ -21,6 +21,7 @@ export interface Attestation {
   reason_code: number;
   originator_root: string;       // hex, salted commitment root (no PII)
   beneficiary_root: string;
+  policy_hash?: string;          // hex, TravelRuleGate.verdict_policy: the rule/policy version behind the verdict (v10)
   source: 'simulator' | 'chain';
   contract_address: string | null;
   tx_hash: string | null;
@@ -63,7 +64,7 @@ export function buildPack(i: PackInput) {
 | File | What it is |
 |---|---|
 | \`manifest.json\` | File list with sha256, pack root hash, versions |
-| \`attestations.json\` | Travel Rule verdicts (PASS/FAIL), salted commitment roots only, no PII |
+| \`attestations.json\` | Travel Rule verdicts (PASS/FAIL), the policy hash behind each verdict, salted commitment roots only, no PII |
 | \`disclosure-log.jsonl\` | Append-only log of every supervisor access decision (granted and denied) |
 | \`disclosure-log.verification.json\` | Result of re-verifying the log hash chain at generation time |
 
