@@ -7,15 +7,27 @@ import CompactStandardLibrary;
 // data, release flag, disclosure-grant metadata (scope/supervisor/expiry/revoked).
 // SHIELDED (witness, never on chain): originator/beneficiary identity fields and the amount.
 //
+// LINKED CONTRACTS (v10, cross-contract calls, compactc 0.36 / compact-runtime 0.21):
+//   passport: PsavPassport. A counterparty VASP passes the VASP check if the owner attested it
+//             (attestVasp) OR its id is a valid PsavPassport (passport.isValid(vasp_id)).
+//   registry: ComplianceRegistry. releaseTransfer requires registry.hasAttestation(self_company_id)
+//             == 1, i.e. this VASP itself holds a current compliance attestation.
+//
 // FLOW
-//   1. evaluateTransfer(transfer_id): owner (VASP) only. Runs the rule over private data, records
-//      verdict 1=PASS or 2=FAIL (+ reason) publicly, and stores only salted commitments (roots).
-//      Owner-gated because the verdict is final and the witnesses (incl. sanctions_clear) are the
-//      VASP's: anyone else knowing a transfer_id could otherwise front-run it with forged data.
-//   2. releaseTransfer(transfer_id): reverts unless verdict == PASS. Sets status 3=RELEASED.
-//   3. grantDisclosure(...): owner (VASP) registers a scoped, expiring access grant for a
-//      supervisor. The data itself travels off-chain, encrypted under a per-grant key; the
-//      supervisor checks it against the on-chain roots with the pure circuits below.
+//   1. evaluateTransfer(transfer_id, policy_hash): owner (VASP) only. Runs the rule over private
+//      data, records verdict 1=PASS or 2=FAIL (+ reason) publicly, the hash of the rule/policy
+//      version that produced it (verdict_policy; zero refused), and stores only salted
+//      commitments (roots). Owner-gated because the verdict is final and the witnesses (incl.
+//      sanctions_clear) are the VASP's: anyone else knowing a transfer_id could otherwise
+//      front-run it with forged data.
+//   2. releaseTransfer(transfer_id): reverts unless verdict == PASS and the VASP is attested in
+//      the ComplianceRegistry. Sets status 3=RELEASED.
+//   3. grantDisclosure(..., purpose_hash): owner (VASP) REQUESTS a scoped, expiring access grant
+//      for a supervisor, with the hash of its purpose / legal basis (grant_purpose). The grant is
+//      inactive until approveDisclosure(grant_id) by a separate approver (approver_secret, e.g.
+//      the DPO): the owner alone cannot open data (four-eyes). The data itself travels off-chain,
+//      encrypted under a per-grant key; the supervisor checks it against the on-chain roots with
+//      the pure circuits below.
 //      Scope = bitmask over the 4 fields per party: 1 name, 2 account, 4 document, 8 vasp.
 //      Opening one field does not open the others (separate salted commitments).
 //
@@ -39,14 +51,28 @@ witness transfer_amount(): Uint<64>;
 // a documented follow-up).
 witness sanctions_clear(): Boolean;
 witness owner_secret(): Bytes<32>;
+witness approver_secret(): Bytes<32>;
+
+// Interfaces of the linked contracts (only the circuits this gate calls).
+contract PsavPassport {
+  circuit isValid(passport_id: Bytes<32>): Boolean;
+}
+contract ComplianceRegistry {
+  circuit hasAttestation(company_id: Bytes<32>): Uint<8>;
+}
 
 export ledger owner_commit: Bytes<32>;
+export ledger approver_commit: Bytes<32>;
+export ledger passport: PsavPassport;
+export ledger registry: ComplianceRegistry;
+export ledger self_company_id: Bytes<32>;
 export ledger threshold_cents: Uint<64>;
 export ledger attested_vasps: Set<Bytes<32>>;
 export ledger status: Map<Bytes<32>, Uint<8>>;
 export ledger fail_reason: Map<Bytes<32>, Uint<8>>;
 export ledger originator_root: Map<Bytes<32>, Bytes<32>>;
 export ledger beneficiary_root: Map<Bytes<32>, Bytes<32>>;
+export ledger verdict_policy: Map<Bytes<32>, Bytes<32>>;
 export ledger total_pass: Counter;
 export ledger total_fail: Counter;
 export ledger total_released: Counter;
@@ -56,11 +82,22 @@ export ledger grant_supervisor: Map<Bytes<32>, Bytes<32>>;
 export ledger grant_scope: Map<Bytes<32>, Uint<8>>;
 export ledger grant_expires: Map<Bytes<32>, Uint<64>>;
 export ledger grant_revoked: Set<Bytes<32>>;
+export ledger grant_purpose: Map<Bytes<32>, Bytes<32>>;
+export ledger grant_approved: Set<Bytes<32>>;
 export ledger total_grants: Counter;
 
-constructor(owner_commit_: Bytes<32>, threshold_cents_: Uint<64>) {
+constructor(
+  owner_commit_: Bytes<32>, threshold_cents_: Uint<64>,
+  passport_: PsavPassport, registry_: ComplianceRegistry,
+  self_company_id_: Bytes<32>, approver_commit_: Bytes<32>
+) {
+  assert(approver_commit_ != owner_commit_, "Approver must differ from owner");
   owner_commit = disclose(owner_commit_);
   threshold_cents = disclose(threshold_cents_);
+  passport = disclose(passport_);
+  registry = disclose(registry_);
+  self_company_id = disclose(self_company_id_);
+  approver_commit = disclose(approver_commit_);
 }
 
 // owner_commit = persistentHash(owner_secret) (computed off-chain by the VASP).
@@ -70,6 +107,15 @@ export pure circuit owner_commitment(secret: Bytes<32>): Bytes<32> {
 
 circuit assert_owner(): [] {
   assert(persistentHash<Bytes<32>>(owner_secret()) == owner_commit, "Only the VASP owner can do this");
+}
+
+// approver_commit = approver_commitment(approver_secret), a key held apart from the owner's.
+export pure circuit approver_commitment(secret: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<2, Bytes<32>>>([pad(32, "dpo2u/approver/v1"), secret]);
+}
+
+circuit assert_approver(): [] {
+  assert(approver_commitment(approver_secret()) == approver_commit, "Only the disclosure approver can do this");
 }
 
 // Salted commitment of ONE field. label separates the fields so each opens independently.
@@ -97,9 +143,10 @@ export circuit attestVasp(vasp_id: Bytes<32>): [] {
   attested_vasps.insert(disclose(vasp_id));
 }
 
-export circuit evaluateTransfer(transfer_id: Bytes<32>): Uint<8> {
+export circuit evaluateTransfer(transfer_id: Bytes<32>, policy_hash: Bytes<32>): Uint<8> {
   assert_owner();
   assert(!status.member(disclose(transfer_id)), "Transfer already evaluated");
+  assert(policy_hash != default<Bytes<32>>, "Policy hash must not be zero");
   const o = originator_data();
   const b = beneficiary_data();
   const amt = transfer_amount();
@@ -110,7 +157,8 @@ export circuit evaluateTransfer(transfer_id: Bytes<32>): Uint<8> {
   const above = amt >= threshold_cents;
   const id_ok = !above || o.doc_hash != zero;
   // Counterparty VASP id is deliberately public (regulatory identity, not customer PII).
-  const vasp_ok = attested_vasps.member(disclose(b.vasp_id));
+  // Attested by this VASP, or holding a valid PsavPassport.
+  const vasp_ok = attested_vasps.member(disclose(b.vasp_id)) || passport.isValid(disclose(b.vasp_id));
   const clean = sanctions_clear();
 
   const reason: Uint<8> = !complete ? 1 : (!id_ok ? 2 : (!vasp_ok ? 3 : (!clean ? 4 : 0)));
@@ -120,6 +168,7 @@ export circuit evaluateTransfer(transfer_id: Bytes<32>): Uint<8> {
   fail_reason.insert(disclose(transfer_id), disclose(reason));
   originator_root.insert(disclose(transfer_id), disclose(party_root(o)));
   beneficiary_root.insert(disclose(transfer_id), disclose(party_root(b)));
+  verdict_policy.insert(disclose(transfer_id), disclose(policy_hash));
   if (disclose(pass)) { total_pass.increment(1); } else { total_fail.increment(1); }
   return disclose(pass ? 1 : 2);
 }
@@ -128,15 +177,17 @@ export circuit releaseTransfer(transfer_id: Bytes<32>): [] {
   assert_owner();
   assert(status.member(disclose(transfer_id)), "Transfer not evaluated");
   assert(status.lookup(disclose(transfer_id)) == 1, "Travel Rule not satisfied: transfer cannot be released");
+  assert(registry.hasAttestation(self_company_id) == 1, "VASP has no compliance attestation in the registry");
   status.insert(disclose(transfer_id), disclose(3 as Uint<8>));
   total_released.increment(1);
 }
 
 export circuit grantDisclosure(
   grant_id: Bytes<32>, transfer_id: Bytes<32>, supervisor_id: Bytes<32>,
-  scope: Uint<8>, expires_at: Uint<64>
+  scope: Uint<8>, expires_at: Uint<64>, purpose_hash: Bytes<32>
 ): [] {
   assert_owner();
+  assert(purpose_hash != default<Bytes<32>>, "Purpose hash must not be zero");
   assert(status.member(disclose(transfer_id)), "Transfer not evaluated");
   assert(!grant_scope.member(disclose(grant_id)), "Grant id already used");
   assert(scope > 0 as Uint<8>, "Scope must not be empty");
@@ -145,7 +196,17 @@ export circuit grantDisclosure(
   grant_supervisor.insert(disclose(grant_id), disclose(supervisor_id));
   grant_scope.insert(disclose(grant_id), disclose(scope));
   grant_expires.insert(disclose(grant_id), disclose(expires_at));
+  grant_purpose.insert(disclose(grant_id), disclose(purpose_hash));
   total_grants.increment(1);
+}
+
+// Second key: the approver (not the owner) activates a requested grant.
+export circuit approveDisclosure(grant_id: Bytes<32>): [] {
+  assert_approver();
+  assert(grant_scope.member(disclose(grant_id)), "Unknown grant");
+  assert(!grant_revoked.member(disclose(grant_id)), "Grant revoked");
+  assert(!grant_approved.member(disclose(grant_id)), "Grant already approved");
+  grant_approved.insert(disclose(grant_id));
 }
 
 export circuit revokeDisclosure(grant_id: Bytes<32>): [] {
@@ -156,6 +217,7 @@ export circuit revokeDisclosure(grant_id: Bytes<32>): [] {
 
 export circuit isGrantActive(grant_id: Bytes<32>): Boolean {
   return grant_scope.member(disclose(grant_id))
+      && grant_approved.member(disclose(grant_id))
       && !grant_revoked.member(disclose(grant_id))
       && blockTimeLt(grant_expires.lookup(disclose(grant_id)));
 }
