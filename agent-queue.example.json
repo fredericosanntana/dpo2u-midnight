@@ -15,6 +15,7 @@
     "policy_cid": "bafy-policy-cid",
     "threshold": 70,
     "score": 85,
+    "evidence_hash": "856bfa7a5e5a7eca63664a76f6aac0c8da4e5b8db92f93b46f81e61319eade07",
     "org": "acme-corp",
     "jurisdiction": "LGPD"
   }
