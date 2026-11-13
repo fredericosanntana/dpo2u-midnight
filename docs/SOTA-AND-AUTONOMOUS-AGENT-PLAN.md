@@ -68,9 +68,9 @@
 
 **Live & real:** 9/9 contracts deployed on **preview testnet** (2026-06-29, independently verified via `verify-preview.ts` → public indexer `queryContractState`). The **ZK score-private attestation is real** Compact/proof-server machinery, not a mock. The self-funding loop `runLoop()` and `runAttest()` issue real on-chain `callTx` proofs when invoked.
 
-**The on-chain primitive set (9 contracts):** AgentRegistry (DID→identity), AgentWalletFactory (DID→wallet), **ComplianceRegistry** (`attestCompliance` score-private + `attestUseCase` generic + `hasAttestation`/`getUseCaseVerdict` reads), PaymentGateway (treasury Counters plus an app-level `stakeTokens` counter: DPO2U bookkeeping, unrelated to how DUST is generated), FeeDistributor (40/60 split, asserts `expert*3==auditor*2`), LgpdKitRegistry (DPIA hash-anchor), ConsentRegistry (grant/revoke), DataAuditLog (events/breach/deletion), DataSubjectRights (DSAR lifecycle).
+**The on-chain primitive set (9 contracts):** AgentRegistry (DID→identity), AgentWalletFactory (DID→wallet), **ComplianceRegistry** (`attestCompliance` score-private + `attestUseCase` generic + `hasAttestation`/`getUseCaseVerdict` reads), PaymentGateway (treasury Counters plus a `depositNight` counter: DPO2U bookkeeping, unrelated to how DUST is generated), FeeDistributor (40/60 split, asserts `expert*3==auditor*2`), LgpdKitRegistry (DPIA hash-anchor), ConsentRegistry (grant/revoke), DataAuditLog (events/breach/deletion), DataSubjectRights (DSAR lifecycle).
 
-**The loop (`scripts/deploy-preprod.ts:328-374`):** registerAgent → bind wallet → `stakeTokens(1000)` + `depositToTreasury(500)` → `attestCompliance(company, did, cid, threshold=70, ctx, score=85)` (proves 85≥70, score never written) → `distributeComplianceFee(40,60)`.
+**The loop (`scripts/deploy-preprod.ts:328-374`):** registerAgent → bind wallet → `stakeTokens(1000)` (since renamed `depositNight`) + `depositToTreasury(500)` → `attestCompliance(company, did, cid, threshold=70, ctx, score=85)` (proves 85≥70, score never written) → `distributeComplianceFee(40,60)`.
 
 **What's MISSING (the 7 gaps):**
 1. **No autonomous runner** — it's a manual one-shot CLI. No daemon/scheduler. (The `dpo2u-defi-ops` cron in memory **does not exist**; only `dpo2u-midnight-agent` exists = a Claude-CLI content pipeline, never touches the contracts.)

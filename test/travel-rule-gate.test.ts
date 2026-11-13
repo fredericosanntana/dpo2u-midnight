@@ -11,11 +11,12 @@ import * as Gate from '../build/TravelRuleGate/contract/index.js';
 import * as Passport from '../build/PsavPassport/contract/index.js';
 import * as Registry from '../build/ComplianceRegistry/contract/index.js';
 import { publicStateHex, simAddress, contractRef, asDeployed, crossContract, SIM_BLOCK_HASH } from './helpers.js';
+import { newProviderKey, signSanctionsList, sanctionsListRoot, toPayload, fromPayload, type SanctionsListWitness } from '../scripts/lib/sanctions-list.js';
 
 const { Contract, ledger, pureCircuits } = Gate;
 
 type Party = { name_hash: Uint8Array; account_hash: Uint8Array; doc_hash: Uint8Array; vasp_id: Uint8Array; salt: Uint8Array };
-type PS = { o: Party; b: Party; amount: bigint; sanctionsClear: boolean; secret: Uint8Array; approver: Uint8Array };
+type PS = { o: Party; b: Party; amount: bigint; sanctionsClear: boolean; secret: Uint8Array; approver: Uint8Array; list: SanctionsListWitness };
 
 const b32 = (s: string) => { const x = Buffer.alloc(32); Buffer.from(s).copy(x, 0, 0, 32); return new Uint8Array(x); };
 const ZERO = new Uint8Array(32);
@@ -42,7 +43,17 @@ const witnesses = {
   sanctions_clear: (c: any) => [c.privateState, c.privateState.sanctionsClear] as [PS, boolean],
   owner_secret: (c: any) => [c.privateState, c.privateState.secret] as [PS, Uint8Array],
   approver_secret: (c: any) => [c.privateState, c.privateState.approver] as [PS, Uint8Array],
+  sanctions_list: (c: any) => [c.privateState, c.privateState.list] as [PS, SanctionsListWitness],
 };
+
+// Sanctions-list provider (fictitious) and a snapshot valid for one day from T0.
+const PROVIDER = new Uint8Array(Buffer.from('aa'.repeat(32), 'hex'));
+const PROVIDER_KEY = newProviderKey();
+const LIST_ROOT = sanctionsListRoot(['11'.repeat(32), '22'.repeat(32)]);
+const DAY = 86_400;
+const signedList = (o: Partial<{ sk: bigint; provider_id: Uint8Array; list_root: Uint8Array; issued_at: bigint; valid_until: bigint }> = {}) =>
+  signSanctionsList(Gate, o.sk ?? PROVIDER_KEY.sk, { provider_id: o.provider_id ?? PROVIDER, list_root: o.list_root ?? LIST_ROOT, issued_at: o.issued_at ?? BigInt(T0 - 3600), valid_until: o.valid_until ?? BigInt(T0 + DAY) });
+const LIST = signedList();
 
 const party = (n: string, withDoc: boolean, vasp = b32('vasp:own')): Party => ({
   name_hash: b32('name:' + n), account_hash: b32('acct:' + n),
@@ -50,7 +61,7 @@ const party = (n: string, withDoc: boolean, vasp = b32('vasp:own')): Party => ({
 });
 
 function base(over: Partial<PS> = {}): PS {
-  return { o: party('orig', true), b: party('benef', true, BENEF_VASP), amount: 250_000n, sanctionsClear: true, secret: OWNER_SECRET, approver: APPROVER_SECRET, ...over };
+  return { o: party('orig', true), b: party('benef', true, BENEF_VASP), amount: 250_000n, sanctionsClear: true, secret: OWNER_SECRET, approver: APPROVER_SECRET, list: LIST, ...over };
 }
 
 // ── Linked contracts, deployed in the simulator ──
@@ -106,7 +117,9 @@ async function setup(ps: PS, opts: { attested?: boolean } = {}) {
     circuitId: 'test', contractAddress: GATE, coinPublicKeyOrZswapState: CPK,
     contractState: state, privateState: p, time: t, parentBlockHash: SIM_BLOCK_HASH, crossContract: cross,
   } as any);
-  return { contract, ctx: mk(currentContractState), mk };
+  // The owner registers the sanctions-list provider before any evaluation.
+  const reg = await contract.circuits.registerSanctionsProvider(mk(currentContractState), PROVIDER, PROVIDER_KEY.pk);
+  return { contract, ctx: mk(reg.context.callContext.currentQueryContext.state), mk };
 }
 
 /** Ledger state after a call; the next call starts from a fresh context over it. */
@@ -152,7 +165,8 @@ describe('TravelRuleGate', () => {
     const ex = await setup(ps);
     // control: within its 31-day window the same passport passes
     assert.equal((await ex.contract.circuits.evaluateTransfer(ex.mk(ex.ctx.callContext.currentQueryContext.state), TID, POLICY)).result, 1n);
-    const late = ex.mk(ex.ctx.callContext.currentQueryContext.state, ps, T0 + 2 * MONTH);
+    // a sanctions list still valid two months later, so only the passport expiry is under test
+    const late = ex.mk(ex.ctx.callContext.currentQueryContext.state, { ...ps, list: signedList({ valid_until: BigInt(T0 + 3 * MONTH) }) }, T0 + 2 * MONTH);
     const r2 = await ex.contract.circuits.evaluateTransfer(late, TID, POLICY);
     assert.equal(r2.result, 2n);
     assert.equal(ledger(st(r2)).fail_reason.lookup(TID), 3n);
@@ -295,5 +309,72 @@ describe('TravelRuleGate', () => {
     // a forged opening does not reproduce the root
     const forged = pureCircuits.field_commit(b32('name:other'), o.salt, b32('name'));
     assert.notDeepEqual(pureCircuits.root_of(forged, cAcct, cDoc, cVasp), root);
+  });
+
+  // ── signed sanctions lists (v10-signed-sanctions) ──
+  it('SANCTIONS: the verdict records the signed list root, provider and valid_until', async () => {
+    const { contract, ctx, mk } = await setup(base());
+    const a = await contract.circuits.attestVasp(ctx, BENEF_VASP);
+    const r = await contract.circuits.evaluateTransfer(mk(st(a)), TID, POLICY);
+    const L = ledger(st(r));
+    assert.deepEqual(L.verdict_sanctions_root.lookup(TID), LIST_ROOT);
+    assert.deepEqual(L.verdict_sanctions_provider.lookup(TID), PROVIDER);
+    assert.equal(L.verdict_sanctions_valid_until.lookup(TID), BigInt(T0 + DAY));
+  });
+
+  it('SANCTIONS: refuses an unsigned/forged list, an unregistered provider and a tampered root', async () => {
+    const { contract, ctx, mk } = await setup(base());
+    const a = await contract.circuits.attestVasp(ctx, BENEF_VASP);
+    const s0 = st(a);
+    const other = newProviderKey();
+    const forged = signedList({ sk: other.sk });
+    await assert.rejects(() => contract.circuits.evaluateTransfer(mk(s0, base({ list: forged })), TID, POLICY), /Sanctions list signature invalid/);
+    const unsigned = { ...LIST, signature: { announcement: LIST.signature.announcement, response: 0n } };
+    await assert.rejects(() => contract.circuits.evaluateTransfer(mk(s0, base({ list: unsigned })), TID, POLICY), /Sanctions list signature invalid/);
+    const tampered = { ...LIST, list_root: sanctionsListRoot(['33'.repeat(32)]) };
+    await assert.rejects(() => contract.circuits.evaluateTransfer(mk(s0, base({ list: tampered })), TID, POLICY), /Sanctions list signature invalid/);
+    const stranger = signedList({ sk: other.sk, provider_id: new Uint8Array(32).fill(0xbb) });
+    await assert.rejects(() => contract.circuits.evaluateTransfer(mk(s0, base({ list: stranger })), TID, POLICY), /Sanctions provider not registered/);
+    assert.equal(ledger(s0).status.member(TID), false);
+  });
+
+  it('SANCTIONS: refuses an expired list (block time at or past valid_until) and an empty window', async () => {
+    const { contract, ctx, mk } = await setup(base());
+    const a = await contract.circuits.attestVasp(ctx, BENEF_VASP);
+    await assert.rejects(() => contract.circuits.evaluateTransfer(mk(st(a), base(), T0 + DAY), TID, POLICY), /Sanctions list expired/);
+    const stale = signedList({ issued_at: BigInt(T0 - 3 * DAY), valid_until: BigInt(T0 - DAY) });
+    await assert.rejects(() => contract.circuits.evaluateTransfer(mk(st(a), base({ list: stale })), TID, POLICY), /Sanctions list expired/);
+    const empty = { ...LIST, valid_until: LIST.issued_at };
+    await assert.rejects(() => contract.circuits.evaluateTransfer(mk(st(a), base({ list: empty })), TID, POLICY), /validity window is empty/);
+  });
+
+  it('SANCTIONS: the owner revokes and rotates a provider; old keys stop working; only the owner manages providers', async () => {
+    const { contract, ctx, mk } = await setup(base());
+    const a = await contract.circuits.attestVasp(ctx, BENEF_VASP);
+    const rv = await contract.circuits.revokeSanctionsProvider(mk(st(a)), PROVIDER);
+    await assert.rejects(() => contract.circuits.evaluateTransfer(mk(st(rv)), TID, POLICY), /Sanctions provider revoked/);
+    const next = newProviderKey();
+    const rot = await contract.circuits.registerSanctionsProvider(mk(st(rv)), PROVIDER, next.pk);
+    await assert.rejects(() => contract.circuits.evaluateTransfer(mk(st(rot)), TID, POLICY), /Sanctions list signature invalid/, 'list signed with the rotated-out key');
+    const ok = await contract.circuits.evaluateTransfer(mk(st(rot), base({ list: signedList({ sk: next.sk }) })), TID, POLICY);
+    assert.equal(ok.result, 1n);
+    const stranger = base({ secret: b32('not-the-owner') });
+    await assert.rejects(() => contract.circuits.registerSanctionsProvider(mk(st(a), stranger), PROVIDER, next.pk), /Only the VASP owner/);
+    await assert.rejects(() => contract.circuits.revokeSanctionsProvider(mk(st(a), stranger), PROVIDER), /Only the VASP owner/);
+    await assert.rejects(() => contract.circuits.revokeSanctionsProvider(mk(st(a)), new Uint8Array(32).fill(1)), /Unknown sanctions provider/);
+  });
+
+  it('SANCTIONS: gateway payload round-trips and is validated', async () => {
+    const p = toPayload(LIST);
+    assert.match(p.signature.response, /^\d+$/);
+    const back = fromPayload(JSON.parse(JSON.stringify(p)));
+    assert.deepEqual(back.list_root, LIST.list_root);
+    assert.equal(back.signature.response, LIST.signature.response);
+    const { contract, ctx, mk } = await setup(base());
+    const a = await contract.circuits.attestVasp(ctx, BENEF_VASP);
+    assert.equal((await contract.circuits.evaluateTransfer(mk(st(a), base({ list: back })), TID, POLICY)).result, 1n);
+    assert.throws(() => fromPayload({ ...p, signature: undefined }), /missing: signature/);
+    assert.throws(() => fromPayload({ ...p, valid_until: p.issued_at }), /valid_until > issued_at/);
+    assert.throws(() => fromPayload({ ...p, list_root: 'XYZ' }), /lowercase hex/);
   });
 });
