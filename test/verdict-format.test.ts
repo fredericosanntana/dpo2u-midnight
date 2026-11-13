@@ -14,6 +14,7 @@ import * as Gate from '../build/TravelRuleGate/contract/index.js';
 import * as Passport from '../build/PsavPassport/contract/index.js';
 import * as Registry from '../build/ComplianceRegistry/contract/index.js';
 import { simAddress, contractRef, asDeployed, crossContract, SIM_BLOCK_HASH } from './helpers.js';
+import { signSanctionsList, sanctionsListRoot, providerPublicKey } from '../scripts/lib/sanctions-list.js';
 import { verdictFromLedger, verdictDigest, canonicalJson, checkVerdict, VERDICT_FORMAT } from '../scripts/lib/verdict.js';
 
 const VECTORS = path.join(path.dirname(fileURLToPath(import.meta.url)), 'vectors', 'verdict-v1.json');
@@ -24,6 +25,10 @@ const T0 = 1_800_000_000;
 const GATE = simAddress(0x6a7e), PASSPORT = simAddress(0x9a55), REGISTRY = simAddress(0x4e61);
 const OWNER = b32('owner-secret-test-only'), APPROVER = b32('approver-secret-test-only'), SELF = b32('company:example-vasp');
 const ATTESTED = b32('vasp:counterparty-A'), POLICY = b32('policy:travel-rule@1.0.0');
+// Fixed (deterministic) provider key and list, so the vectors are reproducible.
+const PROVIDER = new Uint8Array(32).fill(0xaa);
+const PROVIDER_SK = 123456789n;
+const LIST_ROOT = sanctionsListRoot(['11'.repeat(32), '22'.repeat(32)]);
 const party = (n: string, doc: boolean, vasp: Uint8Array) => ({ name_hash: b32('name:' + n), account_hash: b32('acct:' + n), doc_hash: doc ? b32('doc:' + n) : ZERO, vasp_id: vasp, salt: b32('salt:' + n) });
 
 /** Fixed cases: name, private inputs, release after evaluation. */
@@ -50,9 +55,13 @@ async function simulate() {
     originator_data: (x: any) => [x.privateState, x.privateState.o], beneficiary_data: (x: any) => [x.privateState, x.privateState.b],
     transfer_amount: (x: any) => [x.privateState, x.privateState.amount], sanctions_clear: (x: any) => [x.privateState, x.privateState.clear],
     owner_secret: (x: any) => [x.privateState, OWNER], approver_secret: (x: any) => [x.privateState, APPROVER],
+    sanctions_list: (x: any) => [x.privateState, LIST],
   } as any);
+  // The signature itself is randomized (Schnorr nonce) but never enters the verdict: only root, provider, valid_until.
+  const LIST = signSanctionsList(Gate as any, PROVIDER_SK, { provider_id: PROVIDER, list_root: LIST_ROOT, issued_at: BigInt(T0 - 3600), valid_until: BigInt(T0 + 86_400) });
   let state: any = (await g.initialState(createConstructorContext({}, CPK), Gate.pureCircuits.owner_commitment(OWNER), 100_000n, contractRef(PASSPORT), contractRef(REGISTRY), SELF, Gate.pureCircuits.approver_commitment(APPROVER))).currentContractState;
   const run = async (ps: any, f: (c: any) => Promise<any>) => { state = (await f(createCircuitContext({ circuitId: 't', contractAddress: GATE, coinPublicKeyOrZswapState: CPK, contractState: state, privateState: ps, time: T0, parentBlockHash: SIM_BLOCK_HASH, crossContract: cross } as any))).context.callContext.currentQueryContext.state; };
+  await run(CASES[0], (c) => g.circuits.registerSanctionsProvider(c, PROVIDER, providerPublicKey(PROVIDER_SK)));
   await run(CASES[0], (c) => g.circuits.attestVasp(c, ATTESTED));
   const out = [];
   for (const c of CASES) {
@@ -83,6 +92,7 @@ describe('verdict format v1', () => {
       assert.equal(x.canonical, canonicalJson(x.verdict));
       assert.equal(x.digest, createHash('sha256').update(x.canonical).digest('hex'));
     }
+    for (const x of vectors) assert.deepEqual(x.verdict.sanctions, { list_root: Buffer.from(LIST_ROOT).toString('hex'), provider_id: 'aa'.repeat(32), valid_until: T0 + 86_400 });
     assert.deepEqual(vectors.map((x: any) => [x.verdict.verdict, x.verdict.released, x.verdict.reason.code]),
       [['PASS', true, 0], ['PASS', false, 0], ['FAIL', false, 1], ['FAIL', false, 2], ['FAIL', false, 3], ['FAIL', false, 4]]);
   });
