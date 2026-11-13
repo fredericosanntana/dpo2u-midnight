@@ -64,7 +64,11 @@ Source of truth: [`deployment-preprod-v9.json`](deployment-preprod-v9.json). Net
 | `TravelRuleGate` | `fdb80609b5fa3a746133a43a3a7914ce19687c4787e4dc097e08d6cf195b627a` | `003a1e952e6be4560dbf307ad020ccf6b298bedeaf8e00cdc4f1491d21f3f34046` | 3404169 |
 | `PsavPassport` | `154a09c750df7b1b83c9d1e670f4c14596e3476b7190f9dc10c97e7412c08c70` | `001616e8f8ec03d56fb53b876c7be1451b9b2871a24377fc963ae8e45688017d4f` | 3404173 |
 
-<!-- PREPROD-INTERACTION-TX -->
+**On-chain interaction (preprod).** `ComplianceRegistry.attestCompliance` (owner-gated) for a fictitious company `DPO2U-TEST-ZEALY-001`, public threshold 70, private score 85: only pass/fail is proven, the score stays off-chain.
+
+| Contract | Circuit | txId | Block |
+|---|---|---|---|
+| `ComplianceRegistry` | `attestCompliance` | `0045f362e21608ac0757f58b7d05c5d52518d251de78d1877aebf57c228b6b9330` | 3408895 |
 
 > **Version note.** These three are the **pre-v10** builds (the `TravelRuleGate` constructor takes only `owner_commit` and `threshold_cents`; it is not linked to `PsavPassport`/`ComplianceRegistry`). The v10 contracts on `main` (cross-contract gate, two-key disclosure, signed sanctions lists) are deployed to preview first and will be redeployed to preprod/mainnet from there.
 
