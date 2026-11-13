@@ -24,7 +24,7 @@ This is now the **single source of truth** for the DPO2U Midnight stack (previou
 | `AgentRegistry` | Agent DID + role registry |
 | `AgentWalletFactory` | Agent DID → wallet-address registry |
 | `FeeDistributor` | 40/60 expert/auditor fee split (validated on-chain) |
-| `PaymentGateway` | Treasury deposits + `$NIGHT` staking |
+| `PaymentGateway` | Treasury deposits + an app-level `$NIGHT` pool counter (`stakeTokens`; bookkeeping only, not how DUST is generated) |
 | `LgpdKitRegistry` | Anti-fraud registry for generated LGPD documents (DPIA/policy hashes) |
 | `ConsentRegistry` | LGPD/GDPR consent grant/revoke/update (Art. 7-8) |
 | `DataAuditLog` | LGPD Art. 37 processing audit trail |
@@ -131,7 +131,7 @@ Client pays $NIGHT       Protocol splits fees        Agent registers ZK proof
 |----------|---------|--------------|
 | **ComplianceRegistry** | Core: ZK-attested compliance scores on-chain | `registerAttestation`, `getComplianceStatus` |
 | **FeeDistributor** | Autonomous 40/60 fee split between expert/auditor agents | `distributeComplianceFee`, `getExpertPools`, `getAuditorPools` |
-| **PaymentGateway** | Treasury deposits and $NIGHT staking | `depositToTreasury`, `stakeTokens`, `getTreasuryBalance` |
+| **PaymentGateway** | Treasury deposits and an app-level $NIGHT pool counter (DUST comes from holding NIGHT, not from this) | `depositToTreasury`, `stakeTokens`, `getTreasuryBalance` |
 | **AgentRegistry** | Agent lifecycle: register, deactivate, task tracking | `registerAgent`, `deactivateAgent`, `recordTask`, `verifyAgent` |
 
 ---
@@ -266,7 +266,7 @@ See `scripts/lib/wallet-setup.ts`. This fix is referenced in midnight-js PR #604
 ├── compact/
 │   ├── ComplianceRegistry.compact   # Core: ZK-attested compliance on-chain
 │   ├── FeeDistributor.compact       # Autonomous fee split
-│   ├── PaymentGateway.compact       # Treasury and staking
+│   ├── PaymentGateway.compact       # Treasury and NIGHT pool counter
 │   ├── AgentRegistry.compact        # Agent lifecycle
 │   └── build/                       # Compiled artifacts
 ├── scripts/

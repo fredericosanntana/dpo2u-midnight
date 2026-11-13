@@ -6,7 +6,7 @@
 
 ## 1. The idea and the protocol reality
 
-The original idea was "a wallet that stakes NIGHT, generates DUST, and a controller *sells the
+The original idea was "a wallet that holds NIGHT, generates DUST, and a controller *sells the
 DUST* to big players." The protocol makes the literal version impossible, and offers a better one:
 
 - **DUST is non-transferable by design** (`midnight-ledger/spec/dust.md`: *"Dust is a shielded
