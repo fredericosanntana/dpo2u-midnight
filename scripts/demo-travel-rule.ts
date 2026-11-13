@@ -107,8 +107,8 @@ console.log(`[1] counterparty with a valid PsavPassport (not attested by this VA
 console.log(`[1] on-chain grant: active before approval=${before}, after approval by the second key=${after}`);
 
 const atts: Attestation[] = [
-  { id: 'att-001', type: 'travel_rule_verdict', transfer_id: hex(ids.pass), verdict: 'RELEASED', reason_code: 0, originator_root: hex(L.originator_root.lookup(ids.pass)), beneficiary_root: hex(L.beneficiary_root.lookup(ids.pass)), policy_hash: hex(L.verdict_policy.lookup(ids.pass)), source: 'simulator', contract_address: null, tx_hash: null },
-  { id: 'att-002', type: 'travel_rule_verdict', transfer_id: hex(ids.fail), verdict: 'FAIL', reason_code: Number(L.fail_reason.lookup(ids.fail)), originator_root: hex(L.originator_root.lookup(ids.fail)), beneficiary_root: hex(L.beneficiary_root.lookup(ids.fail)), policy_hash: hex(L.verdict_policy.lookup(ids.fail)), source: 'simulator', contract_address: null, tx_hash: null },
+  { id: 'att-001', type: 'travel_rule_verdict', transfer_id: hex(ids.pass), verdict: 'RELEASED', reason_code: 0, originator_root: hex(L.originator_root.lookup(ids.pass)), beneficiary_root: hex(L.beneficiary_root.lookup(ids.pass)), policy_hash: hex(L.verdict_policy.lookup(ids.pass)), sanctions: { list_root: hex(L.verdict_sanctions_root.lookup(ids.pass)), provider_id: hex(L.verdict_sanctions_provider.lookup(ids.pass)), valid_until: Number(L.verdict_sanctions_valid_until.lookup(ids.pass)) }, source: 'simulator', contract_address: null, tx_hash: null },
+  { id: 'att-002', type: 'travel_rule_verdict', transfer_id: hex(ids.fail), verdict: 'FAIL', reason_code: Number(L.fail_reason.lookup(ids.fail)), originator_root: hex(L.originator_root.lookup(ids.fail)), beneficiary_root: hex(L.beneficiary_root.lookup(ids.fail)), policy_hash: hex(L.verdict_policy.lookup(ids.fail)), sanctions: { list_root: hex(L.verdict_sanctions_root.lookup(ids.fail)), provider_id: hex(L.verdict_sanctions_provider.lookup(ids.fail)), valid_until: Number(L.verdict_sanctions_valid_until.lookup(ids.fail)) }, source: 'simulator', contract_address: null, tx_hash: null },
 ];
 
 // --- disclosure
@@ -142,7 +142,8 @@ const sh = (x: string) => createHash('sha256').update(x).digest('hex');
 const at = new Date().toISOString();
 const inputs = [
   { name: 'party_data', source: 'demo vault (fictitious, simulator witnesses)', retrievedAt: at, signedBy: null, hash: sh(JSON.stringify([t1, t2, t3], (_k, v) => (v instanceof Uint8Array ? hex(v) : typeof v === 'bigint' ? String(v) : v))) },
-  { name: 'sanctions_list', source: 'none: sanctions_clear is the VASP-attested witness in this demo', retrievedAt: at, signedBy: null, hash: sh('sanctions_clear=true') },
+  // the signed list the gate checked: signedBy = provider id, hash = list root recorded in the verdicts
+  { name: 'sanctions_list', source: 'sanctions-list provider (fictitious), signed snapshot', retrievedAt: at, signedBy: hex(PROVIDER), hash: hex(LIST.list_root) },
   { name: 'threshold', source: 'TravelRuleGate.threshold_cents (simulator)', retrievedAt: at, signedBy: null, hash: sh(String(L.threshold_cents)) },
   { name: 'registry_attestation', source: 'ComplianceRegistry.attestation_verdicts (simulator)', retrievedAt: at, signedBy: null, hash: sh(hex(SELF) + ':1') },
 ];

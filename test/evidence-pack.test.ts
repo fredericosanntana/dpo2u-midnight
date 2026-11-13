@@ -152,4 +152,13 @@ describe('evidence pack: declared scope, policy version and inputs', () => {
     assert.equal('policyVersion' in m, true);
     assert.deepEqual(verifyPack(out), { ok: true, errors: [] });
   });
+
+  it('a verdict made against a signed sanctions list must declare it: hash = recorded root, signedBy = provider id', () => {
+    const san = { list_root: hx('list'), provider_id: 'aa'.repeat(32), valid_until: 1_800_086_400 };
+    const signed = INPUTS.map((x) => (x.name === 'sanctions_list' ? { ...x, signedBy: san.provider_id, hash: san.list_root } : x));
+    const { out } = build({ attestations: [{ ...att[0], policy_hash: 'ee'.repeat(32), sanctions: san }], inputs: signed });
+    assert.deepEqual(verifyPack(out), { ok: true, errors: [] });
+    assert.throws(() => build({ attestations: [{ ...att[0], policy_hash: 'ee'.repeat(32), sanctions: san }] }), /sanctions_list .* not declared/);
+    assert.ok(strip(out, (m) => { m.inputs.find((x: any) => x.name === 'sanctions_list').signedBy = 'bb'.repeat(32); }).errors.some((e) => /not declared/.test(e)));
+  });
 });

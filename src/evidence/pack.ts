@@ -27,6 +27,7 @@ export interface Attestation {
   originator_root: string;       // hex, salted commitment root (no PII)
   beneficiary_root: string;
   policy_hash?: string;          // hex, TravelRuleGate.verdict_policy: the rule/policy version behind the verdict (v10)
+  sanctions?: { list_root: string; provider_id: string; valid_until: number };  // signed list recorded with the verdict
   source: 'simulator' | 'chain';
   contract_address: string | null;
   tx_hash: string | null;
@@ -55,7 +56,7 @@ export interface PackInputRecord {
 export const REQUIRED_INPUTS = ['party_data', 'sanctions_list', 'threshold', 'registry_attestation'] as const;
 
 /** Checks scope / policyVersion / inputs; returns the problems (empty = valid). */
-export function checkDeclaredScope(m: { scope?: any; policyVersion?: unknown; inputs?: any }, attestations: { policy_hash?: string }[]): string[] {
+export function checkDeclaredScope(m: { scope?: any; policyVersion?: unknown; inputs?: any }, attestations: { policy_hash?: string; sanctions?: { list_root: string; provider_id: string } }[]): string[] {
   const e: string[] = [];
   if (!m.scope || typeof m.scope.text !== 'string' || m.scope.text.trim().length < 40) e.push('scope.text missing (what the proof covers and does not cover)');
   else if (!/not/i.test(m.scope.text)) e.push('scope.text must state what the proof does NOT cover');
@@ -73,6 +74,12 @@ export function checkDeclaredScope(m: { scope?: any; policyVersion?: unknown; in
     if (!/^[0-9a-f]{64}$/.test(String(x?.hash))) e.push(`inputs[${i}].hash must be sha256 hex`);
   });
   for (const r of REQUIRED_INPUTS) if (!m.inputs.some((x: any) => x?.name === r)) e.push(`inputs: ${r} not declared`);
+  // A verdict made against a signed sanctions list must declare that list: hash = recorded root, signedBy = provider id.
+  for (const a of attestations) {
+    if (!a.sanctions) continue;
+    const ok = m.inputs.some((x: any) => x?.name === 'sanctions_list' && x.hash === a.sanctions!.list_root && x.signedBy === a.sanctions!.provider_id);
+    if (!ok) e.push(`inputs: sanctions_list ${a.sanctions.list_root.slice(0, 12)}… signed by ${a.sanctions.provider_id.slice(0, 12)}… (recorded in a verdict) not declared`);
+  }
   return e;
 }
 
