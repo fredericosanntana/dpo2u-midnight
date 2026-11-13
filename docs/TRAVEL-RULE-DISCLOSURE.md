@@ -26,4 +26,44 @@ Calling `evaluateTransfer` / `releaseTransfer` on a network needs the SDK's cros
 
 Fallback (design 1B, not used): if cross-contract calls fail on the target network, the gate keeps only the approver key and the agent runs the passport and registry checks off-chain before `evaluateTransfer` / `releaseTransfer`.
 
-Known limits: sanctions result is VASP-attested (not proven in-circuit); the counterparty VASP id is deliberately public (and is the PsavPassport id it is checked against); "viewing key" here is an application-level disclosure key (HKDF per grant) plus on-chain grant metadata, not a Midnight wallet viewing key. The v10 gate is not deployed on any network yet.
+## Signed sanctions lists (v10-signed-sanctions)
+
+`evaluateTransfer` accepts a sanctions screening only against a list snapshot signed by a registered provider:
+
+| Check (in-circuit) | Failure |
+|---|---|
+| provider id registered (`registerSanctionsProvider`, owner only; one active Jubjub key per id; re-registering rotates the key) | `Sanctions provider not registered` |
+| provider not revoked (`revokeSanctionsProvider`, owner only; re-registering reinstates with the new key) | `Sanctions provider revoked` |
+| `valid_until > issued_at` | `Sanctions list validity window is empty` |
+| block time before `valid_until` | `Sanctions list expired` |
+| `jubjubSchnorrVerify<4>(sanctions_message(list_root, provider_id, issued_at, valid_until), signature, key)` | `Sanctions list signature invalid` |
+
+The verdict records `verdict_sanctions_root`, `verdict_sanctions_provider` and `verdict_sanctions_valid_until` per transfer. `sanctions_clear` (neither party is on the list) is still the VASP's statement: the circuit proves which signed, unexpired list it was made against, not the non-membership itself.
+
+**Payload the gateway passes** for each evaluation (witness `sanctions_list`; parser `fromPayload` in `scripts/lib/sanctions-list.ts`, which refuses missing or malformed fields):
+
+```json
+{
+  "provider_id": "<32-byte hex, lowercase>",
+  "list_root":   "<32-byte hex, lowercase: sanctionsListRoot(entry hashes) of the snapshot>",
+  "issued_at":   1800000000,
+  "valid_until": 1800086400,
+  "signature": { "announcement": { "x": "<decimal>", "y": "<decimal>" }, "response": "<decimal>" }
+}
+```
+
+**How the provider signs** (compact-runtime 0.21, no other library):
+
+```ts
+import { jubjubSchnorrSign, CompactTypeVector, CompactTypeField, sampleJubjubSchnorrSk, jubjubSchnorrVerifyingKey } from '@midnight-ntwrk/compact-runtime';
+import { pureCircuits } from './build/TravelRuleGate/contract/index.js';
+const sk = sampleJubjubSchnorrSk();               // provider's signing key, kept by the provider
+const pk = jubjubSchnorrVerifyingKey(sk);         // {x, y}: given to the VASP, registered on chain
+const msg = pureCircuits.sanctions_message(listRoot, providerId, issuedAt, validUntil);
+// = [transientHash<Bytes<32>>(list_root), transientHash<Bytes<32>>(provider_id), issued_at, valid_until]
+const signature = jubjubSchnorrSign(new CompactTypeVector(4, CompactTypeField), msg, sk);
+```
+
+`signSanctionsList` / `toPayload` in `scripts/lib/sanctions-list.ts` do exactly this. The list root is `sha256("dpo2u/sanctions-list/v1" || sorted unique entry hashes)` (`sanctionsListRoot`).
+
+Known limits: sanctions non-membership is VASP-attested (not proven in-circuit), but bound to a signed, unexpired list; the counterparty VASP id is deliberately public (and is the PsavPassport id it is checked against); "viewing key" here is an application-level disclosure key (HKDF per grant) plus on-chain grant metadata, not a Midnight wallet viewing key. The v10 gate is not deployed on any network yet.
