@@ -52,7 +52,41 @@ MIDNIGHT_SEED=0000000000000000000000000000000000000000000000000000000000000001 \
   MIDNIGHT_NETWORK=standalone npm run deploy:standalone   # → deployment-standalone.json
 ```
 
-**Preprod public testnet — blocked.** The wallet (`mn_addr_preprod1jelp33c…px5g`) is already funded with tNIGHT, but the headless wallet `waitForSync` must grind the full shielded transaction history of preprod — which is extremely slow and OOMs Node's default heap (use `NODE_OPTIONS=--max-old-space-size=12288`+). This is a known Midnight limitation (other teams hit dust-wallet WASM `unreachable` at the same wall). Tracked as a follow-up; standalone is the working path today.
+**Preprod public testnet — deployed (2026-11-13).** The headless ledger-v9 wallet now resumes from a sync checkpoint (delta sync ~1 min), so `scripts/deploy-v9.ts` deploys to preprod directly. Preprod is reached through Blockfrost (`BLOCKFROST_PROJECT_ID`); the Midnight-hosted preprod endpoints were retired on 2026-10-09.
+
+### Deployed contracts (preprod)
+
+Source of truth: [`deployment-preprod-v9.json`](deployment-preprod-v9.json). Network `preprod`, ledger v9, `compactc 0.36.0`, owner-gated (`owner-v1`). Deployment recorded in commit `d434eab`.
+
+| Contract | Contract address | Deploy txId | Block |
+|---|---|---|---|
+| `ComplianceRegistry` | `815417fb90eb1eb5a9be1d908302aefb32112c9b9130dc45dbda9a477b923504` | `00fb2fa0d9bd06ade4baaf0e35064008470a57ab77ee74e3c86776ba8a5a4f5027` | 3404165 |
+| `TravelRuleGate` | `fdb80609b5fa3a746133a43a3a7914ce19687c4787e4dc097e08d6cf195b627a` | `003a1e952e6be4560dbf307ad020ccf6b298bedeaf8e00cdc4f1491d21f3f34046` | 3404169 |
+| `PsavPassport` | `154a09c750df7b1b83c9d1e670f4c14596e3476b7190f9dc10c97e7412c08c70` | `001616e8f8ec03d56fb53b876c7be1451b9b2871a24377fc963ae8e45688017d4f` | 3404173 |
+
+<!-- PREPROD-INTERACTION-TX -->
+
+> **Version note.** These three are the **pre-v10** builds (the `TravelRuleGate` constructor takes only `owner_commit` and `threshold_cents`; it is not linked to `PsavPassport`/`ComplianceRegistry`). The v10 contracts on `main` (cross-contract gate, two-key disclosure, signed sanctions lists) are deployed to preview first and will be redeployed to preprod/mainnet from there.
+
+**How to interact**
+
+- **CLI, preprod today (`scripts/agent.ts`)** — the preprod contracts above are driven by the ledger-v9 scripts as of commit `d434eab`. `scripts/agent.ts` seals compliance attestations on `ComplianceRegistry.attestCompliance` from a work queue (`agent-queue.example.json`):
+
+  ```bash
+  git checkout d434eab
+  MIDNIGHT_NETWORK=preprod npx tsx scripts/agent.ts --once --queue agent-queue.json
+  ```
+
+  Env: `MIDNIGHT_SEED`, `BLOCKFROST_PROJECT_ID`, `PROOF_SERVER_URL`, `DPO2U_OWNER_SECRET` (see `scripts/lib/midnight-v9.ts`).
+- **CLI, v10 gate (`scripts/travel-rule-v10.ts`)** — the operator CLI for the v10 Travel Rule gate: `attest-self`, `issue-passport`, `register-provider`, `evaluate`, `release`, `grant`, `approve`, `revoke`, `status`. It reads addresses from `deployment-<network>-v9.json` and requires a v10 gate (`codeVersion` v10 in that file), so it applies to the v10 redeploy, not to the preprod gate above. Every command has `--plan`, which prints the contract, circuit, cross-contract calls and args without touching a wallet or the network:
+
+  ```bash
+  MIDNIGHT_NETWORK=preview npx tsx scripts/travel-rule-v10.ts status --transfer <id> --plan
+  MIDNIGHT_NETWORK=preview npx tsx scripts/travel-rule-v10.ts evaluate --transfer <id> \
+      --policy <hex|label> --witness-file <file> --sanctions-list <file|->
+  ```
+
+- **WebUI (`deploy-console/`)** — a Vite browser console that deploys the contracts through the Midnight Lace wallet (Lace syncs inside the extension, so no headless full sync). Setup in [`deploy-console/RUNBOOK.md`](deploy-console/RUNBOOK.md): `cd deploy-console && npm install && npm run dev` → http://127.0.0.1:5173, with a local proof server on `:6300`.
 
 ### Follow-ups (out of scope for this consolidation)
 - **PoR `seal_solvency` → `SolvencyRegistry.compact`** — port the Stellar `por-filing` solvency proof (public solvency, private positions).
