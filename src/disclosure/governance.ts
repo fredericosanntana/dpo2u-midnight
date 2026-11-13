@@ -16,6 +16,8 @@
 import { createHash, createHmac, hkdfSync, randomBytes, timingSafeEqual } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { type ExceptionItem, type ExceptionSource, exceptionId, slaHours, reasonOf, checkDecision, isOverdue } from './exceptions.js';
+import { view, type Role, type GateSnapshot, type Period } from './roles.js';
 
 export const FIELD_BITS = { name: 1, account: 2, document: 4, vasp: 8 } as const;
 export type Field = keyof typeof FIELD_BITS;
@@ -38,7 +40,9 @@ export interface Claims {
 export interface LogEntry {
   seq: number;
   ts: number;
-  event: 'ISSUE' | 'REVOKE' | 'ACCESS_GRANTED' | 'ACCESS_DENIED';
+  // EXCEPTION_*: grant_id carries the exception id, supervisor the actor (owner / decider).
+  // ROLE_VIEW: grant_id carries the role, supervisor the actor who pulled the view.
+  event: 'ISSUE' | 'REVOKE' | 'ACCESS_GRANTED' | 'ACCESS_DENIED' | 'EXCEPTION_OPEN' | 'EXCEPTION_DECIDE' | 'ROLE_VIEW';
   grant_id: string;
   supervisor: string;
   detail: Record<string, unknown>;
@@ -78,6 +82,7 @@ export function purposeHash(c: Pick<Claims, 'grant_id' | 'supervisor' | 'legal_b
 export class DisclosureGovernance {
   private revoked = new Set<string>();
   private issued = new Map<string, Claims>();
+  private excs = new Map<string, ExceptionItem>();
   private entries: LogEntry[] = [];
 
   /**
@@ -96,6 +101,11 @@ export class DisclosureGovernance {
       for (const e of this.entries) {
         if (e.event === 'REVOKE') this.revoked.add(e.grant_id);
         if (e.event === 'ISSUE') this.issued.set(e.grant_id, e.detail.claims as Claims);
+        if (e.event === 'EXCEPTION_OPEN') this.excs.set(e.grant_id, { ...(e.detail.item as ExceptionItem) });
+        if (e.event === 'EXCEPTION_DECIDE') {
+          const it = this.excs.get(e.grant_id);
+          if (it) Object.assign(it, { status: 'decided', decision: e.detail.decision, decided_by: e.supervisor, decided_at: e.ts, justification: e.detail.justification });
+        }
       }
     }
   }
@@ -180,6 +190,50 @@ export class DisclosureGovernance {
     }
     this.append('ACCESS_GRANTED', claims.grant_id, claims.supervisor, { request: req, legal_basis: claims.legal_basis });
     return { ok: true, fields: out };
+  }
+
+  // ── exception queue (src/disclosure/exceptions.ts) ──
+  /** Opens an item for a FAIL / refused attestation. Idempotent: an existing item is returned unchanged. */
+  openException(p: { source: ExceptionSource; ref: string; reason_code: number; reason_text?: string; policy_hash?: string; owner: string; due_hours?: number }): ExceptionItem {
+    if (!p.ref?.trim()) throw new Error('ref is required');
+    if (!p.owner?.trim()) throw new Error('owner is required');
+    const id = exceptionId(p.source, p.ref);
+    const existing = this.excs.get(id);
+    if (existing) return existing;
+    const opened_at = this.now();
+    const item: ExceptionItem = {
+      id, source: p.source, ref: p.ref, reason_code: p.reason_code, reason: reasonOf(p.source, p.reason_code, p.reason_text),
+      ...(p.policy_hash ? { policy_hash: p.policy_hash } : {}), owner: p.owner,
+      opened_at, due_at: opened_at + 3600 * (p.due_hours ?? slaHours(p.source, p.reason_code)), status: 'open',
+    };
+    this.excs.set(id, item);
+    this.append('EXCEPTION_OPEN', id, p.owner, { item });
+    return item;
+  }
+
+  decideException(id: string, d: { decision: string; by: string; justification: string }): ExceptionItem {
+    const item = this.excs.get(id);
+    checkDecision(item, d);
+    const now = this.now();
+    this.append('EXCEPTION_DECIDE', id, d.by, { decision: d.decision, justification: d.justification, overdue_when_decided: now >= item!.due_at });
+    Object.assign(item!, { status: 'decided', decision: d.decision, decided_by: d.by, decided_at: now, justification: d.justification });
+    return item!;
+  }
+
+  exceptions(filter: { open?: boolean; overdue?: boolean } = {}): ExceptionItem[] {
+    const now = this.now();
+    return [...this.excs.values()]
+      .filter((e) => (!filter.open || e.status === 'open') && (!filter.overdue || isOverdue(e, now)))
+      .map((e) => ({ ...e }));
+  }
+
+  /** Role view of a gate snapshot (src/disclosure/roles.ts), logged with what was returned (counts only). */
+  roleView(role: Role, actor: string, snapshot: GateSnapshot, opts: { period?: Period } = {}): Record<string, unknown> {
+    if (!actor?.trim()) throw new Error('actor is required');
+    const v = view(role, snapshot, opts);
+    const size = Array.isArray(v.failed) ? v.failed.length : Array.isArray(v.transfers) ? v.transfers.length : Array.isArray(v.buckets) ? v.buckets.length : 0;
+    this.append('ROLE_VIEW', role, actor, { gate: snapshot.gate, network: snapshot.network, rows: size, ...(opts.period ? { period: opts.period } : {}) });
+    return v;
   }
 
   log(): readonly LogEntry[] { return this.entries; }
