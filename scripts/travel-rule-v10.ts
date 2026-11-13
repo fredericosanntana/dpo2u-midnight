@@ -9,6 +9,8 @@
  *                   --score N (private) --threshold N --context LABEL --evidence HEX|LABEL
  *   issue-passport  PsavPassport.issuePassport, tier 0 (machine-only), one machine rule PASS
  *                   --passport-id ID (= the counterparty vasp_id) [--pack LABEL --pack-version V]
+ *                   or --from-queue FILE|- --passport-witness FILE(600): the gateway's queued passport plus its
+ *                   private preimages; every derived field is recomputed and must match (scripts/lib/passport-queue.ts)
  *   register-provider  registerSanctionsProvider --provider-id ID --provider-key FILE ({x, y} decimal; re-registering rotates)
  *   revoke-provider    revokeSanctionsProvider --provider-id ID
  *   evaluate        evaluateTransfer --transfer ID --policy HEX|LABEL --witness-file FILE(600) --sanctions-list FILE|-
@@ -21,6 +23,8 @@
  *   revoke          revokeDisclosure --grant ID
  *   status          ledger read: transfer status / grant activity  [--transfer ID] [--grant ID]
  *
+ * --institution ID selects that institution's own gate (deploy-v9.ts --institution); PsavPassport and
+ *   ComplianceRegistry stay the shared ones.
  * --deployment FILE reads the addresses from FILE instead of deployment-<net>-v9.json.
  * --plan prints what would run (contract, circuit, key, cross-contract call, ZK sources, args) and
  * touches no wallet and no network. Output: one JSON line on stdout; a reverted circuit prints
@@ -39,6 +43,7 @@ import { CompiledContract } from '@midnight-ntwrk/compact-js';
 import { encodeContractAddress, ContractState } from '@midnight-ntwrk/compact-runtime';
 import fs from 'node:fs';
 import { fromPayload } from './lib/sanctions-list.js';
+import { parseQueuePayload, readPreimages, issueFromQueue, payloadDigest } from './lib/passport-queue.js';
 import { ZKConfigRegistry } from '@midnight-ntwrk/midnight-js-types';
 import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
@@ -57,11 +62,11 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
-    plan: { type: 'boolean', default: false }, deployment: { type: 'string' },
+    plan: { type: 'boolean', default: false }, deployment: { type: 'string' }, institution: { type: 'string' },
     transfer: { type: 'string' }, policy: { type: 'string' }, 'witness-file': { type: 'string' },
     grant: { type: 'string' }, supervisor: { type: 'string' }, scope: { type: 'string' }, ttl: { type: 'string' }, purpose: { type: 'string' },
     'approver-secret-stdin': { type: 'boolean', default: false }, 'as-owner': { type: 'boolean', default: false },
-    'sanctions-list': { type: 'string' }, 'provider-id': { type: 'string' }, 'provider-key': { type: 'string' },
+    'sanctions-list': { type: 'string' }, 'from-queue': { type: 'string' }, 'passport-witness': { type: 'string' }, 'provider-id': { type: 'string' }, 'provider-key': { type: 'string' },
     score: { type: 'string' }, threshold: { type: 'string' }, context: { type: 'string' }, evidence: { type: 'string' },
     'passport-id': { type: 'string' }, pack: { type: 'string' }, 'pack-version': { type: 'string' },
   },
@@ -74,7 +79,10 @@ const selfCompany = () => { const s = (process.env.TRAVEL_RULE_SELF_COMPANY_ID ?
 const readStdin = async () => { let s = ''; for await (const c of process.stdin) s += c; return s; };
 
 /** Arguments for the command, printable (hex) and as circuit values. */
-function argsFor(c: Command): { show: Record<string, unknown>; call: unknown[] } {
+/** Set by issue-passport --from-queue: witnesses from the private preimages and the verdict the circuit must return. */
+let queueIssue: { witnesses: Record<string, unknown>; expectedVerdict: number; payloadSha256: string } | undefined;
+
+async function argsFor(c: Command): Promise<{ show: Record<string, unknown>; call: unknown[] }> {
   switch (c) {
     case 'attest-self': {
       const company = b32(selfCompany()), ctx = hashArg(need('context')), ev = hashArg(need('evidence'));
@@ -82,6 +90,16 @@ function argsFor(c: Command): { show: Record<string, unknown>; call: unknown[] }
         call: [company, b32('did:dpo2u:agent:001'), b32('travel-rule-v10'), BigInt(need('threshold')), ctx, BigInt(need('score')), ev] };
     }
     case 'issue-passport': {
+      if (values['from-queue']) {
+        // Gateway queue payload (file or '-' for stdin) + the private preimages (mode 600): scripts/lib/passport-queue.ts.
+        const raw = values['from-queue'] === '-' ? await readStdin() : fs.readFileSync(values['from-queue'], 'utf8');
+        const q = parseQueuePayload(JSON.parse(raw));
+        const Passport = await import(pathToFileURL(path.join(buildDir(ROOT, 'PsavPassport'), 'contract', 'index.js')).href);
+        const r = issueFromQueue(Passport as any, q, readPreimages(need('passport-witness')));
+        queueIssue = { witnesses: r.witnesses, expectedVerdict: r.expectedVerdict, payloadSha256: payloadDigest(raw) };
+        return { show: { from_queue: values['from-queue'], payload_sha256: queueIssue.payloadSha256, passport_id: hex(q.passportId), tier: q.tier, issued_at: q.issuedAt, expires_at: q.expiresAt, expected_verdict: r.expectedVerdict, derived_fields: 'partnerCommit, evidenceCommit, reviewerCommit, ruleCounts, verdict match the preimages' },
+          call: [...r.args] };
+      }
       const id = idArg(need('passport-id')), issued = Math.floor(Date.now() / 1000) - 120;
       return { show: { passport_id: hex(id), tier: 0, issued_at: issued, expires_at: issued + 31_536_000 },
         call: [id, hashArg(values.pack ?? 'psav-pack-fictitious'), b32(values['pack-version'] ?? '1.0.0'), 0n, BigInt(issued), BigInt(issued + 31_536_000)] };
@@ -128,8 +146,8 @@ const refuse = (n: string) => () => { throw new Error(`witness ${n} is not avail
 
 async function main() {
   const net = networkConfig();
-  const d = readGateDeployment(ROOT, net.name, values.deployment);
-  const a = argsFor(cmd);
+  const d = readGateDeployment(ROOT, net.name, values.deployment, values.institution);
+  const a = await argsFor(cmd);
   const p = plan(ROOT, d, cmd, a.show);
   if (values.plan) { console.log(JSON.stringify({ plan: p }, null, 2)); return; }
 
@@ -175,7 +193,8 @@ async function main() {
     if (cmd === 'attest-self' || cmd === 'issue-passport') {
       const name = cmd === 'attest-self' ? 'ComplianceRegistry' : 'PsavPassport';
       const base = makeProviders(w, buildDir(ROOT, name), `${name}-v10`);
-      const w8 = { ...ownerWitnesses(owner!),
+      const qw = queueIssue?.witnesses;
+      const w8 = qw ? { ...ownerWitnesses(owner!), ...Object.fromEntries(Object.entries(qw).map(([k, v]) => [k, (x: any) => [x.privateState, v]])), sponsor_secret: refuse('sponsor_secret') } : { ...ownerWitnesses(owner!),
         rule_origins: (x: any) => [x.privateState, [1n, ...Array(15).fill(0n)]], rule_verdicts: (x: any) => [x.privateState, [1n, ...Array(15).fill(0n)]],
         partner_id: (x: any) => [x.privateState, b32('fictitious-partner')], commit_salt: (x: any) => [x.privateState, new Uint8Array(randomBytes(32))],
         reviewer_sig_hash: (x: any) => [x.privateState, new Uint8Array(32)], evidence_hash: (x: any) => [x.privateState, hashArg('fictitious-evidence')],
@@ -206,6 +225,10 @@ async function main() {
       return;
     } finally { setScoreSalt(undefined); }
 
+    if (queueIssue && r?.private?.result !== undefined && Number(r.private.result) !== queueIssue.expectedVerdict) {
+      console.log(JSON.stringify({ ok: false, command: cmd, error: `issuePassport returned verdict ${r.private.result}, queue payload said ${queueIssue.expectedVerdict}`, txId: r?.public?.txId }));
+      process.exitCode = 2; return;
+    }
     const L = await readGate();
     const after: any = {};
     if (cmd === 'evaluate' || cmd === 'release') {
