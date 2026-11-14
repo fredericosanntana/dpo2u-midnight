@@ -33,6 +33,7 @@ import { findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
 import { networkConfig, openWallet, ensureDust, makeProviders, masterSeedHex, dustBalance, CODE_VERSION, type V9Wallet } from './lib/midnight-v9.js';
 import { ownerSecret, ownerWitnesses, scoreSalt, setScoreSalt } from './owner.js';
+import { newProviderKey, signSanctionsList, sanctionsListRoot } from './lib/sanctions-list.js';
 import { summarize, makeConversion, convert, deployBaseline, compiledVersions, packageVersion, hostHardware, isLocalUrl, benchFile, type Sample } from './lib/bench.js';
 
 // @ts-expect-error WebSocket polyfill for graphql-ws in Node
@@ -173,7 +174,8 @@ async function main() {
   console.log(JSON.stringify({ out: path.relative(ROOT, out), summary: report.summary }));
 }
 
-/** TravelRuleGate v10: one attestVasp (not measured), then evaluate + release per run. Release needs self_company_id attested (attestCompliance workload). */
+/** TravelRuleGate v10: one attestVasp and one registerSanctionsProvider with a bench-only key and a
+ * fictitious signed list (not measured), then evaluate + release per run. Release needs self_company_id attested (attestCompliance workload). */
 async function runGate(w: V9Wallet, g: { lib: any; dep: any }, runs: number, tag: string, secret: Uint8Array, withFee: (p: any) => any, measure: (wl: string, i: number, f: () => Promise<any>) => Promise<void>) {
   const { lib, dep } = g;
   const { ZKConfigRegistry } = await import('@midnight-ntwrk/midnight-js-types');
@@ -187,14 +189,21 @@ async function runGate(w: V9Wallet, g: { lib: any; dep: any }, runs: number, tag
   const counterparty = b32(`vasp:bench-${tag}`.slice(0, 32));
   let cur = { o: party(`o-${tag}`, b32('vasp:bench-own')), b: party(`b-${tag}`, counterparty) };
   const mod = await import(pathToFileURL(path.join(zk, 'contract', 'index.js')).href);
+  // evaluateTransfer requires a sanctions list signed by a registered provider (witness sanctions_list).
+  const provider = newProviderKey();
+  const providerId = h32(`bench|${tag}|sanctions-provider`);
+  const now = BigInt(Math.floor(Date.now() / 1000));
+  const list = signSanctionsList(mod as any, provider.sk, { provider_id: providerId, list_root: sanctionsListRoot([createHash('sha256').update(`bench|${tag}|entry`).digest('hex')]), issued_at: now - 3600n, valid_until: now + 86_400n });
   const refuse = (n: string) => () => { throw new Error(`witness ${n} not used by the bench`); };
   const compiled = (CompiledContract.make('TravelRuleGate', mod.Contract) as any).pipe((CompiledContract as any).withWitnesses({
     owner_secret: (x: any) => [x.privateState, secret], approver_secret: refuse('approver_secret'),
     originator_data: (x: any) => [x.privateState, cur.o], beneficiary_data: (x: any) => [x.privateState, cur.b],
     transfer_amount: (x: any) => [x.privateState, 250_000n], sanctions_clear: (x: any) => [x.privateState, true],
+    sanctions_list: (x: any) => [x.privateState, list],
   }), (CompiledContract as any).withCompiledFileAssets(zk));
   const gate: any = await (findDeployedContract as any)(providers, { contractAddress: dep.gate, compiledContract: compiled, privateStateId: 'TravelRuleGatePrivateState', initialPrivateState: {} });
   await gate.callTx.attestVasp(counterparty);
+  await gate.callTx.registerSanctionsProvider(providerId, provider.pk);
   for (let i = 0; i < runs; i++) {
     cur = { o: party(`o-${tag}-${i}`, b32('vasp:bench-own')), b: party(`b-${tag}-${i}`, counterparty) };
     const t = h32(`bench|${tag}|transfer|${i}`);
