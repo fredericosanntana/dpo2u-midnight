@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>DPO2U Travel Rule Gate · Midnight</title>
+<meta name="description" content="Travel Rule compliance for virtual-asset transfers, proven in zero knowledge on Midnight. Live on the Midnight preview testnet.">
+<link rel="icon" href="img/icon.png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/asciinema-player@3.8.0/dist/bundle/asciinema-player.css">
+<style>
+:root{--paper:#F1ECE3;--card:#fff;--ink:#0C0D10;--soft:#55524c;--line:#E2DACB;--accent:#C85C3B;--ok:#2e7d4f;--no:#b4472a}
+@media (prefers-color-scheme:dark){:root{--paper:#121317;--card:#1b1d22;--ink:#EEE8DD;--soft:#a9a397;--line:#2b2e35;--accent:#E07A57;--ok:#7BC67E;--no:#E58B6B}}
+*{box-sizing:border-box}body{margin:0;background:var(--paper);color:var(--ink);font:17px/1.6 Georgia,'DejaVu Serif',serif}
+.bar{height:8px;background:var(--accent)}main{max-width:1080px;margin:0 auto;padding:28px 16px 80px}
+.wm{font-weight:700;font-size:26px;letter-spacing:.5px}.wm b{color:var(--accent)}
+.kicker{font:13px/1.4 ui-monospace,'DejaVu Sans Mono',monospace;letter-spacing:3px;text-transform:uppercase;color:var(--accent);margin:40px 0 10px}
+h1{font-size:clamp(32px,6vw,58px);line-height:1.08;margin:6px 0 14px}h2{font-size:clamp(24px,4vw,34px);margin:6px 0 14px}
+.lead{font-size:20px;font-style:italic;color:var(--soft);max-width:760px}
+.pill{display:inline-block;border:1px solid var(--accent);color:var(--accent);border-radius:99px;padding:2px 12px;font:13px ui-monospace,monospace;margin-right:6px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}.stat b{display:block;font-size:34px;color:var(--accent)}.stat span{font:13px ui-monospace,monospace;color:var(--soft)}
+.scroll{overflow-x:auto;background:var(--card);border:1px solid var(--line);border-radius:12px}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:15px}td,th{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}th{font:12px ui-monospace,monospace;letter-spacing:2px;text-transform:uppercase;color:var(--soft)}
+td.n{font:700 15px ui-monospace,monospace;color:var(--accent)}code{font:13px ui-monospace,'DejaVu Sans Mono',monospace;word-break:break-all}code.tx{color:var(--soft)}
+.ok{color:var(--ok);font-weight:700}.no{color:var(--no);font-weight:700}
+.player{border-radius:12px;overflow:hidden;border:1px solid var(--line)}
+.shots{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px}.shots img{width:100%;border-radius:10px;border:1px solid var(--line);display:block}
+a{color:var(--accent)}.note{font-size:14px;color:var(--soft)}footer{margin-top:50px;font:13px ui-monospace,monospace;color:var(--soft)}
+</style></head><body><div class="bar"></div><main>
+<div class="wm">DP<b>O</b>2U</div>
+<div class="kicker">Travel Rule Gate · Midnight Buildathon · Wave 3</div>
+<h1>Travel Rule compliance,<br>proven in zero knowledge.</h1>
+<p class="lead">A VASP proves that a virtual-asset transfer meets the Travel Rule without putting customer data on-chain. Disclosure to a supervisor needs two keys.</p>
+<p><span class="pill">Midnight preview testnet</span><span class="pill">Compact · compactc 0.36.0</span><span class="pill">open source</span></p>
+<p><a href="https://github.com/fredericosanntana/dpo2u-midnight">github.com/fredericosanntana/dpo2u-midnight</a> · <a href="https://dpo2u.com">dpo2u.com</a></p>
+
+<div class="kicker">Live run · 2026-11-14 · Midnight preview</div>
+<h2>The end-to-end check, recorded on the network</h2>
+<p><code>bash scripts/verify-travel-rule-v10.sh</code> against the v10 contracts on the Midnight preview testnet. Real wallet, real proofs, real transactions; about 15 minutes of real time, played here at 20x with waits trimmed. It ends with <b>ALL CHECKS PASSED</b>.</p>
+<div id="cast" class="player"></div>
+<details><summary>Transcript of the result lines (or download <a href="demo.cast">demo.cast</a>)</summary><pre style="white-space:pre-wrap;word-break:break-all;font:12px ui-monospace,monospace;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px">  ✓ step 0: {&quot;ok&quot;:true,&quot;command&quot;:&quot;register-provider&quot;,&quot;contract&quot;:&quot;TravelRuleGate&quot;,&quot;address&quot;:&quot;9c6650bb751dd8298c457a4e40fd4b3d48ac832f22091f9a58b32f291daf09c0&quot;,&quot;circuit&quot;:&quot;registerSanctionsProvider&quot;,&quot;result&quot;:&quot;&quot;,&quot;txId&quot;:&quot;00461bb8770beeb5b72cc41f3ba7293b5e0452aebcca09486da2ac62ad80b85a54&quot;,&quot;blockHeight&quot;:100551,&quot;provider&quot;:{&quot;registered&quot;:true,&quot;revoked&quot;:false}}
+    ✓ provider.registered = true
+  ✓ step 1: {&quot;ok&quot;:true,&quot;command&quot;:&quot;issue-passport&quot;,&quot;contract&quot;:&quot;PsavPassport&quot;,&quot;address&quot;:&quot;21dc5ef4b666de7436d65f531aace9f53ad72bcd0b5eedbac25259afb5773951&quot;,&quot;circuit&quot;:&quot;issuePassport&quot;,&quot;result&quot;:&quot;1&quot;,&quot;txId&quot;:&quot;00f0a3ecf678aa8cf67f9cb7c4104a829d1ee7f8d2e3a94156f9b1e25478727385&quot;,&quot;blockHeight&quot;:100570}
+  ✓ step 1b refused as expected: {&quot;ok&quot;:false,&quot;command&quot;:&quot;evaluate&quot;,&quot;circuit&quot;:&quot;evaluateTransfer&quot;,&quot;error&quot;:&quot;failed assert: Sanctions list expired&quot;}
+  ✓ step 2: {&quot;ok&quot;:true,&quot;command&quot;:&quot;evaluate&quot;,&quot;contract&quot;:&quot;TravelRuleGate&quot;,&quot;address&quot;:&quot;9c6650bb751dd8298c457a4e40fd4b3d48ac832f22091f9a58b32f291daf09c0&quot;,&quot;circuit&quot;:&quot;evaluateTransfer&quot;,&quot;result&quot;:&quot;1&quot;,&quot;txId&quot;:&quot;00e92905a6d1cf6717eec7916b63649042325d32883f9baa0e9612202451b64bc6&quot;,&quot;blockHeight&quot;:100610,&quot;transfer&quot;:{&quot;status&quot;:1,&quot;fail_reason&quot;:0,&quot;policy_hash&quot;:&quot;8f4bd551a5802d494ffd1700c4800daf075d69a9e1ada94768c3a56ee62f8a48&quot;,&quot;sanctions&quot;:{&quot;list_root&quot;:&quot;6663905c5829eda94bb70c45098370977677aaf58e7e9d0c977a43178daa78dd&quot;,&quot;provider_id&quot;:&quot;70726f76696465723a666963746974696f75732d323032363131313454303131&quot;,&quot;valid_until&quot;:1794704673}}}
+    ✓ transfer.status = 1
+    ✓ transfer.fail_reason = 0
+    ✓ transfer.sanctions.list_root = 6663905c5829eda94bb70c45098370977677aaf58e7e9d0c977a43178daa78dd
+  ~ step 3 skipped: self_company_id was already attested by an earlier run (released early: {&quot;ok&quot;:true,&quot;command&quot;:&quot;release&quot;,&quot;contract&quot;:&quot;TravelRuleGate&quot;,&quot;address&quot;:&quot;9c6650bb751dd8298c457a4e40fd4b3d48ac832f22091f9a58b32f291daf09c0&quot;,&quot;circuit&quot;:&quot;releaseTransfer&quot;,&quot;result&quot;:&quot;&quot;,&quot;txId&quot;:&quot;00802c96312e50bb9d4017d109085d430745cebe6c713a5d16236383e45e4da1a3&quot;,&quot;blockHeight&quot;:100626,&quot;transfer&quot;:{&quot;status&quot;:3,&quot;fail_reason&quot;:0,&quot;policy_hash&quot;:&quot;8f4bd551a5802d494ffd1700c4800daf075d69a9e1ada94768c3a56ee62f8a48&quot;,&quot;sanctions&quot;:{&quot;list_root&quot;:&quot;6663905c5829eda94bb70c45098370977677aaf58e7e9d0c977a43178daa78dd&quot;,&quot;provider_id&quot;:&quot;70726f76696465723a666963746974696f75732d323032363131313454303131&quot;,&quot;valid_until&quot;:1794704673}}})
+  ✓ step 4: {&quot;ok&quot;:true,&quot;command&quot;:&quot;attest-self&quot;,&quot;contract&quot;:&quot;ComplianceRegistry&quot;,&quot;address&quot;:&quot;c475215ea3894b411312729fd6db81d37d66ffc65871660a8b07eda82e44f38e&quot;,&quot;circuit&quot;:&quot;attestCompliance&quot;,&quot;result&quot;:&quot;&quot;,&quot;txId&quot;:&quot;009205d3a13eecc72ba66324c40b3748e4097181ac7a3b38058461038053349583&quot;,&quot;blockHeight&quot;:100639}
+  ~ step 5 skipped (released in step 3)
+  ✓ step 6: {&quot;ok&quot;:true,&quot;command&quot;:&quot;grant&quot;,&quot;contract&quot;:&quot;TravelRuleGate&quot;,&quot;address&quot;:&quot;9c6650bb751dd8298c457a4e40fd4b3d48ac832f22091f9a58b32f291daf09c0&quot;,&quot;circuit&quot;:&quot;grantDisclosure&quot;,&quot;result&quot;:&quot;&quot;,&quot;txId&quot;:&quot;009ea05225232aadd29d1aa9b9c2d229cedd6e5c998f5eccb8f7ae9b8c038c53e2&quot;,&quot;blockHeight&quot;:100654,&quot;grant&quot;:{&quot;known&quot;:true,&quot;approved&quot;:false,&quot;revoked&quot;:false,&quot;expired&quot;:false,&quot;expires_at&quot;:1794623114,&quot;scope&quot;:1,&quot;purpose_hash&quot;:&quot;225468ac2c9262bd8fd869cdb24ea3fdf12e909af3a2814720293dd90e0585ed&quot;,&quot;active&quot;:false}}
+    ✓ grant.active = false
+    ✓ grant.approved = false
+  ✓ step 7 refused as expected: {&quot;ok&quot;:false,&quot;command&quot;:&quot;approve&quot;,&quot;circuit&quot;:&quot;approveDisclosure&quot;,&quot;error&quot;:&quot;This is the owner secret: the owner cannot approve a disclosure&quot;}
+  ✓ step 8: {&quot;ok&quot;:true,&quot;command&quot;:&quot;approve&quot;,&quot;contract&quot;:&quot;TravelRuleGate&quot;,&quot;address&quot;:&quot;9c6650bb751dd8298c457a4e40fd4b3d48ac832f22091f9a58b32f291daf09c0&quot;,&quot;circuit&quot;:&quot;approveDisclosure&quot;,&quot;result&quot;:&quot;&quot;,&quot;txId&quot;:&quot;003117d02247a39fe2288bf7e58a4b6d5c939fb56680fd7a482ca6cf138ecbb962&quot;,&quot;blockHeight&quot;:100681,&quot;grant&quot;:{&quot;known&quot;:true,&quot;approved&quot;:true,&quot;revoked&quot;:false,&quot;expired&quot;:false,&quot;expires_at&quot;:1794623114,&quot;scope&quot;:1,&quot;purpose_hash&quot;:&quot;225468ac2c9262bd8fd869cdb24ea3fdf12e909af3a2814720293dd90e0585ed&quot;,&quot;active&quot;:true}}
+    ✓ grant.active = true
+  ✓ step 9: {&quot;ok&quot;:true,&quot;gate&quot;:&quot;9c6650bb751dd8298c457a4e40fd4b3d48ac832f22091f9a58b32f291daf09c0&quot;,&quot;totals&quot;:{&quot;pass&quot;:&quot;7&quot;,&quot;fail&quot;:&quot;0&quot;,&quot;released&quot;:&quot;7&quot;,&quot;grants&quot;:&quot;2&quot;},&quot;transfer&quot;:{&quot;status&quot;:3,&quot;fail_reason&quot;:0,&quot;policy_hash&quot;:&quot;8f4bd551a5802d494ffd1700c4800daf075d69a9e1ada94768c3a56ee62f8a48&quot;,&quot;sanctions&quot;:{&quot;list_root&quot;:&quot;6663905c5829eda94bb70c45098370977677aaf58e7e9d0c977a43178daa78dd&quot;,&quot;provider_id&quot;:&quot;70726f76696465723a666963746974696f75732d323032363131313454303131&quot;,&quot;valid_until&quot;:1794704673}},&quot;grant&quot;:{&quot;known&quot;:true,&quot;approved&quot;:true,&quot;revoked&quot;:false,&quot;expired&quot;:false,&quot;expires_at&quot;:1794623114,&quot;scope&quot;:1,&quot;purpose_hash&quot;:&quot;225468ac2c9262bd8fd869cdb24ea3fdf12e909af3a2814720293dd90e0585ed&quot;,&quot;active&quot;:true}}
+    ✓ grant.active = true
+results: verify-out/travel-rule-v10-20261114T011421.jsonl
+ALL CHECKS PASSED</pre></details>
+<p class="note">Entities, sanctions entries and the supervisor are fictitious. Witness files hold hashes and salts only. No secret appears in the recording.</p>
+
+<div class="scroll"><table><tr><th>Step</th><th>What it does</th><th>Result on preview</th></tr>
+<tr><td class="n">0</td><td>Register a (fictitious) sanctions-list provider key<br><code>registerSanctionsProvider</code></td><td><span class="ok">ok</span> · block 100551<br><code class="tx">00461bb8770beeb5b72cc41f3ba7293b5e0452aebcca09486da2ac62ad80b85a54</code></td></tr>
+<tr><td class="n">1</td><td>Issue a PsavPassport to the counterparty VASP<br><code>issuePassport</code></td><td><span class="ok">ok</span> · block 100570<br><code class="tx">00f0a3ecf678aa8cf67f9cb7c4104a829d1ee7f8d2e3a94156f9b1e25478727385</code></td></tr>
+<tr><td class="n">1b</td><td>Evaluate with an expired sanctions list<br><code>evaluateTransfer</code></td><td><span class="no">refused as expected</span><br><code>failed assert: Sanctions list expired</code></td></tr>
+<tr><td class="n">2</td><td>Evaluate the transfer against a valid signed list<br><code>evaluateTransfer</code></td><td><span class="ok">ok</span> · block 100610<br><code class="tx">00e92905a6d1cf6717eec7916b63649042325d32883f9baa0e9612202451b64bc6</code></td></tr>
+<tr><td class="n">3</td><td>Release (this VASP was already attested by an earlier run, so the release went through here)<br><code>releaseTransfer</code></td><td><span class="ok">ok</span> · block 100626<br><code class="tx">00802c96312e50bb9d4017d109085d430745cebe6c713a5d16236383e45e4da1a3</code></td></tr>
+<tr><td class="n">4</td><td>Attest this VASP in ComplianceRegistry<br><code>attestCompliance</code></td><td><span class="ok">ok</span> · block 100639<br><code class="tx">009205d3a13eecc72ba66324c40b3748e4097181ac7a3b38058461038053349583</code></td></tr>
+<tr><td class="n">6</td><td>Grant a disclosure to a supervisor<br><code>grantDisclosure</code></td><td><span class="ok">ok</span> · block 100654<br><code class="tx">009ea05225232aadd29d1aa9b9c2d229cedd6e5c998f5eccb8f7ae9b8c038c53e2</code></td></tr>
+<tr><td class="n">7</td><td>Owner tries to approve the disclosure<br><code>approveDisclosure</code></td><td><span class="no">refused as expected</span><br><code>This is the owner secret: the owner cannot approve a disclosure</code></td></tr>
+<tr><td class="n">8</td><td>Separate approver approves<br><code>approveDisclosure</code></td><td><span class="ok">ok</span> · block 100681<br><code class="tx">003117d02247a39fe2288bf7e58a4b6d5c939fb56680fd7a482ca6cf138ecbb962</code></td></tr>
+<tr><td class="n">9</td><td>Read status back from the ledger<br><code>ledger read</code></td><td><span class="ok">transfer status 3 (released), grant active</span></td></tr>
+</table></div>
+
+<div class="kicker">How it works</div>
+<div class="shots"><img src="img/03-how.png" alt="Private inputs, checks in the circuit, public ledger"><img src="img/05-release.png" alt="Release re-checks and two-key disclosure"><img src="img/04-circuit.png" alt="evaluateTransfer circuit in Compact"><img src="img/02-problem.png" alt="The problem"></div>
+
+<div class="kicker">Benchmark · 2026-11-13 · 5 runs</div>
+<div class="grid"><div class="stat"><b>5/5</b><span>evaluateTransfer ok · median 54.4 s</span></div><div class="stat"><b>5/5</b><span>releaseTransfer ok · median 24.3 s</span></div><div class="stat"><b>16</b><span>contracts deployed on preview (v10)</span></div></div>
+<p></p><div class="scroll"><table><tr><th>Circuit</th><th>Latency</th><th>Block</th><th>Transaction</th></tr><tr><td><code>evaluateTransfer</code></td><td>66.7 s</td><td>98982</td><td><code class="tx">00c1cc38ad60bbae3eed3b7ebacfdc6c01c1ce31cefb4d5bde6509daeb66c9de4a</code></td></tr>
+<tr><td><code>releaseTransfer</code></td><td>24.2 s</td><td>98986</td><td><code class="tx">00cf9abc44405e64dd335f202680c6f3c67f251f90c00cf990bad467030ef523ea</code></td></tr>
+<tr><td><code>evaluateTransfer</code></td><td>65.3 s</td><td>98997</td><td><code class="tx">00ce656dfdf5c256911220581832098885467ed29a507873d8c6971308da9f9d31</code></td></tr>
+<tr><td><code>releaseTransfer</code></td><td>24.4 s</td><td>99001</td><td><code class="tx">00a558bf457648598a51c6013af5ef5260ca7c1bf6666542d48eeaddc6e2811f91</code></td></tr>
+<tr><td><code>evaluateTransfer</code></td><td>54.4 s</td><td>99010</td><td><code class="tx">0043c4ae41c7154713be1f757b6c1c4ab12e54abe64b4ebe8bb82b8a95e14843bc</code></td></tr>
+<tr><td><code>releaseTransfer</code></td><td>24.2 s</td><td>99014</td><td><code class="tx">00052f500d820b8523ee1c010ae398eb7105acd9fa7567da40b01509fcc0b1bcdb</code></td></tr>
+<tr><td><code>evaluateTransfer</code></td><td>53.2 s</td><td>99023</td><td><code class="tx">003da02ab9a1fce598600ba8bdfe515022be8784b6a0067bbbc459259233d60f59</code></td></tr>
+<tr><td><code>releaseTransfer</code></td><td>24.3 s</td><td>99027</td><td><code class="tx">00969bdfd3ccc4a742b34d880c37ee665fd52131a118a1b4d503319e19115b9a6d</code></td></tr>
+<tr><td><code>evaluateTransfer</code></td><td>53.2 s</td><td>99036</td><td><code class="tx">0011825febc4ade72890eb2969117ce7b4b340ba750c398e46670e042a177bd836</code></td></tr>
+<tr><td><code>releaseTransfer</code></td><td>24.3 s</td><td>99040</td><td><code class="tx">003457ef2a3e0f2e83e3492c0ed91617bb0af57c7f118382eb1a36bad815c5b807</code></td></tr></table></div>
+<p class="note">Latency is prove + submit + confirmation, measured from the client. Proof server 9.0.1, ledger v9, midnight-js-contracts 5.0.0. Source: <code>benchmarks/preview-2026-11-13-gate.json</code>.</p>
+
+<div class="kicker">Contracts · Midnight preview · v10</div>
+<div class="scroll"><table><tr><th>Contract</th><th>Address</th><th>Deploy block</th></tr>
+<tr><td>TravelRuleGate</td><td><code>9c6650bb751dd8298c457a4e40fd4b3d48ac832f22091f9a58b32f291daf09c0</code></td><td>98181</td></tr>
+<tr><td>PsavPassport</td><td><code>21dc5ef4b666de7436d65f531aace9f53ad72bcd0b5eedbac25259afb5773951</code></td><td>98178</td></tr>
+<tr><td>ComplianceRegistry</td><td><code>c475215ea3894b411312729fd6db81d37d66ffc65871660a8b07eda82e44f38e</code></td><td>98175</td></tr></table></div>
+<p class="note">Earlier (pre-v10) builds are also on preprod; see the README. Nothing is on mainnet yet.</p>
+
+<div class="kicker">What's next</div>
+<p>Mainnet deployment · sanctions non-membership proofs with an indexed sorted Merkle tree · external audit of the Compact contracts · pilots with regulated institutions.</p>
+<footer>DPO2U · compliance as a protocol · testnet only, not legal advice</footer>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/asciinema-player@3.8.0/dist/bundle/asciinema-player.min.js"></script>
+<script>AsciinemaPlayer.create('demo.cast', document.getElementById('cast'), {speed:20, idleTimeLimit:1.5, fit:'width', theme:'monokai', terminalFontSize:'13px'});</script>
+</body></html>
