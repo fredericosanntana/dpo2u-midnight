@@ -135,7 +135,7 @@ async function evaluate(repoFull, headSha) {
 async function handleWebhook(req, res, body) {
   if (!verifySig(body, req.headers['x-hub-signature-256'])) { res.writeHead(401); return res.end('bad signature'); }
   let ev; try { ev = JSON.parse(body); } catch { res.writeHead(400); return res.end('bad json'); }
-  if (ev && (ev.kind === 'psav_passport' || ev.kind === 'company_attestation')) return enqueueJourney(res, ev);
+  if (ev && ['psav_passport', 'company_attestation', 'travel_rule_transfer', 'travel_rule_release'].includes(ev.kind)) return enqueueJourney(res, ev);
   const event = req.headers['x-github-event'] || 'push';
   const repoFull = (ev.repository && ev.repository.full_name) || 'unknown/repo';
   const [owner, repo] = repoFull.split('/');
@@ -251,6 +251,7 @@ function handleEnqueue(req, res, body) {
 const PASSPORT_FIELDS = ['passportId', 'packHash', 'packVersion', 'tier', 'issuedAt', 'expiresAt', 'verdict', 'ruleCounts', 'preimage_ref'];
 const COMPANY_FIELDS = ['company_id', 'evidence_hash', 'verdict', 'score', 'threshold', 'passport_ref', 'regimes', 'engine'];
 const HEX64 = /^[0-9a-f]{64}$/;
+const INSTITUTION = /^[a-z0-9][a-z0-9-]{1,62}$/;
 function enqueueJourney(res, ev) {
   const bad = (m) => { res.writeHead(400, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: m })); };
   let item;
@@ -263,6 +264,21 @@ function enqueueJourney(res, ev) {
     if (ev.preimage_ref !== `${ev.passportId}.json`) return bad('preimage_ref must be "<passportId>.json"');
     if (!HEX64.test(String(ev.packHash))) return bad('packHash must be 64-hex');
     item = { type: 'psav_passport', derive: true, ...Object.fromEntries(PASSPORT_FIELDS.map((k) => [k, ev[k]])) };
+  } else if (ev.kind === 'travel_rule_transfer' || ev.kind === 'travel_rule_release') {
+    // Public fields only: the personal-data witness stays in MIDNIGHT_TRANSFER_WITNESS_DIR (tmpfs) and never reaches this queue.
+    if (!INSTITUTION.test(String(ev.institution))) return bad('institution must be the gateway clientId (a-z, 0-9, "-")');
+    const t = String(ev.transfer_id || '').toLowerCase();
+    if (!HEX64.test(t)) return bad('transfer_id must be 64-hex');
+    if (ev.kind === 'travel_rule_release') item = { type: 'travel_rule_release', institution: ev.institution, transfer_id: t };
+    else {
+      const ph = String(ev.policy_hash || '').toLowerCase();
+      if (!HEX64.test(ph) || /^0+$/.test(ph)) return bad('policy_hash must be 64-hex, not zero');
+      if (ev.witness_ref !== `${t}.json`) return bad('witness_ref must be "<transfer_id>.json"');
+      const l = ev.sanctions_list;
+      if (!l || !HEX64.test(String(l.provider_id)) || !HEX64.test(String(l.list_root)) || !l.signature) return bad('sanctions_list must be the signed payload');
+      for (const k of ['originator', 'beneficiary', 'amount_cents', 'sanctions_clear']) if (ev[k] !== undefined) return bad(`${k} is private: write it to the witness file, never to the queue`);
+      item = { type: 'travel_rule_transfer', institution: ev.institution, transfer_id: t, policy_hash: ph, sanctions_list: l, witness_ref: ev.witness_ref };
+    }
   } else {
     const missing = COMPANY_FIELDS.filter((k) => ev[k] === undefined || ev[k] === null);
     if (missing.length) return bad(`missing: ${missing.join(', ')}`);
@@ -277,10 +293,25 @@ function enqueueJourney(res, ev) {
   if (q.length >= QUEUE_CAP) { res.writeHead(429, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: 'queue full, retry later', cap: QUEUE_CAP })); }
   q.push(item);
   writeJSON(QUEUE, q);
-  const key = item.type === 'psav_passport' ? item.passportId : item.company_id;
+  const key = item.type === 'psav_passport' ? item.passportId : item.type === 'company_attestation' ? item.company_id : item.type === 'travel_rule_release' ? `${item.transfer_id}:release` : item.transfer_id;
   console.log(`[enqueue] ${item.type} ${String(key).slice(0, 24)}`);
   res.writeHead(202, { 'content-type': 'application/json' });
   res.end(JSON.stringify({ enqueued: true, kind: item.type, key }));
+}
+
+// Outcome of one queued item by its key (passportId, company_id, transfer_id or <transfer_id>:release):
+// still queued, or the latest agent-ledger entry (tx, block, DUST spent, Travel Rule status / fail_reason, error).
+function agentItem(res, key) {
+  const json = (code, v) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(v)); };
+  if (!/^[a-z0-9:._-]{1,80}$/.test(key)) return json(400, { error: 'bad key' });
+  const keyOf = (i) => i.type === 'psav_passport' ? String(i.passportId).toLowerCase() : i.type === 'company_attestation' ? i.company_id
+    : i.type === 'travel_rule_release' ? `${i.transfer_id}:release` : (i.transfer_id || i.evidence_hash);
+  if (readJSON(QUEUE, []).some((i) => keyOf(i) === key)) return json(200, { key, state: 'queued' });
+  const e = readJSON(LEDGER, []).filter((x) => x && String(x.key).toLowerCase() === key).pop();
+  if (!e) return json(404, { key, state: 'unknown' });
+  const out = { key, state: e.error ? 'failed' : 'sealed', kind: e.kind ?? null, at: e.ts, network: e.network };
+  for (const k of ['txId', 'blockHeight', 'dustCost', 'institution', 'status', 'fail_reason', 'error']) if (e[k] !== undefined) out[k] = e[k];
+  return json(200, out);
 }
 
 // JSON view of a Midnight attestation — powers the SAME SPA /verify UI as Stellar
@@ -329,6 +360,10 @@ const server = http.createServer((req, res) => {
     const parts = req.url.split('?')[0].split('/'); // ['', 'verify', uc, hash]
     res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' });
     return res.end(renderVerify(parts[2] || USE_CASE, parts[3] || ''));
+  }
+  if (req.method === 'GET' && req.url.split('?')[0].startsWith('/agent/item/')) {
+    if (ENQUEUE_TOKEN && String(req.headers['authorization'] || '').replace(/^Bearer\s+/i, '') !== ENQUEUE_TOKEN) { res.writeHead(401); return res.end('bad token'); }
+    return agentItem(res, decodeURIComponent(req.url.split('?')[0].slice('/agent/item/'.length)).toLowerCase());
   }
   if (req.method === 'GET' && req.url.split('?')[0] === '/agent/status') {
     res.writeHead(200, { 'content-type': 'application/json', 'access-control-allow-origin': '*' });
