@@ -12,7 +12,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { createCircuitContext, createConstructorContext } from '@midnight-ntwrk/compact-runtime';
 import * as Passport from '../build/PsavPassport/contract/index.js';
-import { parseQueuePayload, parsePreimages, issueFromQueue, expectedVerdict, QUEUE_FIELDS, QUEUE_FIELD_MAP } from '../scripts/lib/passport-queue.js';
+import { parseQueuePayload, parsePreimages, issueFromQueue, expectedVerdict, QUEUE_FIELDS, QUEUE_FIELD_MAP, deriveQueuePassport, preimagePath, readPreimageFile } from '../scripts/lib/passport-queue.js';
+import { parseCompanyAttestation, policyCid, selfAttestationContext } from '../scripts/lib/company-attestation.js';
 import { institutionGateInputs, recordInstitutionGate, institutionGate } from '../scripts/lib/institutions.js';
 import { readGateDeployment } from '../scripts/lib/travel-rule-v10.js';
 import { buildEvidencePack } from '../src/evidence/gateway.js';
@@ -115,6 +116,71 @@ describe('E3: passport from the gateway queue', () => {
 });
 
 // ── E6 ──
+describe('E3 derive mode: the daemon computes the commits from the preimage file', () => {
+  const pub = () => { const { partnerCommit: _a, evidenceCommit: _b, reviewerCommit: _c, ...rest } = payloadFor(); return { kind: 'psav_passport', derive: true, ...rest, preimage_ref: 'vasp:queued-partner.json' }; };
+
+  it('derived payload equals the full gateway payload and issues the same passport', async () => {
+    const pre = parsePreimages(PRE);
+    const q = deriveQueuePassport(Passport as any, pub(), pre);
+    assert.deepEqual(q, parseQueuePayload(payloadFor()));
+    const r = issueFromQueue(Passport as any, q, pre);
+    const { result, L } = await issueInSimulator(r.args, r.witnesses);
+    assert.equal(result, 1);
+    assert.deepEqual(L.partner_commit.lookup(q.passportId), q.partnerCommit);
+  });
+
+  it('no reviewer: reviewerCommit is zeros; counts and verdict are still checked against the rules', () => {
+    const pre = parsePreimages({ ...PRE, reviewerSigHash: null, rules: [{ origin: 1, verdict: 1 }] });
+    const q = deriveQueuePassport(Passport as any, { ...pub(), tier: 0, expiresAt: T0 - 3600 + 31_536_000, ruleCounts: { machine: 1, human: 0, third_party: 0 } }, pre);
+    assert.deepEqual(q.reviewerCommit, new Uint8Array(32));
+    assert.throws(() => issueFromQueue(Passport as any, deriveQueuePassport(Passport as any, { ...pub(), tier: 0, ruleCounts: { machine: 2, human: 0, third_party: 0 } }, pre), pre), /ruleCounts/);
+  });
+
+  it('refuses commits in a derive payload and missing public fields', () => {
+    const pre = parsePreimages(PRE);
+    assert.throws(() => deriveQueuePassport(Passport as any, { ...pub(), partnerCommit: '00'.repeat(32) }, pre), /must not carry partnerCommit/);
+    const { preimage_ref: _r, ...noRef } = pub();
+    assert.throws(() => deriveQueuePassport(Passport as any, noRef, pre), /missing: preimage_ref/);
+  });
+
+  it('preimage file: only <dir>/<passportId>.json, regular file, no access for other; 0640 accepted', () => {
+    const d = tmp();
+    assert.throws(() => preimagePath('relative/dir', 'p1', 'p1.json'), /absolute/);
+    assert.throws(() => preimagePath(d, 'p1', 'other.json'), /<passportId>.json/);
+    assert.throws(() => preimagePath(d, '../p1', '../p1.json'), /plain file name/);
+    const f = preimagePath(d, 'p1', 'p1.json');
+    fs.writeFileSync(f, JSON.stringify(PRE), { mode: 0o644 });
+    fs.chmodSync(f, 0o644);
+    assert.throws(() => readPreimageFile(f), /no access for "other"/);
+    fs.chmodSync(f, 0o640);
+    assert.deepEqual(readPreimageFile(f), parsePreimages(PRE));
+    const link = path.join(d, 'p2.json');
+    fs.symlinkSync(f, link);
+    assert.throws(() => readPreimageFile(link), /regular file/);
+  });
+});
+
+describe('E4: company self-attestation item', () => {
+  const ok = { company_id: hx('client-1'), evidence_hash: hx('report'), verdict: 'PASS', score: 85, threshold: 70, passport_ref: 'vasp:queued-partner', regimes: ['LGPD', 'BCB-520'], engine: 'pilot-gateway/1.4.0' };
+
+  it('maps to attestCompliance inputs keyed by company_id, with policy_cid and a per-passport context', () => {
+    const a = parseCompanyAttestation(ok);
+    assert.equal(Buffer.from(a.companyId).toString('hex'), ok.company_id);
+    assert.equal(a.score, 85n); assert.equal(a.threshold, 70n);
+    assert.deepEqual(a.policyCid, policyCid(ok.engine, ok.passport_ref, ['BCB-520', 'LGPD']));
+    assert.deepEqual(a.context, selfAttestationContext(ok.company_id, ok.passport_ref));
+    assert.notDeepEqual(parseCompanyAttestation({ ...ok, passport_ref: 'vasp:other' }).context, a.context);
+  });
+
+  it('refuses FAIL, a score below threshold, bad hex and missing regimes', () => {
+    assert.throws(() => parseCompanyAttestation({ ...ok, verdict: 'FAIL' }), /verdict must be PASS/);
+    assert.throws(() => parseCompanyAttestation({ ...ok, score: 60 }), /below threshold/);
+    assert.throws(() => parseCompanyAttestation({ ...ok, company_id: 'client-1' }), /company_id/);
+    assert.throws(() => parseCompanyAttestation({ ...ok, regimes: [] }), /regimes/);
+    assert.throws(() => parseCompanyAttestation({ ...ok, score: undefined }), /score/);
+  });
+});
+
 describe('E6: one TravelRuleGate per institution', () => {
   it('inputs: the institution approver commitment is required; ids are checked', () => {
     const c = 'cd'.repeat(32);
