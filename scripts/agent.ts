@@ -14,6 +14,11 @@
  *   MIDNIGHT_NETWORK=preview npx tsx scripts/agent.ts --watch --interval 120
  *   flags: --queue <path> (default agent-queue.json) --dust-floor <bigint> --fee <n>
  *   env:   MIDNIGHT_SEED, PROOF_SERVER_URL, DPO2U_OWNER_SECRET; mainnet guard in scripts/lib/midnight-v9.ts
+ *          MIDNIGHT_PREIMAGE_DIR (absolute; passport preimages for psav_passport derive items)
+ * Journey items from the gateway (POST /enqueue on webhook/server.cjs):
+ *   psav_passport, derive: true   PsavPassport.issuePassport; commits computed from <MIDNIGHT_PREIMAGE_DIR>/<passportId>.json
+ *                                 (scripts/lib/passport-queue.ts), file deleted after the issue succeeds
+ *   company_attestation           ComplianceRegistry.attestCompliance keyed by company_id (scripts/lib/company-attestation.ts)
  * Contract addresses come from deployment-<network>-v9.json (scripts/deploy-v9.ts).
  */
 import 'dotenv/config';
@@ -41,6 +46,9 @@ import * as FeeDistributor from '../build/FeeDistributor/contract/index.js';
 import * as TrustStackRegistry from '../build/TrustStackRegistry/contract/index.js';
 import * as LegalSourceManifest from '../build/LegalSourceManifest/contract/index.js';
 import * as SolvencyRegistry from '../build/SolvencyRegistry/contract/index.js';
+import * as PsavPassport from '../build/PsavPassport/contract/index.js';
+import { deriveQueuePassport, issueFromQueue, preimagePath, readPreimageFile } from './lib/passport-queue.js';
+import { parseCompanyAttestation } from './lib/company-attestation.js';
 
 // @ts-expect-error WebSocket polyfill required for wallet sync (graphql-ws) in Node
 globalThis.WebSocket = WebSocket;
@@ -113,10 +121,10 @@ function deploymentAddress(network: string, name: string): string {
   return c.contractAddress;
 }
 
-async function joinContract(ctx: V9Wallet, secret: Uint8Array, name: string, mod: any) {
+async function joinContract(ctx: V9Wallet, secret: Uint8Array, name: string, mod: any, extraWitnesses: Record<string, unknown> = {}) {
   const zkPath = buildPath(name);
   const compiled = (CompiledContract.make(name, mod.Contract) as any).pipe(
-    (CompiledContract as any).withWitnesses(ownerWitnesses(secret)),
+    (CompiledContract as any).withWitnesses({ ...ownerWitnesses(secret), ...extraWitnesses }),
     (CompiledContract as any).withCompiledFileAssets(zkPath),
   );
   const addr = deploymentAddress(ctx.net.name, name);
@@ -128,7 +136,7 @@ async function joinContract(ctx: V9Wallet, secret: Uint8Array, name: string, mod
 }
 
 type QueueItem = {
-  type?: 'use_case' | 'compliance' | 'escrow_create' | 'escrow_release' | 'escrow_refund' | 'trust_register' | 'legal_anchor' | 'solvency_seal';
+  type?: 'use_case' | 'compliance' | 'escrow_create' | 'escrow_release' | 'escrow_refund' | 'trust_register' | 'legal_anchor' | 'solvency_seal' | 'psav_passport' | 'company_attestation';
   // use_case
   use_case_id?: string; verdict?: number; evidence_hash?: string; metadata_hash?: string;
   // compliance (score-private)
@@ -142,9 +150,19 @@ type QueueItem = {
   stack_id?: string; stack_hash?: string; version?: number; citation_id?: string; source_hash?: string;
   // (PoR) solvency seal — reserves/liabilities are PRIVATE inputs (proven, NEVER written on-chain)
   entity_id?: string; report_cid?: string; period?: number; reserves?: number | string; liabilities?: number | string;
+  // (E3) psav_passport, derive mode: public fields only + preimage_ref (scripts/lib/passport-queue.ts)
+  derive?: boolean; passportId?: string; preimage_ref?: string; [k: string]: unknown;
+  // (E4) company_attestation: company_id (hex32), evidence_hash, verdict, score, threshold, passport_ref, regimes, engine
+  passport_ref?: string; regimes?: string[]; engine?: string;
 };
 
-type Contracts = { cr: any; escrow: any; pg: any; fd: any; trust: any; legal: any; solvency: any; ownerSecret: Uint8Array };
+type Contracts = { cr: any; escrow: any; pg: any; fd: any; trust: any; legal: any; solvency: any; passport: any; ownerSecret: Uint8Array };
+
+// Witnesses of the passport being issued (set per item, cleared after the call), like setScoreSalt.
+let passportWitness: Record<string, unknown> | undefined;
+const passportWitnesses = Object.fromEntries(['rule_origins', 'rule_verdicts', 'partner_id', 'commit_salt', 'reviewer_sig_hash', 'evidence_hash'].map((k) => [k,
+  (x: any) => { if (!passportWitness) throw new Error(`witness ${k}: no passport being issued`); return [x.privateState, passportWitness[k]]; }]));
+const refuseSponsor = { sponsor_secret: () => { throw new Error('witness sponsor_secret: not used by the agent'); } };
 
 // (2b) revenue recognition: book the per-attestation fee on-chain (PaymentGateway treasury = the
 // public revenue ledger) + the 40/60 expert/auditor split (FeeDistributor). Real value-in is EARN
@@ -210,6 +228,32 @@ async function attestItem(c: Contracts, item: QueueItem) {
     return { kind: 'solvency_seal', key: entity, context: toHex(ctxBytes), public: r?.public ?? {} };
   }
 
+  // ── (E3) PsavPassport from the gateway queue, derive mode: commits computed from the preimages ──
+  if (type === 'psav_passport') {
+    if (item.derive !== true) throw new Error('psav_passport items must have derive: true (the full-payload path is travel-rule-v10.ts issue-passport --from-queue)');
+    const file = preimagePath(process.env.MIDNIGHT_PREIMAGE_DIR ?? '', String(item.passportId), String(item.preimage_ref));
+    const pre = readPreimageFile(file);
+    const q = deriveQueuePassport(PsavPassport as any, item, pre);
+    const r0 = issueFromQueue(PsavPassport as any, q, pre);
+    passportWitness = r0.witnesses;
+    let r: any;
+    try { r = await c.passport.callTx.issuePassport(...r0.args); } finally { passportWitness = undefined; }
+    if (r?.private?.result !== undefined && Number(r.private.result) !== r0.expectedVerdict) throw new Error(`issuePassport returned verdict ${r.private.result}, expected ${r0.expectedVerdict} (tx ${r?.public?.txId}); preimages kept at ${file}`);
+    try { fs.rmSync(file); } catch (e: any) { console.log(`  [agent] passport issued but preimages NOT deleted (${file}): ${e?.message ?? e}`); }
+    return { kind: 'psav_passport', key: String(item.passportId), public: r?.public ?? {} };
+  }
+
+  // ── (E4) institution self-attestation after its first passport: ComplianceRegistry keyed by company_id ──
+  if (type === 'company_attestation') {
+    const a = parseCompanyAttestation(item);
+    setScoreSalt(scoreSalt(c.ownerSecret, a.context));
+    let r: any;
+    try {
+      r = await c.cr.callTx.attestCompliance(a.companyId, b32(item.agent_did ?? 'did:dpo2u:agent:001'), a.policyCid, a.threshold, a.context, a.score, a.evidenceHash);
+    } finally { setScoreSalt(undefined); }
+    return { kind: 'company_attestation', key: String(item.company_id), context: toHex(a.context), public: r?.public ?? {} };
+  }
+
   // ── ComplianceRegistry: attestation ──
   if (type === 'compliance') {
     const org = item.org ?? item.company_id ?? 'org';
@@ -257,7 +301,7 @@ async function drainOnce(ctx: V9Wallet, contracts: Contracts, queuePath: string,
     const remaining = loadQueue(queuePath);
     const item = remaining.shift();
     if (!item) break;
-    const label = item.escrow_id ?? item.use_case_id ?? item.company_id ?? '(item)';
+    const label = item.escrow_id ?? item.use_case_id ?? item.company_id ?? item.passportId ?? '(item)';
     try {
       await ensureDustFloor(ctx, floor);                          // Phase-2 watchdog
       const before = dustOf(await Rx.firstValueFrom(ctx.facade.state()));
@@ -334,6 +378,7 @@ async function main() {
     trust: await joinContract(ctx, secret, 'TrustStackRegistry', TrustStackRegistry),
     legal: await joinContract(ctx, secret, 'LegalSourceManifest', LegalSourceManifest),
     solvency: await joinContract(ctx, secret, 'SolvencyRegistry', SolvencyRegistry),
+    passport: await joinContract(ctx, secret, 'PsavPassport', PsavPassport, { ...passportWitnesses, ...refuseSponsor }),
   };
   const fee = Number(values.fee);
 

@@ -17,8 +17,16 @@
  *   { partnerId, commitSalt, evidenceHash, reviewerSigHash | null, rules: [{ origin, verdict }] }
  * and the hook recomputes every derived field and refuses to submit unless all of them match the
  * payload: what lands on chain is exactly what the gateway enqueued.
+ *
+ * DERIVE MODE (agent daemon, kind "psav_passport" with derive: true): the gateway enqueues only the
+ * public fields, without the three commits, plus preimage_ref = "<passportId>.json", a file in
+ * MIDNIGHT_PREIMAGE_DIR (no access for "other", e.g. 0640). The daemon reads it, computes
+ * partnerCommit / evidenceCommit / reviewerCommit with the circuit's labeled_commit
+ * (deriveQueuePassport), runs the same checks as above (counts and verdict against the rules), issues,
+ * and deletes the file only after the issue succeeded.
  */
 import fs from 'node:fs';
+import path from 'node:path';
 import { createHash } from 'node:crypto';
 
 export const QUEUE_FIELDS = ['passportId', 'partnerCommit', 'packHash', 'packVersion', 'tier', 'issuedAt', 'expiresAt', 'verdict', 'ruleCounts', 'evidenceCommit', 'reviewerCommit'] as const;
@@ -127,6 +135,45 @@ export function issueFromQueue(Passport: { pureCircuits: { labeled_commit(v: Uin
     },
     expectedVerdict: v,
   };
+}
+
+export const DERIVE_FIELDS = ['passportId', 'packHash', 'packVersion', 'tier', 'issuedAt', 'expiresAt', 'verdict', 'ruleCounts', 'preimage_ref'] as const;
+const COMMIT_FIELDS = ['partnerCommit', 'evidenceCommit', 'reviewerCommit'] as const;
+
+/** Where the preimages of a derive-mode item live: <dir>/<passportId>.json, nothing else. */
+export function preimagePath(dir: string, passportId: string, ref: string): string {
+  if (!dir || !path.isAbsolute(dir)) throw new Error('MIDNIGHT_PREIMAGE_DIR must be an absolute path');
+  if (ref !== `${passportId}.json`) throw new Error(`preimage_ref must be "<passportId>.json" (${passportId}.json), got ${JSON.stringify(ref)}`);
+  if (ref.includes('/') || ref.includes('\\') || ref.includes('\0') || ref.startsWith('.')) throw new Error('preimage_ref must be a plain file name');
+  return path.join(dir, ref);
+}
+
+/** Preimages of a derive-mode item: a regular file (not a link) with no access for "other". */
+export function readPreimageFile(file: string): PassportPreimages {
+  const st = fs.lstatSync(file);
+  if (!st.isFile()) throw new Error(`${file} must be a regular file (not a link)`);
+  if ((st.mode & 0o007) !== 0) throw new Error(`${file} holds passport preimages: no access for "other" (0640 or 0600)`);
+  return parsePreimages(JSON.parse(fs.readFileSync(file, 'utf8')));
+}
+
+/**
+ * Derive mode: the public payload (no commits) plus the preimages give the full queue payload, with
+ * the commits computed by the circuit's labeled_commit. The result goes through parseQueuePayload and
+ * issueFromQueue like any queued passport, so counts and verdict are still checked against the rules.
+ */
+export function deriveQueuePassport(Passport: { pureCircuits: { labeled_commit(v: Uint8Array, s: Uint8Array, l: Uint8Array): Uint8Array } }, j: any, p: PassportPreimages): QueuePassport {
+  const missing = DERIVE_FIELDS.filter((k) => j?.[k] === undefined || j?.[k] === null);
+  if (missing.length) throw new Error(`derive payload missing: ${missing.join(', ')}`);
+  const present = COMMIT_FIELDS.filter((k) => j[k] !== undefined);
+  if (present.length) throw new Error(`derive payload must not carry ${present.join(', ')}: the daemon computes them from the preimages`);
+  const lc = Passport.pureCircuits.labeled_commit;
+  const hx = (u: Uint8Array) => Buffer.from(u).toString('hex');
+  const hasReviewer = !eq(p.reviewerSigHash, ZERO);
+  const { preimage_ref: _ref, derive: _derive, kind: _kind, type: _type, ...pub } = j;
+  return parseQueuePayload({ ...pub,
+    partnerCommit: hx(lc(p.partnerId, p.commitSalt, label('partner'))),
+    evidenceCommit: hx(lc(p.evidenceHash, p.commitSalt, label('evidence'))),
+    reviewerCommit: hasReviewer ? hx(lc(p.reviewerSigHash, p.commitSalt, label('reviewer'))) : hx(ZERO) });
 }
 
 /** sha256 of the payload file contents, for the operator's record of what was issued from the queue. */

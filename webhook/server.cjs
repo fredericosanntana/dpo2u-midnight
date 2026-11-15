@@ -135,6 +135,7 @@ async function evaluate(repoFull, headSha) {
 async function handleWebhook(req, res, body) {
   if (!verifySig(body, req.headers['x-hub-signature-256'])) { res.writeHead(401); return res.end('bad signature'); }
   let ev; try { ev = JSON.parse(body); } catch { res.writeHead(400); return res.end('bad json'); }
+  if (ev && (ev.kind === 'psav_passport' || ev.kind === 'company_attestation')) return enqueueJourney(res, ev);
   const event = req.headers['x-github-event'] || 'push';
   const repoFull = (ev.repository && ev.repository.full_name) || 'unknown/repo';
   const [owner, repo] = repoFull.split('/');
@@ -241,6 +242,45 @@ function handleEnqueue(req, res, body) {
   console.log(`[enqueue] ${org}@${String(ev.commit || '').slice(0, 7)} ${use_case_id} verdict ${VLABEL[verdict]} → ${evidence_hash.slice(0, 12)}…`);
   res.writeHead(202, { 'content-type': 'application/json' });
   res.end(JSON.stringify({ enqueued: true, evidence_hash, verify: verifyUrl }));
+}
+
+// Journey items from the pilot-gateway (E3 passport in derive mode, E4 company self-attestation).
+// Only the listed public fields are queued; the agent re-checks everything (scripts/lib/passport-queue.ts,
+// scripts/lib/company-attestation.ts) and the passport preimages never pass through here: they stay in
+// MIDNIGHT_PREIMAGE_DIR, named by preimage_ref = "<passportId>.json".
+const PASSPORT_FIELDS = ['passportId', 'packHash', 'packVersion', 'tier', 'issuedAt', 'expiresAt', 'verdict', 'ruleCounts', 'preimage_ref'];
+const COMPANY_FIELDS = ['company_id', 'evidence_hash', 'verdict', 'score', 'threshold', 'passport_ref', 'regimes', 'engine'];
+const HEX64 = /^[0-9a-f]{64}$/;
+function enqueueJourney(res, ev) {
+  const bad = (m) => { res.writeHead(400, { 'content-type': 'application/json' }); res.end(JSON.stringify({ error: m })); };
+  let item;
+  if (ev.kind === 'psav_passport') {
+    if (ev.derive !== true) return bad('psav_passport needs derive: true');
+    const missing = PASSPORT_FIELDS.filter((k) => ev[k] === undefined || ev[k] === null);
+    if (missing.length) return bad(`missing: ${missing.join(', ')}`);
+    if (['partnerCommit', 'evidenceCommit', 'reviewerCommit'].some((k) => ev[k] !== undefined)) return bad('derive items must not carry the commits');
+    if (typeof ev.passportId !== 'string' || !ev.passportId || /[\/\\\0]/.test(ev.passportId) || ev.passportId.startsWith('.')) return bad('passportId must be a plain id');
+    if (ev.preimage_ref !== `${ev.passportId}.json`) return bad('preimage_ref must be "<passportId>.json"');
+    if (!HEX64.test(String(ev.packHash))) return bad('packHash must be 64-hex');
+    item = { type: 'psav_passport', derive: true, ...Object.fromEntries(PASSPORT_FIELDS.map((k) => [k, ev[k]])) };
+  } else {
+    const missing = COMPANY_FIELDS.filter((k) => ev[k] === undefined || ev[k] === null);
+    if (missing.length) return bad(`missing: ${missing.join(', ')}`);
+    if (!HEX64.test(String(ev.company_id).toLowerCase()) || !HEX64.test(String(ev.evidence_hash).toLowerCase())) return bad('company_id and evidence_hash must be 64-hex');
+    if (String(ev.verdict).toUpperCase() !== 'PASS') return bad('only a PASS is attested');
+    if (![ev.score, ev.threshold].every((n) => Number.isInteger(n) && n >= 0 && n <= 100) || ev.score < ev.threshold) return bad('score and threshold must be 0..100 with score >= threshold');
+    if (!Array.isArray(ev.regimes) || !ev.regimes.length) return bad('regimes must be a non-empty list');
+    item = { type: 'company_attestation', ...Object.fromEntries(COMPANY_FIELDS.map((k) => [k, ev[k]])) };
+    item.company_id = String(item.company_id).toLowerCase(); item.evidence_hash = String(item.evidence_hash).toLowerCase();
+  }
+  const q = readJSON(QUEUE, []);
+  if (q.length >= QUEUE_CAP) { res.writeHead(429, { 'content-type': 'application/json' }); return res.end(JSON.stringify({ error: 'queue full, retry later', cap: QUEUE_CAP })); }
+  q.push(item);
+  writeJSON(QUEUE, q);
+  const key = item.type === 'psav_passport' ? item.passportId : item.company_id;
+  console.log(`[enqueue] ${item.type} ${String(key).slice(0, 24)}`);
+  res.writeHead(202, { 'content-type': 'application/json' });
+  res.end(JSON.stringify({ enqueued: true, kind: item.type, key }));
 }
 
 // JSON view of a Midnight attestation — powers the SAME SPA /verify UI as Stellar
