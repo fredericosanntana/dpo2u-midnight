@@ -19,6 +19,9 @@
  *   psav_passport, derive: true   PsavPassport.issuePassport; commits computed from <MIDNIGHT_PREIMAGE_DIR>/<passportId>.json
  *                                 (scripts/lib/passport-queue.ts), file deleted after the issue succeeds
  *   company_attestation           ComplianceRegistry.attestCompliance keyed by company_id (scripts/lib/company-attestation.ts)
+ *   travel_rule_transfer          institution's TravelRuleGate.evaluateTransfer; private witness from
+ *                                 <MIDNIGHT_TRANSFER_WITNESS_DIR>/<transfer_id>.json, deleted after the attempt (scripts/lib/transfer-queue.ts)
+ *   travel_rule_release           institution's TravelRuleGate.releaseTransfer
  * Contract addresses come from deployment-<network>-v9.json (scripts/deploy-v9.ts).
  */
 import 'dotenv/config';
@@ -49,6 +52,13 @@ import * as SolvencyRegistry from '../build/SolvencyRegistry/contract/index.js';
 import * as PsavPassport from '../build/PsavPassport/contract/index.js';
 import { deriveQueuePassport, issueFromQueue, preimagePath, readPreimageFile } from './lib/passport-queue.js';
 import { parseCompanyAttestation } from './lib/company-attestation.js';
+import { parseTransferItem, parseReleaseItem, witnessPath, readWitnessFile, dropWitness } from './lib/transfer-queue.js';
+import { GATE, CALLEES, readGateDeployment, crossGateProviders, gateLedgerOf, buildDir } from './lib/travel-rule-v10.js';
+import { encodeContractAddress, ContractState } from '@midnight-ntwrk/compact-runtime';
+import { ZKConfigRegistry } from '@midnight-ntwrk/midnight-js-types';
+import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
+import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
+import * as TravelRuleGate from '../build/TravelRuleGate/contract/index.js';
 
 // @ts-expect-error WebSocket polyfill required for wallet sync (graphql-ws) in Node
 globalThis.WebSocket = WebSocket;
@@ -136,7 +146,7 @@ async function joinContract(ctx: V9Wallet, secret: Uint8Array, name: string, mod
 }
 
 type QueueItem = {
-  type?: 'use_case' | 'compliance' | 'escrow_create' | 'escrow_release' | 'escrow_refund' | 'trust_register' | 'legal_anchor' | 'solvency_seal' | 'psav_passport' | 'company_attestation';
+  type?: 'use_case' | 'compliance' | 'escrow_create' | 'escrow_release' | 'escrow_refund' | 'trust_register' | 'legal_anchor' | 'solvency_seal' | 'psav_passport' | 'company_attestation' | 'travel_rule_transfer' | 'travel_rule_release';
   // use_case
   use_case_id?: string; verdict?: number; evidence_hash?: string; metadata_hash?: string;
   // compliance (score-private)
@@ -154,9 +164,49 @@ type QueueItem = {
   derive?: boolean; passportId?: string; preimage_ref?: string; [k: string]: unknown;
   // (E4) company_attestation: company_id (hex32), evidence_hash, verdict, score, threshold, passport_ref, regimes, engine
   passport_ref?: string; regimes?: string[]; engine?: string;
+  // (E6) travel_rule_transfer / travel_rule_release: institution, transfer_id, policy_hash, sanctions_list, witness_ref
+  institution?: string; transfer_id?: string; policy_hash?: string; witness_ref?: string;
 };
 
-type Contracts = { cr: any; escrow: any; pg: any; fd: any; trust: any; legal: any; solvency: any; passport: any; ownerSecret: Uint8Array };
+type Contracts = { cr: any; escrow: any; pg: any; fd: any; trust: any; legal: any; solvency: any; passport: any; ownerSecret: Uint8Array;
+  gate: (institution: string) => Promise<{ c: any; read: () => Promise<any> }> };
+
+// Private data of the transfer being evaluated (set per item from the ephemeral witness file, cleared after).
+let transferWitness: { o: unknown; b: unknown; amount: bigint; clear: boolean; list: unknown } | undefined;
+const tw = (k: 'o' | 'b' | 'amount' | 'clear' | 'list', name: string) => (x: any) => {
+  if (!transferWitness) throw new Error(`witness ${name}: no transfer being evaluated`);
+  return [x.privateState, transferWitness[k]];
+};
+const gateWitnessesFor = (secret: Uint8Array) => ({
+  owner_secret: (x: any) => [x.privateState, secret],
+  approver_secret: () => { throw new Error('witness approver_secret: approvals never run in the agent'); },
+  originator_data: tw('o', 'originator_data'), beneficiary_data: tw('b', 'beneficiary_data'),
+  transfer_amount: tw('amount', 'transfer_amount'), sanctions_clear: tw('clear', 'sanctions_clear'), sanctions_list: tw('list', 'sanctions_list'),
+});
+
+/** One joined TravelRuleGate per institution (deploy-v9.ts --institution), with its on-chain links checked. */
+function gateSessions(ctx: V9Wallet, secret: Uint8Array) {
+  const cache = new Map<string, Promise<{ c: any; read: () => Promise<any> }>>();
+  const open = async (institution: string) => {
+    const d = readGateDeployment(ROOT, ctx.net.name, undefined, institution);
+    const providers = crossGateProviders(ROOT, makeProviders(ctx, buildDir(ROOT, GATE), `${GATE}-${institution}-agent`), ctx.net.proofServer, d.links, { ZKConfigRegistry, NodeZkConfigProvider, httpClientProofProvider });
+    const read = async () => gateLedgerOf(TravelRuleGate, await providers.publicDataProvider.queryContractState(d.gate), ContractState);
+    const L0 = await read();
+    for (const [field, name] of [['passport', CALLEES[0]], ['registry', CALLEES[1]]] as const) {
+      if (toHex(L0[field].bytes) !== toHex(encodeContractAddress(d.links[name]))) throw new Error(`gate of ${institution}: on-chain ${field} link differs from ${d.file}`);
+    }
+    const compiled = (CompiledContract.make(GATE, (TravelRuleGate as any).Contract) as any).pipe(
+      (CompiledContract as any).withWitnesses(gateWitnessesFor(secret)), (CompiledContract as any).withCompiledFileAssets(buildDir(ROOT, GATE)));
+    console.log(`[agent] joining ${GATE} of ${institution} ${d.gate.slice(0, 16)}…`);
+    const c = await (findDeployedContract as any)(providers, { contractAddress: d.gate, compiledContract: compiled, privateStateId: `${GATE}-${institution}PrivateState`, initialPrivateState: {} });
+    return { c, read };
+  };
+  return (institution: string) => {
+    let p = cache.get(institution);
+    if (!p) { p = open(institution); cache.set(institution, p); p.catch(() => cache.delete(institution)); }
+    return p;
+  };
+}
 
 // Witnesses of the passport being issued (set per item, cleared after the call), like setScoreSalt.
 let passportWitness: Record<string, unknown> | undefined;
@@ -254,6 +304,32 @@ async function attestItem(c: Contracts, item: QueueItem) {
     return { kind: 'company_attestation', key: String(item.company_id), context: toHex(a.context), public: r?.public ?? {} };
   }
 
+  // ── (E6) Travel Rule on the institution's gate; the private witness comes from an ephemeral file ──
+  if (type === 'travel_rule_transfer') {
+    const t = parseTransferItem(item);
+    const file = witnessPath(process.env.MIDNIGHT_TRANSFER_WITNESS_DIR ?? '', t);
+    let r: any;
+    try {
+      const w = readWitnessFile(file);
+      const g = await c.gate(t.institution);
+      transferWitness = { o: w.o, b: w.b, amount: w.amount, clear: w.clear, list: t.list };
+      try { r = await g.c.callTx.evaluateTransfer(t.transferId, t.policyHash); } finally { transferWitness = undefined; }
+      const L = await g.read();
+      return { kind: 'travel_rule_transfer', key: t.transferIdHex, public: r?.public ?? {},
+        extra: { institution: t.institution, status: Number(L.status.lookup(t.transferId)), fail_reason: Number(L.fail_reason.lookup(t.transferId)) } };
+    } finally {
+      const err = dropWitness(file);   // success or failure: the private data never outlives the attempt
+      if (err) console.log(`  [agent] transfer witness NOT deleted (${file}): ${err}`);
+    }
+  }
+  if (type === 'travel_rule_release') {
+    const t = parseReleaseItem(item);
+    const g = await c.gate(t.institution);
+    const r = await g.c.callTx.releaseTransfer(t.transferId);
+    const L = await g.read();
+    return { kind: 'travel_rule_release', key: `${t.transferIdHex}:release`, public: r?.public ?? {}, extra: { institution: t.institution, transfer_id: t.transferIdHex, status: Number(L.status.lookup(t.transferId)) } };
+  }
+
   // ── ComplianceRegistry: attestation ──
   if (type === 'compliance') {
     const org = item.org ?? item.company_id ?? 'org';
@@ -301,7 +377,7 @@ async function drainOnce(ctx: V9Wallet, contracts: Contracts, queuePath: string,
     const remaining = loadQueue(queuePath);
     const item = remaining.shift();
     if (!item) break;
-    const label = item.escrow_id ?? item.use_case_id ?? item.company_id ?? item.passportId ?? '(item)';
+    const label = item.escrow_id ?? item.use_case_id ?? item.company_id ?? item.passportId ?? item.transfer_id ?? '(item)';
     try {
       await ensureDustFloor(ctx, floor);                          // Phase-2 watchdog
       const before = dustOf(await Rx.firstValueFrom(ctx.facade.state()));
@@ -326,7 +402,7 @@ async function drainOnce(ctx: V9Wallet, contracts: Contracts, queuePath: string,
         txId: (res.public as any).txId, blockHeight: (res.public as any).blockHeight,
         transferTx, transferAmount: transferTx ? String(item.transfer_amount) : undefined,
         dustBefore: before.toString(), dustAfter: after.toString(), dustCost: cost.toString(),
-        context: (res as any).context,
+        context: (res as any).context, ...((res as any).extra ?? {}),
       });
       if (revenue) appendRevenue({ ts: new Date().toISOString(), kind: res.kind, key: res.key, fee, treasuryTx: revenue.treasuryTx, splitTx: revenue.splitTx, dustCost: cost.toString() });
       done++;
@@ -334,6 +410,14 @@ async function drainOnce(ctx: V9Wallet, contracts: Contracts, queuePath: string,
     } catch (e: any) {
       const msg = e?.message ?? String(e);
       console.log(`[agent] ✗ ${label} FAILED: ${msg}`);
+      // Travel Rule items are dropped on failure: the private witness is already gone, so a retry needs a
+      // fresh item from the gateway; the error is recorded under the transfer key (GET /agent/item/<key>).
+      if (item.type === 'travel_rule_transfer' || item.type === 'travel_rule_release') {
+        writeQueue(queuePath, remaining);
+        const key = item.type === 'travel_rule_release' ? `${String(item.transfer_id).toLowerCase()}:release` : String(item.transfer_id).toLowerCase();
+        appendLedger({ ts: new Date().toISOString(), network: ctx.net.name, kind: item.type, key, institution: item.institution, error: msg });
+        continue;
+      }
       // leave the item in the queue head; abort this drain so a poison item can't spin.
       appendLedger({ ts: new Date().toISOString(), network: ctx.net.name, key: label, error: msg });
       break;
@@ -379,6 +463,7 @@ async function main() {
     legal: await joinContract(ctx, secret, 'LegalSourceManifest', LegalSourceManifest),
     solvency: await joinContract(ctx, secret, 'SolvencyRegistry', SolvencyRegistry),
     passport: await joinContract(ctx, secret, 'PsavPassport', PsavPassport, { ...passportWitnesses, ...refuseSponsor }),
+    gate: gateSessions(ctx, secret),
   };
   const fee = Number(values.fee);
 

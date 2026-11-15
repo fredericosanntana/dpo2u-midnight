@@ -14,6 +14,7 @@ import { createCircuitContext, createConstructorContext } from '@midnight-ntwrk/
 import * as Passport from '../build/PsavPassport/contract/index.js';
 import { parseQueuePayload, parsePreimages, issueFromQueue, expectedVerdict, QUEUE_FIELDS, QUEUE_FIELD_MAP, deriveQueuePassport, preimagePath, readPreimageFile } from '../scripts/lib/passport-queue.js';
 import { parseCompanyAttestation, policyCid, selfAttestationContext } from '../scripts/lib/company-attestation.js';
+import { parseTransferItem, parseReleaseItem, witnessPath, readWitnessFile, dropWitness } from '../scripts/lib/transfer-queue.js';
 import { institutionGateInputs, recordInstitutionGate, institutionGate } from '../scripts/lib/institutions.js';
 import { readGateDeployment } from '../scripts/lib/travel-rule-v10.js';
 import { buildEvidencePack } from '../src/evidence/gateway.js';
@@ -178,6 +179,45 @@ describe('E4: company self-attestation item', () => {
     assert.throws(() => parseCompanyAttestation({ ...ok, company_id: 'client-1' }), /company_id/);
     assert.throws(() => parseCompanyAttestation({ ...ok, regimes: [] }), /regimes/);
     assert.throws(() => parseCompanyAttestation({ ...ok, score: undefined }), /score/);
+  });
+});
+
+describe('E6 daemon: Travel Rule items from the gateway', () => {
+  const tid = hx('dpo2u.transfer:42');
+  const list = { provider_id: hx('provider'), list_root: hx('root'), issued_at: T0 - 60, valid_until: T0 + 3600, signature: { announcement: { x: '1', y: '2' }, response: '3' } };
+  const item = { kind: 'travel_rule_transfer', institution: 'client-abc', transfer_id: tid, policy_hash: hx('travel-rule-fatf@1.0.0|root|1'), sanctions_list: list, witness_ref: `${tid}.json` };
+  const party = (n: string) => ({ name_hash: hx('n' + n), account_hash: hx('a' + n), doc_hash: hx('d' + n), vasp_id: hx('v' + n), salt: hx('s' + n) });
+  const witness = { originator: party('o'), beneficiary: party('b'), amount_cents: 250000, sanctions_clear: true };
+
+  it('parses the public item; refuses bad ids, a zero policy hash, a wrong witness_ref and a missing list', () => {
+    const t = parseTransferItem(item);
+    assert.equal(t.transferIdHex, tid);
+    assert.equal(t.list.valid_until, BigInt(T0 + 3600));
+    assert.throws(() => parseTransferItem({ ...item, institution: 'Client ABC' }), /institution id/);
+    assert.throws(() => parseTransferItem({ ...item, transfer_id: '42' }), /transfer_id/);
+    assert.throws(() => parseTransferItem({ ...item, policy_hash: '0'.repeat(64) }), /not zero/);
+    assert.throws(() => parseTransferItem({ ...item, witness_ref: 'other.json' }), /witness_ref/);
+    assert.throws(() => parseTransferItem({ ...item, sanctions_list: undefined }), /sanctions_list/);
+    assert.equal(parseReleaseItem({ institution: 'client-abc', transfer_id: tid }).transferIdHex, tid);
+  });
+
+  it('witness file: regular, no access for other, salts non-zero and distinct; dropped after use', () => {
+    const d = tmp();
+    const t = parseTransferItem(item);
+    assert.throws(() => witnessPath('rel', t), /absolute/);
+    const f = witnessPath(d, t);
+    fs.writeFileSync(f, JSON.stringify(witness)); fs.chmodSync(f, 0o644);
+    assert.throws(() => readWitnessFile(f), /no access for "other"/);
+    fs.chmodSync(f, 0o640);
+    const w = readWitnessFile(f);
+    assert.equal(w.amount, 250000n); assert.equal(w.clear, true);
+    fs.writeFileSync(f, JSON.stringify({ ...witness, beneficiary: { ...party('b'), salt: party('o').salt } }));
+    assert.throws(() => readWitnessFile(f), /salts must differ/);
+    fs.writeFileSync(f, JSON.stringify({ ...witness, originator: { ...party('o'), salt: '0'.repeat(64) } }));
+    assert.throws(() => readWitnessFile(f), /must not be zero/);
+    assert.equal(dropWitness(f), null);
+    assert.equal(fs.existsSync(f), false);
+    assert.equal(dropWitness(f), null);
   });
 });
 

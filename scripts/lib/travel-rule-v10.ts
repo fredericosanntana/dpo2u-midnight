@@ -196,3 +196,10 @@ export function plan(root: string, d: GateDeployment, cmd: Command, args: Record
     args,
   };
 }
+
+// ── providers for a gate call (shared by the CLI and the agent daemon) ──
+/** makeProviders' base plus the callee module provider and a ZK registry over the gate and its callees. */
+export function crossGateProviders(root: string, base: any, proofServer: string, links: Record<CalleeName, string>, deps: { ZKConfigRegistry: any; NodeZkConfigProvider: any; httpClientProofProvider: any }) {
+  const registry = new deps.ZKConfigRegistry(zkDirs(root).map((d) => new deps.NodeZkConfigProvider(d)));
+  return { ...base, contractModuleProvider: moduleProviderFor(root, links), proofProvider: deps.httpClientProofProvider({ url: proofServer, zkConfigProvider: registry } as any) };
+}
