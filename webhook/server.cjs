@@ -17,9 +17,9 @@ const fs = require('fs');
 const path = require('path');
 
 const REPO = path.resolve(__dirname, '..');
-const QUEUE = path.join(REPO, 'agent-queue.json');
-const LEDGER = path.join(REPO, 'agent-ledger.json');
-const RECORDS = path.join(REPO, 'webhook-attestations.json');
+const QUEUE = process.env.AGENT_QUEUE_FILE || path.join(REPO, 'agent-queue.json');
+const LEDGER = process.env.AGENT_LEDGER_FILE || path.join(REPO, 'agent-ledger.json');
+const RECORDS = process.env.WEBHOOK_RECORDS_FILE || path.join(REPO, 'webhook-attestations.json');
 const SECRET = process.env.GITHUB_WEBHOOK_SECRET || '';
 const GH_TOKEN = process.env.GITHUB_TOKEN || '';
 const PORT = Number(process.env.WEBHOOK_PORT || 8099);
@@ -135,7 +135,6 @@ async function evaluate(repoFull, headSha) {
 async function handleWebhook(req, res, body) {
   if (!verifySig(body, req.headers['x-hub-signature-256'])) { res.writeHead(401); return res.end('bad signature'); }
   let ev; try { ev = JSON.parse(body); } catch { res.writeHead(400); return res.end('bad json'); }
-  if (ev && ['psav_passport', 'company_attestation', 'travel_rule_transfer', 'travel_rule_release'].includes(ev.kind)) return enqueueJourney(res, ev);
   const event = req.headers['x-github-event'] || 'push';
   const repoFull = (ev.repository && ev.repository.full_name) || 'unknown/repo';
   const [owner, repo] = repoFull.split('/');
@@ -219,6 +218,8 @@ function handleEnqueue(req, res, body) {
     if (auth !== ENQUEUE_TOKEN) { res.writeHead(401); return res.end('bad token'); }
   }
   let ev; try { ev = JSON.parse(body); } catch { res.writeHead(400); return res.end('bad json'); }
+  // Journey items from the pilot-gateway (bearer-token route, not the GitHub HMAC webhook).
+  if (ev && ['psav_passport', 'company_attestation', 'travel_rule_transfer', 'travel_rule_release'].includes(ev.kind)) return enqueueJourney(res, ev);
   const evidence_hash = String(ev.evidence_hash || '').toLowerCase();
   if (!/^[0-9a-f]{64}$/.test(evidence_hash)) { res.writeHead(400); return res.end('evidence_hash must be 64-hex'); }
   const use_case_id = ev.use_case_id || 'managed_compliance_v1';
