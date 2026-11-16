@@ -13,8 +13,8 @@
  * Workloads (--workloads, default all available):
  *   attestCompliance  ComplianceRegistry, company TRAVEL_RULE_SELF_COMPANY_ID (or bench-company), fresh context per run
  *   attestUseCase     ComplianceRegistry, fresh evidence hash per run
- *   gate              TravelRuleGate v10 evaluateTransfer + releaseTransfer, only when the deployment file has a
- *                     v10 gate AND scripts/lib/travel-rule-v10.ts is present (branch feat/v10-gate-network);
+ *   gate              TravelRuleGate evaluateTransfer + releaseTransfer, only when the deployment file has a
+ *                     current gate (codeVersion v11, in-circuit sanctions screening; readGateDeployment);
  *                     otherwise reported as skipped with the reason
  * Options: --runs N (5) --out FILE --baseline FILE (deployment-preprod-v9.json) --specks-per-dust N (10^15)
  *   --dust-per-night N (5) --night-usd P --night-usd-source S --night-usd-date YYYY-MM-DD
@@ -175,7 +175,7 @@ async function main() {
   console.log(JSON.stringify({ out: path.relative(ROOT, out), summary: report.summary }));
 }
 
-/** TravelRuleGate v10: one attestVasp and one registerSanctionsProvider with a bench-only key and a
+/** TravelRuleGate v11: one attestVasp and one registerSanctionsProvider with a bench-only key and a
  * fictitious signed list (not measured), then evaluate + release per run. Release needs self_company_id attested (attestCompliance workload). */
 async function runGate(w: V9Wallet, g: { lib: any; dep: any }, runs: number, tag: string, secret: Uint8Array, withFee: (p: any) => any, measure: (wl: string, i: number, f: () => Promise<any>) => Promise<void>) {
   const { lib, dep } = g;

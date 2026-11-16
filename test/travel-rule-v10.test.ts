@@ -93,8 +93,11 @@ describe('travel-rule-v10: deployment', () => {
     assert.throws(() => readGateDeployment(ROOT, 'preview', f), /link to ComplianceRegistry missing/);
   });
 
-  it('the current preview file still has the pre-v10 gate (needs the v10 redeploy first)', () => {
-    assert.throws(() => readGateDeployment(ROOT, 'preview'), /not the v11 layout/);
+  it('the preview deployment file is either a current v11 gate or refused with the reason', () => {
+    const f = path.join(ROOT, 'deployment-preview-v9.json');
+    const g = JSON.parse(fs.readFileSync(f, 'utf8')).contracts?.TravelRuleGate;
+    if (g?.codeVersion === 'v11') assert.equal(readGateDeployment(ROOT, 'preview').gate, g.contractAddress);
+    else assert.throws(() => readGateDeployment(ROOT, 'preview'), /not the v11 layout/);
   });
 });
 
