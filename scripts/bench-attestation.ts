@@ -34,6 +34,7 @@ import { CompiledContract } from '@midnight-ntwrk/compact-js';
 import { networkConfig, openWallet, ensureDust, makeProviders, masterSeedHex, dustBalance, CODE_VERSION, type V9Wallet } from './lib/midnight-v9.js';
 import { ownerSecret, ownerWitnesses, scoreSalt, setScoreSalt } from './owner.js';
 import { newProviderKey, signSanctionsList, sanctionsListRoot } from './lib/sanctions-list.js';
+import { companyIdBytes } from './lib/institutions.js';
 import { summarize, makeConversion, convert, deployBaseline, compiledVersions, packageVersion, hostHardware, isLocalUrl, benchFile, type Sample } from './lib/bench.js';
 
 // @ts-expect-error WebSocket polyfill for graphql-ws in Node
@@ -148,7 +149,7 @@ async function main() {
         if (workloads.includes('attestCompliance')) {
           const ctx = h32(`bench|${tag}|ctx|${i}`);
           setScoreSalt(scoreSalt(secret, ctx));
-          await measure('attestCompliance', i, () => cr.callTx.attestCompliance(b32(self), b32('did:dpo2u:bench'), b32('bench-policy'), 70n, ctx, 85n, h32(`bench|${tag}|evidence|${i}`)).finally(() => setScoreSalt(undefined)));
+          await measure('attestCompliance', i, () => cr.callTx.attestCompliance(companyIdBytes(self), b32('did:dpo2u:bench'), b32('bench-policy'), 70n, ctx, 85n, h32(`bench|${tag}|evidence|${i}`)).finally(() => setScoreSalt(undefined)));
         }
         if (workloads.includes('attestUseCase')) {
           await measure('attestUseCase', i, () => cr.callTx.attestUseCase(b32('bench_usecase_v1'), 1n, h32(`bench|${tag}|uc|${i}`), h32(`bench|${tag}|meta|${i}`)));

@@ -18,6 +18,7 @@
  * context, so the same passport cannot be self-attested twice.
  */
 import { createHash } from 'node:crypto';
+import { companyIdBytes } from './institutions.js';
 
 export type CompanyAttestation = {
   companyId: Uint8Array; evidenceHash: Uint8Array; score: bigint; threshold: bigint;
@@ -49,7 +50,7 @@ export function parseCompanyAttestation(j: any): CompanyAttestation {
   if (typeof j?.engine !== 'string' || !j.engine) bad.push('engine must be a non-empty string');
   if (bad.length) throw new Error('company_attestation invalid: ' + bad.join('; '));
   return {
-    companyId: bytes(cid), evidenceHash: bytes(ev), score: BigInt(j.score), threshold: BigInt(j.threshold),
+    companyId: companyIdBytes(cid), evidenceHash: bytes(ev), score: BigInt(j.score), threshold: BigInt(j.threshold),
     policyCid: policyCid(j.engine, j.passport_ref, j.regimes), context: selfAttestationContext(cid, j.passport_ref),
     passportRef: j.passport_ref, regimes: [...j.regimes], engine: j.engine,
   };

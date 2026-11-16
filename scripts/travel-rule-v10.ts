@@ -43,6 +43,7 @@ import { CompiledContract } from '@midnight-ntwrk/compact-js';
 import { encodeContractAddress, ContractState } from '@midnight-ntwrk/compact-runtime';
 import fs from 'node:fs';
 import { fromPayload } from './lib/sanctions-list.js';
+import { companyIdBytes } from './lib/institutions.js';
 import { parseQueuePayload, readPreimages, issueFromQueue, payloadDigest } from './lib/passport-queue.js';
 import { ZKConfigRegistry } from '@midnight-ntwrk/midnight-js-types';
 import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
@@ -85,7 +86,7 @@ let queueIssue: { witnesses: Record<string, unknown>; expectedVerdict: number; p
 async function argsFor(c: Command): Promise<{ show: Record<string, unknown>; call: unknown[] }> {
   switch (c) {
     case 'attest-self': {
-      const company = b32(selfCompany()), ctx = hashArg(need('context')), ev = hashArg(need('evidence'));
+      const company = companyIdBytes(selfCompany()), ctx = hashArg(need('context')), ev = hashArg(need('evidence'));
       return { show: { company_id: hex(company), threshold: need('threshold'), context: hex(ctx), evidence_hash: hex(ev), score: '(private)' },
         call: [company, b32('did:dpo2u:agent:001'), b32('travel-rule-v10'), BigInt(need('threshold')), ctx, BigInt(need('score')), ev] };
     }

@@ -16,6 +16,19 @@ export function checkInstitutionId(id: string): string {
   return id;
 }
 
+/**
+ * The 32 bytes of a company_id, the same in every place it is used: the TravelRuleGate constructor
+ * (self_company_id), ComplianceRegistry.attestCompliance and the agent's company_attestation item.
+ * 64 hex chars (the gateway's sha256 company id) -> those 32 bytes; any other label -> its UTF-8
+ * padded to 32 bytes (the older b32 convention for labels such as "bench-company").
+ */
+export function companyIdBytes(s: string): Uint8Array {
+  const v = s.trim();
+  if (HEX64.test(v)) return new Uint8Array(Buffer.from(v, 'hex'));
+  if (Buffer.byteLength(v) > 32) throw new Error('company_id label longer than 32 bytes: pass the 64-hex company id instead');
+  const b = Buffer.alloc(32); Buffer.from(v, 'utf-8').copy(b); return new Uint8Array(b);
+}
+
 export type InstitutionGateInput = { institution: string; selfCompanyId?: string; approverCommit?: string; thresholdCents?: string };
 
 /** Validated constructor inputs (after owner_commit) for an institution's gate. */

@@ -52,6 +52,7 @@ import * as SolvencyRegistry from '../build/SolvencyRegistry/contract/index.js';
 import * as PsavPassport from '../build/PsavPassport/contract/index.js';
 import { deriveQueuePassport, issueFromQueue, preimagePath, readPreimageFile } from './lib/passport-queue.js';
 import { parseCompanyAttestation } from './lib/company-attestation.js';
+import { companyIdBytes } from './lib/institutions.js';
 import { parseTransferItem, parseReleaseItem, witnessPath, readWitnessFile, dropWitness } from './lib/transfer-queue.js';
 import { GATE, CALLEES, readGateDeployment, crossGateProviders, gateLedgerOf, buildDir } from './lib/travel-rule-v10.js';
 import { encodeContractAddress, ContractState } from '@midnight-ntwrk/compact-runtime';
@@ -341,7 +342,7 @@ async function attestItem(c: Contracts, item: QueueItem) {
     let r: any;
     try {
       r = await c.cr.callTx.attestCompliance(
-        b32(item.company_id ?? org), b32(item.agent_did ?? 'did:dpo2u:agent:001'),
+        companyIdBytes(item.company_id ?? org), b32(item.agent_did ?? 'did:dpo2u:agent:001'),
         b32(item.policy_cid ?? 'bafy-policy-cid'), BigInt(item.threshold ?? 70),
         ctxBytes, BigInt(item.score ?? 0), hexToBytes32(item.evidence_hash),
       );

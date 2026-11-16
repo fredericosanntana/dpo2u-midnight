@@ -12,7 +12,8 @@
  *   passport          address of PsavPassport (deployed earlier in this run or in the deployment file)
  *   registry          address of ComplianceRegistry (same; must be the v10 build)
  *   self_company_id   TRAVEL_RULE_SELF_COMPANY_ID (required): the company_id this VASP is attested
- *                     under in the ComplianceRegistry (same 32-byte padding as the agent's b32)
+ *                     under in the ComplianceRegistry: 64 hex = those 32 bytes (the gateway's sha256 company id),
+ *                     any other label = UTF-8 padded to 32 bytes (companyIdBytes, scripts/lib/institutions.ts)
  *   approver_commit   DPO2U_APPROVER_COMMIT, or computed from DPO2U_APPROVER_SECRET; a key apart
  *                     from the owner's (scripts/owner.ts). Testnets may derive it from the seed.
  * So PsavPassport and ComplianceRegistry deploy before TravelRuleGate.
@@ -43,7 +44,7 @@ import * as Rx from 'rxjs';
 import { networkConfig, openWallet, ensureDust, makeProviders, masterSeedHex, dustBalance, V10_CONTRACTS, CODE_VERSION } from './lib/midnight-v9.js';
 import { ownerSecret, ownerCommit, approverCommit } from './owner.js';
 import { encodeContractAddress } from '@midnight-ntwrk/compact-runtime';
-import { institutionGateInputs, institutionGate, recordInstitutionGate } from './lib/institutions.js';
+import { institutionGateInputs, institutionGate, recordInstitutionGate, companyIdBytes } from './lib/institutions.js';
 
 // @ts-expect-error WebSocket polyfill for graphql-ws in Node
 globalThis.WebSocket = WebSocket;
@@ -52,7 +53,6 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 type ArgCtx = { net: string; secret: Uint8Array; mod: any; addressOf: (name: string) => string | undefined };
 
-const b32 = (s: string) => { const b = Buffer.alloc(32); Buffer.from(s, 'utf-8').copy(b, 0, 0, Math.min(s.length, 32)); return new Uint8Array(b); };
 const contractRef = (addr: string) => ({ bytes: encodeContractAddress(addr) });
 function linked(c: ArgCtx, name: string): { bytes: Uint8Array } {
   const a = c.addressOf(name);
@@ -70,7 +70,7 @@ const CONTRACTS: Record<string, (c: ArgCtx) => unknown[]> = {
     return [
       BigInt(process.env.TRAVEL_RULE_THRESHOLD_CENTS ?? '100000'),
       linked(c, 'PsavPassport'), linked(c, 'ComplianceRegistry'),
-      b32(self), approverCommit(c.mod, c.net, c.secret),
+      companyIdBytes(self), approverCommit(c.mod, c.net, c.secret),
     ];
   },
   ConsentRegistry: () => [],
@@ -133,7 +133,7 @@ async function main() {
   const inst = values.institution ? institutionGateInputs({ institution: values.institution, selfCompanyId: values['self-company-id'], approverCommit: values['approver-commit'], thresholdCents: values['threshold-cents'] }) : undefined;
   const instLinked = (n: string) => { const a = addressOf(n); if (!a) throw new Error(`institution gate needs a current ${n} in ${path.basename(OUT)}: deploy the shared contracts first`); return contractRef(a); };
   const argsOf = (p: { name: string; mod: any }) => inst
-    ? [ownerCommit(p.mod, secret), inst.thresholdCents, instLinked('PsavPassport'), instLinked('ComplianceRegistry'), b32(inst.selfCompanyId), inst.approverCommit]
+    ? [ownerCommit(p.mod, secret), inst.thresholdCents, instLinked('PsavPassport'), instLinked('ComplianceRegistry'), companyIdBytes(inst.selfCompanyId), inst.approverCommit]
     : [ownerCommit(p.mod, secret), ...CONTRACTS[p.name]({ net: net.name, secret, mod: p.mod, addressOf })];
   const existing = (name: string) => (values.institution ? institutionGate(out, values.institution) : out.contracts[name]);
   console.log(`[deploy] ${net.name}: ${plan.map((p) => p.name).join(', ')}${values.institution ? ` for institution ${values.institution}` : ''}`);
