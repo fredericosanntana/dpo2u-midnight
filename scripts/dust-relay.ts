@@ -33,7 +33,7 @@ import { CompiledContract } from '@midnight-ntwrk/compact-js';
 import * as ledger from '@midnight-ntwrk/ledger-v9';
 import { MidnightBech32m, DustAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
 
-import { networkConfig, openWallet, makeProviders, masterSeedHex, dustBalance, V10_CONTRACTS, CODE_VERSION, type NetCfg, type V9Wallet } from './lib/midnight-v9.js';
+import { networkConfig, openWallet, makeProviders, masterSeedHex, dustBalance, V10_CONTRACTS, codeVersionOf, type NetCfg, type V9Wallet } from './lib/midnight-v9.js';
 import { ownerWitnesses } from './owner.js';
 
 // @ts-expect-error WS polyfill required for wallet sync in Node
@@ -132,7 +132,7 @@ export function deploymentAddress(network: string, name: string): string {
   const c = JSON.parse(fs.readFileSync(file, 'utf8')).contracts?.[name];
   if (!c?.contractAddress) throw new Error(`${name} not in ${file}`);
   if (c.accessControl !== 'owner-v2') throw new Error(`${name} in ${file} was deployed without access control or with the untagged owner_commitment (owner-v1); redeploy`);
-  if (V10_CONTRACTS.has(name) && c.codeVersion !== CODE_VERSION) throw new Error(`${name} in ${file} is the pre-${CODE_VERSION} layout; redeploy with scripts/deploy-v9.ts`);
+  if (V10_CONTRACTS.has(name) && c.codeVersion !== codeVersionOf(name)) throw new Error(`${name} in ${file} is not the ${codeVersionOf(name)} layout; redeploy with scripts/deploy-v9.ts`);
   return c.contractAddress;
 }
 

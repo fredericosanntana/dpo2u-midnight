@@ -58,7 +58,7 @@ export const DATA_FLOW = `# Data flow map
 | Per-field salt | VASP | VASP vault | never | supervisor with the opening | witness \`originator_data\` / \`beneficiary_data\` |
 | Counterparty VASP id | transfer | chain | public | everyone | \`attested_vasps\`, PsavPassport id |
 | Amount | transfer | VASP | never (only above/below threshold via reason 2) | VASP | witness \`transfer_amount\` |
-| Sanctions screening | VASP screening provider | VASP | never (boolean, VASP-attested) | VASP | witness \`sanctions_clear\` |
+| Sanctions screening | VASP screening provider | VASP | never (proven in-circuit against the signed list, v11) | VASP | witness \`sanctions_path\` |
 | Verdict, reason, status | gate | chain | public | everyone; compliance role sees FAILs | \`status\`, \`fail_reason\` |
 | Policy version | VASP rules | chain | hash | everyone | \`verdict_policy\` |
 | Disclosure purpose / legal basis | request | credential + log | hash | approver, supervisor, auditor | \`grant_purpose\`, \`purposeHash()\` |

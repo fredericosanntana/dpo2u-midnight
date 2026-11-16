@@ -18,7 +18,7 @@ import CompactStandardLibrary;
 //      data, records verdict 1=PASS or 2=FAIL (+ reason) publicly, the hash of the rule/policy
 //      version that produced it (verdict_policy; zero refused), and stores only salted
 //      commitments (roots). Owner-gated because the verdict is final and the witnesses (incl.
-//      sanctions_clear) are the VASP's: anyone else knowing a transfer_id could otherwise
+//      the screening paths) are the VASP's: anyone else knowing a transfer_id could otherwise
 //      front-run it with forged data.
 //   2. releaseTransfer(transfer_id): reverts unless verdict == PASS and the VASP is attested in
 //      the ComplianceRegistry. Sets status 3=RELEASED.
@@ -35,10 +35,23 @@ import CompactStandardLibrary;
 //   signed (Schnorr/Jubjub) by a provider the owner registered (registerSanctionsProvider; one
 //   active key per id, re-registering rotates it, revokeSanctionsProvider disables it) and the block
 //   time is before its valid_until. The verdict stores verdict_sanctions_root / _provider /
-//   _valid_until. sanctions_clear (not on the list) is still the VASP's statement about that list.
+//   _valid_until.
+//
+// SANCTIONS SCREENING (proven in-circuit, v11-sanctions-nonmembership): the signed list_root is the
+//   root of an indexed (sorted) Merkle tree of depth 20 over screening keys, built by the provider
+//   (scripts/lib/sanctions-list.ts). Each leaf is (value, next): value is a listed key, next the
+//   next larger listed key (0 = none, i.e. +infinity); leaf 0 is (0, smallest key). For each
+//   screened identifier the circuit derives its key, takes the leaf the witness names, recomputes
+//   the root and checks value <= key < next. That leaf exists for every key, so the prover has no
+//   choice: value == key is a proven hit (reason 4), value < key a proven non-membership. Screened
+//   identifiers: account_hash and doc_hash of both parties (doc_hash zero = not given, skipped).
+//   Names are matched off-chain by the provider when it builds the list (fuzzy matching does not
+//   fit a circuit); the list then carries the identifiers of the matched persons.
+//   Design credit: the indexed-tree approach was suggested by ProofOrBluff (@realjohnny5i,
+//   github.com/bytewizard42i/ProofOrBluff).
 //
 // REASON CODES: 0 none, 1 missing required party info, 2 missing originator id above
-//   threshold, 3 counterparty VASP not attested, 4 sanctions screening hit (VASP-attested).
+//   threshold, 3 counterparty VASP not attested, 4 sanctions list hit (proven against the signed list).
 // STATUS: 0 none, 1 PASS, 2 FAIL, 3 RELEASED.
 
 struct Party {
@@ -52,12 +65,21 @@ struct Party {
 witness originator_data(): Party;
 witness beneficiary_data(): Party;
 witness transfer_amount(): Uint<64>;
-// Result of the VASP's off-chain sanctions screening of both parties (NOT proven in-circuit:
-// a Set.member on a private hash would publish the hash; an in-circuit non-membership proof is
-// a documented follow-up). Since v10-signed-sanctions it is tied to a SIGNED list: the screening
-// must name a list root signed by a registered provider (sanctions_list below), still valid at the
-// block time; the verdict records the root, the provider and the list's valid_until.
-witness sanctions_clear(): Boolean;
+// Indexed-tree path for one screening key (see SANCTIONS SCREENING above). The witness returns the
+// leaf with value <= key < next and its 20 siblings; is_right = the current node is a right child.
+struct SanctionsLeaf {
+  value: Uint<128>;
+  next: Uint<128>;
+}
+struct SanctionsStep {
+  sibling: Field;
+  is_right: Boolean;
+}
+struct SanctionsPath {
+  leaf: SanctionsLeaf;
+  steps: Vector<20, SanctionsStep>;
+}
+witness sanctions_path(key: Uint<128>): SanctionsPath;
 
 // A sanctions-list snapshot signed by its provider (Schnorr over Jubjub). The provider signs
 // sanctions_message(list_root, provider_id, issued_at, valid_until) with jubjubSchnorrSign
@@ -196,6 +218,38 @@ export circuit revokeSanctionsProvider(provider_id: Bytes<32>): [] {
   sanctions_provider_revoked.insert(disclose(provider_id));
 }
 
+// Indexed-tree hashing (Poseidon via transientHash). Tags 1 (leaf) and 2 (node) separate the two.
+export pure circuit sanctions_leaf_hash(value: Uint<128>, next: Uint<128>): Field {
+  return transientHash<Vector<3, Field>>([1 as Field, value as Field, next as Field]);
+}
+export pure circuit sanctions_node_hash(left: Field, right: Field): Field {
+  return transientHash<Vector<3, Field>>([2 as Field, left, right]);
+}
+// The tree root as the 32 bytes the provider signs (list_root).
+export pure circuit sanctions_root_bytes(root: Field): Bytes<32> {
+  return root as Bytes<32>;
+}
+// Screening key of a 32-byte identifier hash: its first 16 bytes, big-endian, as an integer.
+export pure circuit screening_key(h: Bytes<32>): Uint<128> {
+  const head = slice<16>(h as Vector<32, Uint<8>>, 0);
+  return fold((acc: Field, b: Uint<8>): Field => acc * 256 + (b as Field), 0 as Field, head) as Uint<128>;
+}
+export pure circuit sanctions_path_root(p: SanctionsPath): Field {
+  return fold((acc: Field, s: SanctionsStep): Field => s.is_right ? sanctions_node_hash(s.sibling, acc) : sanctions_node_hash(acc, s.sibling),
+              sanctions_leaf_hash(p.leaf.value, p.leaf.next), p.steps);
+}
+// Proves one identifier against the signed list; returns true on a proven hit. A zero hash (field
+// not given) is skipped. Reverts if the witness path does not open the signed root or does not
+// bracket the key, so the result cannot be chosen by the prover.
+circuit screen(h: Bytes<32>, list_root: Bytes<32>): Boolean {
+  const key = screening_key(h);
+  const p = sanctions_path(key);
+  const opens = sanctions_root_bytes(sanctions_path_root(p)) == list_root;
+  const brackets = p.leaf.value <= key && (p.leaf.next == 0 || key < p.leaf.next);
+  assert(key == 0 || (opens && brackets), "Sanctions path does not prove the identifier against the signed list");
+  return key != 0 && p.leaf.value == key;
+}
+
 circuit check_sanctions_list(l: SanctionsList): [] {
   const id = disclose(l.provider_id);
   assert(sanctions_provider_key.member(id), "Sanctions provider not registered");
@@ -232,7 +286,12 @@ export circuit evaluateTransfer(transfer_id: Bytes<32>, policy_hash: Bytes<32>):
   const vasp_ok = attested_vasps.member(disclose(b.vasp_id)) || passport.isValid(disclose(b.vasp_id));
   const list = sanctions_list();
   check_sanctions_list(list);
-  const clean = sanctions_clear();
+  // Four separate proofs (no short-circuit): every given identifier is proven against the list.
+  const hit_oa = screen(o.account_hash, list.list_root);
+  const hit_od = screen(o.doc_hash, list.list_root);
+  const hit_ba = screen(b.account_hash, list.list_root);
+  const hit_bd = screen(b.doc_hash, list.list_root);
+  const clean = !(hit_oa || hit_od || hit_ba || hit_bd);
 
   const reason: Uint<8> = !complete ? 1 : (!id_ok ? 2 : (!vasp_ok ? 3 : (!clean ? 4 : 0)));
   const pass = reason == 0;

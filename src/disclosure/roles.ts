@@ -20,7 +20,7 @@ export const REASONS: Record<number, string> = {
   1: 'missing required party info',
   2: 'missing originator document above threshold',
   3: 'counterparty VASP not attested and no valid PsavPassport',
-  4: 'sanctions screening hit (VASP-attested)',
+  4: 'sanctions list hit (proven in-circuit against the signed list; VASP-attested on pre-v11 gates)',
 };
 
 export type TransferRecord = {

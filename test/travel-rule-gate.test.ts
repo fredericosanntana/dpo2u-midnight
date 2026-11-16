@@ -2,6 +2,7 @@
  * TravelRuleGate — PASS and FAIL cases, shielded party data, policy-stamped verdicts, two-key
  * disclosure grants, and the cross-contract links (v10): a counterparty with a valid PsavPassport
  * passes the VASP check; release requires this VASP's attestation in the ComplianceRegistry.
+ * v11: sanctions screening proven in-circuit against the signed indexed tree (hit, non-hit, forged path).
  * Runs against the compiled contracts in the Compact runtime simulator (no network).
  */
 import { describe, it } from 'node:test';
@@ -11,12 +12,12 @@ import * as Gate from '../build/TravelRuleGate/contract/index.js';
 import * as Passport from '../build/PsavPassport/contract/index.js';
 import * as Registry from '../build/ComplianceRegistry/contract/index.js';
 import { publicStateHex, simAddress, contractRef, asDeployed, crossContract, SIM_BLOCK_HASH } from './helpers.js';
-import { newProviderKey, signSanctionsList, sanctionsListRoot, toPayload, fromPayload, type SanctionsListWitness } from '../scripts/lib/sanctions-list.js';
+import { newProviderKey, signSanctionsList, sanctionsListRoot, toPayload, fromPayload, SanctionsTree, leafHash, nodeHash, screeningKey, type SanctionsListWitness, type SanctionsPath } from '../scripts/lib/sanctions-list.js';
 
 const { Contract, ledger, pureCircuits } = Gate;
 
 type Party = { name_hash: Uint8Array; account_hash: Uint8Array; doc_hash: Uint8Array; vasp_id: Uint8Array; salt: Uint8Array };
-type PS = { o: Party; b: Party; amount: bigint; sanctionsClear: boolean; secret: Uint8Array; approver: Uint8Array; list: SanctionsListWitness };
+type PS = { o: Party; b: Party; amount: bigint; tree: SanctionsTree; pathFor?: (key: bigint) => SanctionsPath; secret: Uint8Array; approver: Uint8Array; list: SanctionsListWitness };
 
 const b32 = (s: string) => { const x = Buffer.alloc(32); Buffer.from(s).copy(x, 0, 0, 32); return new Uint8Array(x); };
 const ZERO = new Uint8Array(32);
@@ -40,7 +41,7 @@ const witnesses = {
   originator_data: (c: any) => [c.privateState, c.privateState.o] as [PS, Party],
   beneficiary_data: (c: any) => [c.privateState, c.privateState.b] as [PS, Party],
   transfer_amount: (c: any) => [c.privateState, c.privateState.amount] as [PS, bigint],
-  sanctions_clear: (c: any) => [c.privateState, c.privateState.sanctionsClear] as [PS, boolean],
+  sanctions_path: (c: any, key: bigint) => [c.privateState, (c.privateState.pathFor ?? ((k: bigint) => c.privateState.tree.path(k)))(key)] as [PS, SanctionsPath],
   owner_secret: (c: any) => [c.privateState, c.privateState.secret] as [PS, Uint8Array],
   approver_secret: (c: any) => [c.privateState, c.privateState.approver] as [PS, Uint8Array],
   sanctions_list: (c: any) => [c.privateState, c.privateState.list] as [PS, SanctionsListWitness],
@@ -49,7 +50,9 @@ const witnesses = {
 // Sanctions-list provider (fictitious) and a snapshot valid for one day from T0.
 const PROVIDER = new Uint8Array(Buffer.from('aa'.repeat(32), 'hex'));
 const PROVIDER_KEY = newProviderKey();
-const LIST_ROOT = sanctionsListRoot(['11'.repeat(32), '22'.repeat(32)]);
+const LISTED = ['11'.repeat(32), '22'.repeat(32), Buffer.from(b32('acct:listed-person')).toString('hex'), Buffer.from(b32('doc:listed-person')).toString('hex')];
+const TREE = new SanctionsTree(LISTED);
+const LIST_ROOT = TREE.rootBytes;
 const DAY = 86_400;
 const signedList = (o: Partial<{ sk: bigint; provider_id: Uint8Array; list_root: Uint8Array; issued_at: bigint; valid_until: bigint }> = {}) =>
   signSanctionsList(Gate, o.sk ?? PROVIDER_KEY.sk, { provider_id: o.provider_id ?? PROVIDER, list_root: o.list_root ?? LIST_ROOT, issued_at: o.issued_at ?? BigInt(T0 - 3600), valid_until: o.valid_until ?? BigInt(T0 + DAY) });
@@ -61,7 +64,7 @@ const party = (n: string, withDoc: boolean, vasp = b32('vasp:own')): Party => ({
 });
 
 function base(over: Partial<PS> = {}): PS {
-  return { o: party('orig', true), b: party('benef', true, BENEF_VASP), amount: 250_000n, sanctionsClear: true, secret: OWNER_SECRET, approver: APPROVER_SECRET, list: LIST, ...over };
+  return { o: party('orig', true), b: party('benef', true, BENEF_VASP), amount: 250_000n, tree: TREE, secret: OWNER_SECRET, approver: APPROVER_SECRET, list: LIST, ...over };
 }
 
 // ── Linked contracts, deployed in the simulator ──
@@ -208,9 +211,49 @@ describe('TravelRuleGate', () => {
     const m1 = await miss.contract.circuits.attestVasp(miss.ctx, BENEF_VASP);
     assert.equal(ledger(st(await miss.contract.circuits.evaluateTransfer(miss.mk(st(m1)), TID, POLICY))).fail_reason.lookup(TID), 1n);
 
-    const sx = await setup(base({ sanctionsClear: false }));
+    const sx = await setup(base({ b: { ...party('benef', true, BENEF_VASP), account_hash: b32('acct:listed-person') } }));
     const s1 = await sx.contract.circuits.attestVasp(sx.ctx, BENEF_VASP);
     assert.equal(ledger(st(await sx.contract.circuits.evaluateTransfer(sx.mk(st(s1)), TID, POLICY))).fail_reason.lookup(TID), 4n);
+  });
+
+  // ── in-circuit sanctions screening (v11: indexed Merkle tree, design credit ProofOrBluff) ──
+  it('SCREENING: the circuit hashes match the TypeScript tree (leaf, node, root bytes, key)', () => {
+    assert.equal(pureCircuits.sanctions_leaf_hash(5n, 9n), leafHash(5n, 9n));
+    assert.equal(pureCircuits.sanctions_node_hash(3n, 4n), nodeHash(3n, 4n));
+    assert.deepEqual(pureCircuits.sanctions_root_bytes(TREE.root), TREE.rootBytes);
+    for (const h of [...LISTED, 'ff'.repeat(32), '00'.repeat(16) + 'ab'.repeat(16)]) {
+      assert.equal(pureCircuits.screening_key(new Uint8Array(Buffer.from(h, 'hex'))), screeningKey(h));
+    }
+    const key = screeningKey(LISTED[2]);
+    assert.equal(pureCircuits.sanctions_path_root(TREE.path(key)), TREE.root);
+  });
+
+  it('SCREENING: a listed originator document is a proven hit (reason 4); a zero document is skipped', async () => {
+    const hitDoc = await setup(base({ o: { ...party('orig', true), doc_hash: b32('doc:listed-person') } }));
+    const h1 = await hitDoc.contract.circuits.attestVasp(hitDoc.ctx, BENEF_VASP);
+    const L = ledger(st(await hitDoc.contract.circuits.evaluateTransfer(hitDoc.mk(st(h1)), TID, POLICY)));
+    assert.equal(L.status.lookup(TID), 2n);
+    assert.equal(L.fail_reason.lookup(TID), 4n);
+    const noDoc = await setup(base({ amount: 1n, b: party('benef', false, BENEF_VASP) }));
+    const n1 = await noDoc.contract.circuits.attestVasp(noDoc.ctx, BENEF_VASP);
+    assert.equal(ledger(st(await noDoc.contract.circuits.evaluateTransfer(noDoc.mk(st(n1)), TID, POLICY))).status.lookup(TID), 1n);
+  });
+
+  it('SCREENING: the prover cannot hide a hit or forge a path', async () => {
+    const listedBenef = { ...party('benef', true, BENEF_VASP), account_hash: b32('acct:listed-person') };
+    const { contract, ctx, mk } = await setup(base());
+    const s0 = st(await contract.circuits.attestVasp(ctx, BENEF_VASP));
+    const refusal = /Sanctions path does not prove the identifier against the signed list/;
+    // 1. the path of a neighbouring gap (value < key < next fails: next == key) for a listed key
+    const gapBefore = (key: bigint) => { const p = TREE.path(key); return p.leaf.value === key ? TREE.path(key - 1n) : p; };
+    await assert.rejects(() => contract.circuits.evaluateTransfer(mk(s0, base({ b: listedBenef, pathFor: gapBefore })), TID, POLICY), refusal);
+    // 2. a tree that leaves the key out (valid shape, other root)
+    const without = new SanctionsTree(LISTED.filter((h) => h !== Buffer.from(b32('acct:listed-person')).toString('hex')));
+    await assert.rejects(() => contract.circuits.evaluateTransfer(mk(s0, base({ b: listedBenef, pathFor: (k) => without.path(k) })), TID, POLICY), refusal);
+    // 3. a tampered sibling
+    const bent = (k: bigint) => { const p = TREE.path(k); p.steps[3] = { ...p.steps[3], sibling: p.steps[3].sibling + 1n }; return p; };
+    await assert.rejects(() => contract.circuits.evaluateTransfer(mk(s0, base({ pathFor: bent })), TID, POLICY), refusal);
+    assert.equal(ledger(s0).status.member(TID), false);
   });
 
   it('PRIVACY: public state holds no raw party data, only salted roots', async () => {

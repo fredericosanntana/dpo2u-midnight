@@ -4,7 +4,7 @@
  *
  *   MIDNIGHT_NETWORK=preview npx tsx scripts/travel-rule-v10.ts <command> [options] [--plan]
  *
- * Commands (addresses from deployment-<net>-v9.json, gate must be codeVersion v10):
+ * Commands (addresses from deployment-<net>-v9.json, gate must be codeVersion v11):
  *   attest-self     ComplianceRegistry.attestCompliance for TRAVEL_RULE_SELF_COMPANY_ID
  *                   --score N (private) --threshold N --context LABEL --evidence HEX|LABEL
  *   issue-passport  PsavPassport.issuePassport, tier 0 (machine-only), one machine rule PASS
@@ -14,6 +14,7 @@
  *   register-provider  registerSanctionsProvider --provider-id ID --provider-key FILE ({x, y} decimal; re-registering rotates)
  *   revoke-provider    revokeSanctionsProvider --provider-id ID
  *   evaluate        evaluateTransfer --transfer ID --policy HEX|LABEL --witness-file FILE(600) --sanctions-list FILE|-
+ *                   --sanctions-entries FILE (the signed snapshot's entry hashes, one per line; must produce its list_root)
  *                   (signed list payload, docs/TRAVEL-RULE-DISCLOSURE.md; '-' reads it from stdin)
  *   release         releaseTransfer --transfer ID
  *   grant           grantDisclosure --grant ID --transfer ID --supervisor ID --scope N --ttl SEC --purpose HEX|LABEL
@@ -42,7 +43,7 @@ import { findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
 import { encodeContractAddress, ContractState } from '@midnight-ntwrk/compact-runtime';
 import fs from 'node:fs';
-import { fromPayload } from './lib/sanctions-list.js';
+import { fromPayload, readEntries, treeForSignedRoot } from './lib/sanctions-list.js';
 import { companyIdBytes } from './lib/institutions.js';
 import { parseQueuePayload, readPreimages, issueFromQueue, payloadDigest } from './lib/passport-queue.js';
 import { ZKConfigRegistry } from '@midnight-ntwrk/midnight-js-types';
@@ -67,7 +68,7 @@ const { values, positionals } = parseArgs({
     transfer: { type: 'string' }, policy: { type: 'string' }, 'witness-file': { type: 'string' },
     grant: { type: 'string' }, supervisor: { type: 'string' }, scope: { type: 'string' }, ttl: { type: 'string' }, purpose: { type: 'string' },
     'approver-secret-stdin': { type: 'boolean', default: false }, 'as-owner': { type: 'boolean', default: false },
-    'sanctions-list': { type: 'string' }, 'from-queue': { type: 'string' }, 'passport-witness': { type: 'string' }, 'provider-id': { type: 'string' }, 'provider-key': { type: 'string' },
+    'sanctions-list': { type: 'string' }, 'sanctions-entries': { type: 'string' }, 'from-queue': { type: 'string' }, 'passport-witness': { type: 'string' }, 'provider-id': { type: 'string' }, 'provider-key': { type: 'string' },
     score: { type: 'string' }, threshold: { type: 'string' }, context: { type: 'string' }, evidence: { type: 'string' },
     'passport-id': { type: 'string' }, pack: { type: 'string' }, 'pack-version': { type: 'string' },
   },
@@ -107,8 +108,8 @@ async function argsFor(c: Command): Promise<{ show: Record<string, unknown>; cal
     }
     case 'evaluate': {
       const t = idArg(need('transfer')), p = hashArg(need('policy'));
-      need('witness-file'); need('sanctions-list');
-      return { show: { transfer_id: hex(t), policy_hash: hex(p), witness_file: values['witness-file'], sanctions_list: values['sanctions-list'] }, call: [t, p] };
+      need('witness-file'); need('sanctions-list'); need('sanctions-entries');
+      return { show: { transfer_id: hex(t), policy_hash: hex(p), witness_file: values['witness-file'], sanctions_list: values['sanctions-list'], sanctions_entries: values['sanctions-entries'] }, call: [t, p] };
     }
     case 'release': { const t = idArg(need('transfer')); return { show: { transfer_id: hex(t) }, call: [t] }; }
     case 'grant': {
@@ -205,13 +206,14 @@ async function main() {
     } else {
       const wit = cmd === 'evaluate' ? readTransferWitness(values['witness-file']!) : undefined;
       const list = cmd === 'evaluate' ? fromPayload(JSON.parse(values['sanctions-list'] === '-' ? await readStdin() : fs.readFileSync(values['sanctions-list']!, 'utf8'))) : undefined;
+      const tree = list ? treeForSignedRoot(readEntries(fs.readFileSync(values['sanctions-entries']!, 'utf8')), list.list_root) : undefined;
       target = (await join(providers, GATE, d.gate, {
         owner_secret: owner ? (x: any) => [x.privateState, owner] : refuse('owner_secret'),
         approver_secret: approverSecret ? (x: any) => [x.privateState, approverSecret] : refuse('approver_secret'),
         originator_data: wit ? (x: any) => [x.privateState, wit.o] : refuse('originator_data'),
         beneficiary_data: wit ? (x: any) => [x.privateState, wit.b] : refuse('beneficiary_data'),
         transfer_amount: wit ? (x: any) => [x.privateState, wit.amount] : refuse('transfer_amount'),
-        sanctions_clear: wit ? (x: any) => [x.privateState, wit.clear] : refuse('sanctions_clear'),
+        sanctions_path: tree ? (x: any, key: bigint) => [x.privateState, tree.path(key)] : refuse('sanctions_path'),
         sanctions_list: list ? (x: any) => [x.privateState, list] : refuse('sanctions_list'),
       })).c;
     }

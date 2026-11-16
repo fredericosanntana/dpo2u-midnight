@@ -41,6 +41,10 @@ export type NetworkName = 'preview' | 'preprod' | 'mainnet';
  */
 export const CODE_VERSION = 'v10';
 export const V10_CONTRACTS: ReadonlySet<string> = new Set(['ComplianceRegistry', 'TravelRuleGate', 'ConsentRegistry', 'DataSubjectRights', 'PaymentGateway']);
+/** Contracts that moved past v10 on their own: TravelRuleGate v11 proves sanctions screening in-circuit. */
+const LATER: Readonly<Record<string, string>> = { TravelRuleGate: 'v11' };
+/** The codeVersion a current deployment entry of this contract must carry. */
+export const codeVersionOf = (name: string): string => LATER[name] ?? CODE_VERSION;
 export type NetCfg = { name: NetworkName; networkId: string; indexer: string; indexerWS: string; node: string; proofServer: string };
 
 const PROOF_SERVER = () => process.env.PROOF_SERVER_URL ?? 'http://127.0.0.1:6300';

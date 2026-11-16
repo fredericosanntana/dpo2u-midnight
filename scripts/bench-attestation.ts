@@ -13,8 +13,8 @@
  * Workloads (--workloads, default all available):
  *   attestCompliance  ComplianceRegistry, company TRAVEL_RULE_SELF_COMPANY_ID (or bench-company), fresh context per run
  *   attestUseCase     ComplianceRegistry, fresh evidence hash per run
- *   gate              TravelRuleGate v10 evaluateTransfer + releaseTransfer, only when the deployment file has a
- *                     v10 gate AND scripts/lib/travel-rule-v10.ts is present (branch feat/v10-gate-network);
+ *   gate              TravelRuleGate evaluateTransfer + releaseTransfer, only when the deployment file has a
+ *                     current gate (codeVersion v11, in-circuit sanctions screening; readGateDeployment);
  *                     otherwise reported as skipped with the reason
  * Options: --runs N (5) --out FILE --baseline FILE (deployment-preprod-v9.json) --specks-per-dust N (10^15)
  *   --dust-per-night N (5) --night-usd P --night-usd-source S --night-usd-date YYYY-MM-DD
@@ -33,7 +33,7 @@ import { findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
 import { networkConfig, openWallet, ensureDust, makeProviders, masterSeedHex, dustBalance, CODE_VERSION, type V9Wallet } from './lib/midnight-v9.js';
 import { ownerSecret, ownerWitnesses, scoreSalt, setScoreSalt } from './owner.js';
-import { newProviderKey, signSanctionsList, sanctionsListRoot } from './lib/sanctions-list.js';
+import { newProviderKey, signSanctionsList, SanctionsTree } from './lib/sanctions-list.js';
 import { companyIdBytes } from './lib/institutions.js';
 import { summarize, makeConversion, convert, deployBaseline, compiledVersions, packageVersion, hostHardware, isLocalUrl, benchFile, type Sample } from './lib/bench.js';
 
@@ -96,7 +96,7 @@ async function main() {
     let registry: string | null = null, registryError: string | null = null;
     try { registry = registryAddress(net.name); } catch (e: any) { registryError = e.message; }
     console.log(JSON.stringify({ plan: {
-      network: net.name, runs, workloads, skipped, txs: workloads.reduce((n, w) => n + (w === 'gate' ? 2 * runs + 1 : runs), 0),
+      network: net.name, runs, workloads, skipped, txs: workloads.reduce((n, w) => n + (w === 'gate' ? 2 * runs + 2 : runs), 0),
       registry, registryError, gate: gate.ok ? gate.dep.gate : null,
       measures: ['latency_ms per tx: callTx start -> resolved with block (prove + submit + inclusion)', 'dust per tx: wallet balance delta (under-states) and facade.estimateTransactionFee'],
       conversion: conv, deployBaseline: baseline, versions, proofServerHardware: proofHw, out: path.relative(ROOT, out),
@@ -175,7 +175,7 @@ async function main() {
   console.log(JSON.stringify({ out: path.relative(ROOT, out), summary: report.summary }));
 }
 
-/** TravelRuleGate v10: one attestVasp and one registerSanctionsProvider with a bench-only key and a
+/** TravelRuleGate v11: one attestVasp and one registerSanctionsProvider with a bench-only key and a
  * fictitious signed list (not measured), then evaluate + release per run. Release needs self_company_id attested (attestCompliance workload). */
 async function runGate(w: V9Wallet, g: { lib: any; dep: any }, runs: number, tag: string, secret: Uint8Array, withFee: (p: any) => any, measure: (wl: string, i: number, f: () => Promise<any>) => Promise<void>) {
   const { lib, dep } = g;
@@ -194,12 +194,14 @@ async function runGate(w: V9Wallet, g: { lib: any; dep: any }, runs: number, tag
   const provider = newProviderKey();
   const providerId = h32(`bench|${tag}|sanctions-provider`);
   const now = BigInt(Math.floor(Date.now() / 1000));
-  const list = signSanctionsList(mod as any, provider.sk, { provider_id: providerId, list_root: sanctionsListRoot([createHash('sha256').update(`bench|${tag}|entry`).digest('hex')]), issued_at: now - 3600n, valid_until: now + 86_400n });
+  // In-circuit screening (v11): the list is an indexed tree; 1,000 fictitious entries keep the paths realistic.
+  const tree = new SanctionsTree(Array.from({ length: 1000 }, (_, i) => createHash('sha256').update(`bench|${tag}|entry|${i}`).digest('hex')));
+  const list = signSanctionsList(mod as any, provider.sk, { provider_id: providerId, list_root: tree.rootBytes, issued_at: now - 3600n, valid_until: now + 86_400n });
   const refuse = (n: string) => () => { throw new Error(`witness ${n} not used by the bench`); };
   const compiled = (CompiledContract.make('TravelRuleGate', mod.Contract) as any).pipe((CompiledContract as any).withWitnesses({
     owner_secret: (x: any) => [x.privateState, secret], approver_secret: refuse('approver_secret'),
     originator_data: (x: any) => [x.privateState, cur.o], beneficiary_data: (x: any) => [x.privateState, cur.b],
-    transfer_amount: (x: any) => [x.privateState, 250_000n], sanctions_clear: (x: any) => [x.privateState, true],
+    transfer_amount: (x: any) => [x.privateState, 250_000n], sanctions_path: (x: any, key: bigint) => [x.privateState, tree.path(key)],
     sanctions_list: (x: any) => [x.privateState, list],
   }), (CompiledContract as any).withCompiledFileAssets(zk));
   const gate: any = await (findDeployedContract as any)(providers, { contractAddress: dep.gate, compiledContract: compiled, privateStateId: 'TravelRuleGatePrivateState', initialPrivateState: {} });

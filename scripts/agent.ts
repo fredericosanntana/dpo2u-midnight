@@ -21,6 +21,7 @@
  *   company_attestation           ComplianceRegistry.attestCompliance keyed by company_id (scripts/lib/company-attestation.ts)
  *   travel_rule_transfer          institution's TravelRuleGate.evaluateTransfer; private witness from
  *                                 <MIDNIGHT_TRANSFER_WITNESS_DIR>/<transfer_id>.json, deleted after the attempt (scripts/lib/transfer-queue.ts)
+ *                                 and the signed list's public snapshot <MIDNIGHT_SANCTIONS_DIR>/<list_root>.txt (in-circuit screening)
  *   travel_rule_release           institution's TravelRuleGate.releaseTransfer
  * Contract addresses come from deployment-<network>-v9.json (scripts/deploy-v9.ts).
  */
@@ -39,7 +40,7 @@ import { toHex } from '@midnight-ntwrk/midnight-js-utils';
 import * as ledger from '@midnight-ntwrk/ledger-v9';
 import { MidnightBech32m, UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
-import { networkConfig, openWallet, ensureDust, makeProviders, masterSeedHex, dustBalance, V10_CONTRACTS, CODE_VERSION, type V9Wallet } from './lib/midnight-v9.js';
+import { networkConfig, openWallet, ensureDust, makeProviders, masterSeedHex, dustBalance, V10_CONTRACTS, codeVersionOf, type V9Wallet } from './lib/midnight-v9.js';
 import { ownerSecret, ownerWitnesses, scoreSalt, setScoreSalt } from './owner.js';
 
 import * as ComplianceRegistry from '../build/ComplianceRegistry/contract/index.js';
@@ -53,7 +54,8 @@ import * as PsavPassport from '../build/PsavPassport/contract/index.js';
 import { deriveQueuePassport, issueFromQueue, preimagePath, readPreimageFile } from './lib/passport-queue.js';
 import { parseCompanyAttestation } from './lib/company-attestation.js';
 import { companyIdBytes } from './lib/institutions.js';
-import { parseTransferItem, parseReleaseItem, witnessPath, readWitnessFile, dropWitness } from './lib/transfer-queue.js';
+import { parseTransferItem, parseReleaseItem, witnessPath, readWitnessFile, dropWitness, sanctionsTreeFor } from './lib/transfer-queue.js';
+import type { SanctionsTree } from './lib/sanctions-list.js';
 import { GATE, CALLEES, readGateDeployment, crossGateProviders, gateLedgerOf, buildDir } from './lib/travel-rule-v10.js';
 import { encodeContractAddress, ContractState } from '@midnight-ntwrk/compact-runtime';
 import { ZKConfigRegistry } from '@midnight-ntwrk/midnight-js-types';
@@ -128,7 +130,7 @@ function deploymentAddress(network: string, name: string): string {
   const c = JSON.parse(fs.readFileSync(file, 'utf8')).contracts?.[name];
   if (!c?.contractAddress) throw new Error(`${name} not in ${file}`);
   if (c.accessControl !== 'owner-v2') throw new Error(`${name} in ${file} was deployed without access control or with the untagged owner_commitment (owner-v1); redeploy`);
-  if (V10_CONTRACTS.has(name) && c.codeVersion !== CODE_VERSION) throw new Error(`${name} in ${file} is the pre-${CODE_VERSION} layout; redeploy with scripts/deploy-v9.ts`);
+  if (V10_CONTRACTS.has(name) && c.codeVersion !== codeVersionOf(name)) throw new Error(`${name} in ${file} is not the ${codeVersionOf(name)} layout; redeploy with scripts/deploy-v9.ts`);
   return c.contractAddress;
 }
 
@@ -189,8 +191,8 @@ type Contracts = { cr: any; escrow: any; pg: any; fd: any; trust: any; legal: an
   gate: (institution: string) => Promise<{ c: any; read: () => Promise<any> }> };
 
 // Private data of the transfer being evaluated (set per item from the ephemeral witness file, cleared after).
-let transferWitness: { o: unknown; b: unknown; amount: bigint; clear: boolean; list: unknown } | undefined;
-const tw = (k: 'o' | 'b' | 'amount' | 'clear' | 'list', name: string) => (x: any) => {
+let transferWitness: { o: unknown; b: unknown; amount: bigint; list: unknown; tree: SanctionsTree } | undefined;
+const tw = (k: 'o' | 'b' | 'amount' | 'list', name: string) => (x: any) => {
   if (!transferWitness) throw new Error(`witness ${name}: no transfer being evaluated`);
   return [x.privateState, transferWitness[k]];
 };
@@ -198,7 +200,11 @@ const gateWitnessesFor = (secret: Uint8Array) => ({
   owner_secret: (x: any) => [x.privateState, secret],
   approver_secret: () => { throw new Error('witness approver_secret: approvals never run in the agent'); },
   originator_data: tw('o', 'originator_data'), beneficiary_data: tw('b', 'beneficiary_data'),
-  transfer_amount: tw('amount', 'transfer_amount'), sanctions_clear: tw('clear', 'sanctions_clear'), sanctions_list: tw('list', 'sanctions_list'),
+  transfer_amount: tw('amount', 'transfer_amount'), sanctions_list: tw('list', 'sanctions_list'),
+  sanctions_path: (x: any, key: bigint) => {
+    if (!transferWitness) throw new Error('witness sanctions_path: no transfer being evaluated');
+    return [x.privateState, transferWitness.tree.path(key)];
+  },
 });
 
 /** One joined TravelRuleGate per institution (deploy-v9.ts --institution), with its on-chain links checked. */
@@ -328,8 +334,9 @@ async function attestItem(c: Contracts, item: QueueItem) {
     let r: any;
     try {
       const w = readWitnessFile(file);
+      const tree = sanctionsTreeFor(process.env.MIDNIGHT_SANCTIONS_DIR ?? '', t.list);
       const g = await c.gate(t.institution);
-      transferWitness = { o: w.o, b: w.b, amount: w.amount, clear: w.clear, list: t.list };
+      transferWitness = { o: w.o, b: w.b, amount: w.amount, list: t.list, tree };
       try { r = await g.c.callTx.evaluateTransfer(t.transferId, t.policyHash); } finally { transferWitness = undefined; }
       const L = await g.read();
       return { kind: 'travel_rule_transfer', key: t.transferIdHex, public: r?.public ?? {},

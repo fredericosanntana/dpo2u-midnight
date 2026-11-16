@@ -6,7 +6,10 @@
  *   npx tsx scripts/sanctions-provider.ts pubkey --sk-file FILE            # public key {x, y} of an existing secret
  *   npx tsx scripts/sanctions-provider.ts sign --sk-file FILE --provider-id ID (--entries FILE | --root HEX)
  *        [--issued-at UNIX] (--valid-until UNIX | --ttl SECONDS)          # payload JSON on stdout (docs/TRAVEL-RULE-DISCLOSURE.md)
- * --entries: one sha256 hex per line (hashes of the listed names/ids, never the names themselves).
+ * --entries: one sha256 hex per line (hashes of the listed identifiers: accounts, wallets, documents;
+ *   never the raw values). The list_root is the indexed-tree root the gate proves screening against
+ *   (v11). --publish-dir DIR also writes the snapshot as DIR/<list_root>.txt, the file the operator
+ *   needs to build the paths (MIDNIGHT_SANCTIONS_DIR for the agent, --sanctions-entries for the CLI).
  * The secret key is never printed.
  */
 import fs from 'node:fs';
@@ -14,12 +17,12 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { idArg } from './lib/travel-rule-v10.js';   // same id encoding as travel-rule-v10.ts register-provider
-import { newProviderKey, providerPublicKey, signSanctionsList, sanctionsListRoot, toPayload } from './lib/sanctions-list.js';
+import { newProviderKey, providerPublicKey, signSanctionsList, sanctionsListRoot, readEntries, toPayload } from './lib/sanctions-list.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   'sk-file': { type: 'string' }, 'provider-id': { type: 'string' }, entries: { type: 'string' }, root: { type: 'string' },
-  'issued-at': { type: 'string' }, 'valid-until': { type: 'string' }, ttl: { type: 'string' },
+  'issued-at': { type: 'string' }, 'valid-until': { type: 'string' }, ttl: { type: 'string' }, 'publish-dir': { type: 'string' },
 } });
 const HEX64 = /^[0-9a-f]{64}$/;
 const pub = (pk: { x: bigint; y: bigint }) => ({ x: pk.x.toString(), y: pk.y.toString() });
@@ -44,10 +47,15 @@ async function main() {
   } else if (cmd === 'sign') {
     if (!values['provider-id']) throw new Error('--provider-id is required');
     const root = values.root ? (HEX64.test(values.root) ? new Uint8Array(Buffer.from(values.root, 'hex')) : (() => { throw new Error('--root must be 32 bytes hex'); })())
-      : values.entries ? sanctionsListRoot(fs.readFileSync(values.entries, 'utf8').split('\n').map((l) => l.trim()).filter(Boolean))
+      : values.entries ? sanctionsListRoot(readEntries(fs.readFileSync(values.entries, 'utf8')))
       : (() => { throw new Error('--entries or --root is required'); })();
     const issued = BigInt(values['issued-at'] ?? Math.floor(Date.now() / 1000));
     const until = values['valid-until'] ? BigInt(values['valid-until']) : values.ttl ? issued + BigInt(values.ttl) : (() => { throw new Error('--valid-until or --ttl is required'); })();
+    if (values['publish-dir']) {
+      if (!values.entries) throw new Error('--publish-dir needs --entries');
+      const entries = [...new Set(readEntries(fs.readFileSync(values.entries, 'utf8')))].sort();
+      fs.writeFileSync(path.join(values['publish-dir'], `${Buffer.from(root).toString('hex')}.txt`), entries.join('\n') + '\n');
+    }
     const Gate = await import(pathToFileURL(path.join(ROOT, 'build', 'TravelRuleGate', 'contract', 'index.js')).href);
     console.log(JSON.stringify(toPayload(signSanctionsList(Gate as any, readSk(skFile), { provider_id: idArg(values['provider-id']), list_root: root, issued_at: issued, valid_until: until }))));
   } else {
