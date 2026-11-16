@@ -1,0 +1,305 @@
+{
+  "format": "dpo2u.travel-rule-verdict/1",
+  "generated_by": "test/verdict-crosschain.test.ts (from verdict-v1.json, fictitious anchors)",
+  "vectors": [
+    {
+      "name": "pass-released",
+      "verdict": {
+        "format": "dpo2u.travel-rule-verdict/1",
+        "transfer_id": "7472616e736665723a706173732d72656c656173656400000000000000000000",
+        "verdict": "PASS",
+        "released": true,
+        "reason": {
+          "code": 0,
+          "label": "none"
+        },
+        "policy_hash": "706f6c6963793a74726176656c2d72756c6540312e302e300000000000000000",
+        "originator_root": "0548aa2c72c37728dd70f6c161321590f1aea86780b96cb44f5d1c1d4c21fc20",
+        "beneficiary_root": "5974eddf008c8bd2abf5f119a493ba237137c1502f0a1a682f5e28d78d366fe7",
+        "source_chain": "midnight:simulator",
+        "source_contract": "0000000000000000000000000000000000000000000000000000000000006a7e",
+        "block": null,
+        "tx": null,
+        "sanctions": {
+          "list_root": "2ed13003fc1be9cb2262b8a9dcdcdbce8264dc80738ba35e01d3ed5863c6ff9f",
+          "provider_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "valid_until": 1800086400
+        }
+      },
+      "canonical": "{\"beneficiary_root\":\"5974eddf008c8bd2abf5f119a493ba237137c1502f0a1a682f5e28d78d366fe7\",\"block\":null,\"format\":\"dpo2u.travel-rule-verdict/1\",\"originator_root\":\"0548aa2c72c37728dd70f6c161321590f1aea86780b96cb44f5d1c1d4c21fc20\",\"policy_hash\":\"706f6c6963793a74726176656c2d72756c6540312e302e300000000000000000\",\"reason\":{\"code\":0,\"label\":\"none\"},\"released\":true,\"sanctions\":{\"list_root\":\"2ed13003fc1be9cb2262b8a9dcdcdbce8264dc80738ba35e01d3ed5863c6ff9f\",\"provider_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"valid_until\":1800086400},\"source_chain\":\"midnight:simulator\",\"source_contract\":\"0000000000000000000000000000000000000000000000000000000000006a7e\",\"transfer_id\":\"7472616e736665723a706173732d72656c656173656400000000000000000000\",\"tx\":null,\"verdict\":\"PASS\"}",
+      "digest": "135ce9b8f88f19cb1903d143563858eb953dafc697647da3c96d947a5b5022c9"
+    },
+    {
+      "name": "pass-not-released",
+      "verdict": {
+        "format": "dpo2u.travel-rule-verdict/1",
+        "transfer_id": "7472616e736665723a706173732d6e6f742d72656c6561736564000000000000",
+        "verdict": "PASS",
+        "released": false,
+        "reason": {
+          "code": 0,
+          "label": "none"
+        },
+        "policy_hash": "706f6c6963793a74726176656c2d72756c6540312e302e300000000000000000",
+        "originator_root": "e5f2e040d091ce6162cdb0c57dd6c1a465ecbb7b9edb3a1677d75c540eb57025",
+        "beneficiary_root": "08a5675d78ce5d288b7045a630773b96d04cc4d8fa351b94b8f5a8f9715b5ebc",
+        "source_chain": "midnight:simulator",
+        "source_contract": "0000000000000000000000000000000000000000000000000000000000006a7e",
+        "block": null,
+        "tx": null,
+        "sanctions": {
+          "list_root": "2ed13003fc1be9cb2262b8a9dcdcdbce8264dc80738ba35e01d3ed5863c6ff9f",
+          "provider_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "valid_until": 1800086400
+        }
+      },
+      "canonical": "{\"beneficiary_root\":\"08a5675d78ce5d288b7045a630773b96d04cc4d8fa351b94b8f5a8f9715b5ebc\",\"block\":null,\"format\":\"dpo2u.travel-rule-verdict/1\",\"originator_root\":\"e5f2e040d091ce6162cdb0c57dd6c1a465ecbb7b9edb3a1677d75c540eb57025\",\"policy_hash\":\"706f6c6963793a74726176656c2d72756c6540312e302e300000000000000000\",\"reason\":{\"code\":0,\"label\":\"none\"},\"released\":false,\"sanctions\":{\"list_root\":\"2ed13003fc1be9cb2262b8a9dcdcdbce8264dc80738ba35e01d3ed5863c6ff9f\",\"provider_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"valid_until\":1800086400},\"source_chain\":\"midnight:simulator\",\"source_contract\":\"0000000000000000000000000000000000000000000000000000000000006a7e\",\"transfer_id\":\"7472616e736665723a706173732d6e6f742d72656c6561736564000000000000\",\"tx\":null,\"verdict\":\"PASS\"}",
+      "digest": "7fb0bf0753385ba56c94077e84d1b4dd08f3bd703cb1524c5048983a625ba859"
+    },
+    {
+      "name": "fail-1-missing-party-info",
+      "verdict": {
+        "format": "dpo2u.travel-rule-verdict/1",
+        "transfer_id": "7472616e736665723a6661696c2d312d6d697373696e672d70617274792d696e",
+        "verdict": "FAIL",
+        "released": false,
+        "reason": {
+          "code": 1,
+          "label": "missing_party_info"
+        },
+        "policy_hash": "706f6c6963793a74726176656c2d72756c6540312e302e300000000000000000",
+        "originator_root": "f50322d3c02fb91a6fd75757790567a3e530baca8fa3229c128932a4e5954da3",
+        "beneficiary_root": "f7845367b34fcadbfc40a22c153ec308652cca5e0ab04a6becf3ef602eb43dd0",
+        "source_chain": "midnight:simulator",
+        "source_contract": "0000000000000000000000000000000000000000000000000000000000006a7e",
+        "block": null,
+        "tx": null,
+        "sanctions": {
+          "list_root": "2ed13003fc1be9cb2262b8a9dcdcdbce8264dc80738ba35e01d3ed5863c6ff9f",
+          "provider_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "valid_until": 1800086400
+        }
+      },
+      "canonical": "{\"beneficiary_root\":\"f7845367b34fcadbfc40a22c153ec308652cca5e0ab04a6becf3ef602eb43dd0\",\"block\":null,\"format\":\"dpo2u.travel-rule-verdict/1\",\"originator_root\":\"f50322d3c02fb91a6fd75757790567a3e530baca8fa3229c128932a4e5954da3\",\"policy_hash\":\"706f6c6963793a74726176656c2d72756c6540312e302e300000000000000000\",\"reason\":{\"code\":1,\"label\":\"missing_party_info\"},\"released\":false,\"sanctions\":{\"list_root\":\"2ed13003fc1be9cb2262b8a9dcdcdbce8264dc80738ba35e01d3ed5863c6ff9f\",\"provider_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"valid_until\":1800086400},\"source_chain\":\"midnight:simulator\",\"source_contract\":\"0000000000000000000000000000000000000000000000000000000000006a7e\",\"transfer_id\":\"7472616e736665723a6661696c2d312d6d697373696e672d70617274792d696e\",\"tx\":null,\"verdict\":\"FAIL\"}",
+      "digest": "a6d39bf6f00cb57e6228f4ebf3b80e7922ec9fe39e8e4212700ae9b92a8fc9c2"
+    },
+    {
+      "name": "fail-2-no-document-above-threshold",
+      "verdict": {
+        "format": "dpo2u.travel-rule-verdict/1",
+        "transfer_id": "7472616e736665723a6661696c2d322d6e6f2d646f63756d656e742d61626f76",
+        "verdict": "FAIL",
+        "released": false,
+        "reason": {
+          "code": 2,
+          "label": "missing_originator_document_above_threshold"
+        },
+        "policy_hash": "706f6c6963793a74726176656c2d72756c6540312e302e300000000000000000",
+        "originator_root": "1a1b21466d3e903084b472137d159cdbe67a5eaae35d1c682ebdc9d51fde0572",
+        "beneficiary_root": "8b3a8d0cfb18ff40b2e251e5703819031038ac131a3043d83e83be2cd7ee0331",
+        "source_chain": "midnight:simulator",
+        "source_contract": "0000000000000000000000000000000000000000000000000000000000006a7e",
+        "block": null,
+        "tx": null,
+        "sanctions": {
+          "list_root": "2ed13003fc1be9cb2262b8a9dcdcdbce8264dc80738ba35e01d3ed5863c6ff9f",
+          "provider_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "valid_until": 1800086400
+        }
+      },
+      "canonical": "{\"beneficiary_root\":\"8b3a8d0cfb18ff40b2e251e5703819031038ac131a3043d83e83be2cd7ee0331\",\"block\":null,\"format\":\"dpo2u.travel-rule-verdict/1\",\"originator_root\":\"1a1b21466d3e903084b472137d159cdbe67a5eaae35d1c682ebdc9d51fde0572\",\"policy_hash\":\"706f6c6963793a74726176656c2d72756c6540312e302e300000000000000000\",\"reason\":{\"code\":2,\"label\":\"missing_originator_document_above_threshold\"},\"released\":false,\"sanctions\":{\"list_root\":\"2ed13003fc1be9cb2262b8a9dcdcdbce8264dc80738ba35e01d3ed5863c6ff9f\",\"provider_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"valid_until\":1800086400},\"source_chain\":\"midnight:simulator\",\"source_contract\":\"0000000000000000000000000000000000000000000000000000000000006a7e\",\"transfer_id\":\"7472616e736665723a6661696c2d322d6e6f2d646f63756d656e742d61626f76\",\"tx\":null,\"verdict\":\"FAIL\"}",
+      "digest": "6cbe2e280260683472f3c55921d1a84084b2e65edf19d01a8d265a3299fea727"
+    },
+    {
+      "name": "fail-3-counterparty-not-attested",
+      "verdict": {
+        "format": "dpo2u.travel-rule-verdict/1",
+        "transfer_id": "7472616e736665723a6661696c2d332d636f756e74657270617274792d6e6f74",
+        "verdict": "FAIL",
+        "released": false,
+        "reason": {
+          "code": 3,
+          "label": "counterparty_vasp_not_attested"
+        },
+        "policy_hash": "706f6c6963793a74726176656c2d72756c6540312e302e300000000000000000",
+        "originator_root": "6525a5b186751c24e29e625a09904007e6ae54cd42b562fa78c09038094703fb",
+        "beneficiary_root": "709bbf34e8cee69c00d7e7f3f755fcbeda76446afa1cc9bc2928214247e66da9",
+        "source_chain": "midnight:simulator",
+        "source_contract": "0000000000000000000000000000000000000000000000000000000000006a7e",
+        "block": null,
+        "tx": null,
+        "sanctions": {
+          "list_root": "2ed13003fc1be9cb2262b8a9dcdcdbce8264dc80738ba35e01d3ed5863c6ff9f",
+          "provider_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "valid_until": 1800086400
+        }
+      },
+      "canonical": "{\"beneficiary_root\":\"709bbf34e8cee69c00d7e7f3f755fcbeda76446afa1cc9bc2928214247e66da9\",\"block\":null,\"format\":\"dpo2u.travel-rule-verdict/1\",\"originator_root\":\"6525a5b186751c24e29e625a09904007e6ae54cd42b562fa78c09038094703fb\",\"policy_hash\":\"706f6c6963793a74726176656c2d72756c6540312e302e300000000000000000\",\"reason\":{\"code\":3,\"label\":\"counterparty_vasp_not_attested\"},\"released\":false,\"sanctions\":{\"list_root\":\"2ed13003fc1be9cb2262b8a9dcdcdbce8264dc80738ba35e01d3ed5863c6ff9f\",\"provider_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"valid_until\":1800086400},\"source_chain\":\"midnight:simulator\",\"source_contract\":\"0000000000000000000000000000000000000000000000000000000000006a7e\",\"transfer_id\":\"7472616e736665723a6661696c2d332d636f756e74657270617274792d6e6f74\",\"tx\":null,\"verdict\":\"FAIL\"}",
+      "digest": "772efa720ef1f7491765b6608513a7b81a83d4e5cbdffb78103dd0cf2ad30b31"
+    },
+    {
+      "name": "fail-4-sanctions-hit",
+      "verdict": {
+        "format": "dpo2u.travel-rule-verdict/1",
+        "transfer_id": "7472616e736665723a6661696c2d342d73616e6374696f6e732d686974000000",
+        "verdict": "FAIL",
+        "released": false,
+        "reason": {
+          "code": 4,
+          "label": "sanctions_hit"
+        },
+        "policy_hash": "706f6c6963793a74726176656c2d72756c6540312e302e300000000000000000",
+        "originator_root": "b997bf832d96adbd234e28483afaeda3f55790535457f1d97d3f864fbd62f6bb",
+        "beneficiary_root": "a41a9626b558f45b6af1545f87809ed8f568cd7a019585cb236a1710ae6ba9f0",
+        "source_chain": "midnight:simulator",
+        "source_contract": "0000000000000000000000000000000000000000000000000000000000006a7e",
+        "block": null,
+        "tx": null,
+        "sanctions": {
+          "list_root": "2ed13003fc1be9cb2262b8a9dcdcdbce8264dc80738ba35e01d3ed5863c6ff9f",
+          "provider_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "valid_until": 1800086400
+        }
+      },
+      "canonical": "{\"beneficiary_root\":\"a41a9626b558f45b6af1545f87809ed8f568cd7a019585cb236a1710ae6ba9f0\",\"block\":null,\"format\":\"dpo2u.travel-rule-verdict/1\",\"originator_root\":\"b997bf832d96adbd234e28483afaeda3f55790535457f1d97d3f864fbd62f6bb\",\"policy_hash\":\"706f6c6963793a74726176656c2d72756c6540312e302e300000000000000000\",\"reason\":{\"code\":4,\"label\":\"sanctions_hit\"},\"released\":false,\"sanctions\":{\"list_root\":\"2ed13003fc1be9cb2262b8a9dcdcdbce8264dc80738ba35e01d3ed5863c6ff9f\",\"provider_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"valid_until\":1800086400},\"source_chain\":\"midnight:simulator\",\"source_contract\":\"0000000000000000000000000000000000000000000000000000000000006a7e\",\"transfer_id\":\"7472616e736665723a6661696c2d342d73616e6374696f6e732d686974000000\",\"tx\":null,\"verdict\":\"FAIL\"}",
+      "digest": "efe0cac0cdf2a8057ba57d209af8865493c7e9bb1db853b7707a7ff1760e3999"
+    },
+    {
+      "name": "pass-released-anchored",
+      "verdict": {
+        "format": "dpo2u.travel-rule-verdict/1",
+        "transfer_id": "7472616e736665723a706173732d72656c656173656400000000000000000000",
+        "verdict": "PASS",
+        "released": true,
+        "reason": {
+          "code": 0,
+          "label": "none"
+        },
+        "policy_hash": "706f6c6963793a74726176656c2d72756c6540312e302e300000000000000000",
+        "originator_root": "0548aa2c72c37728dd70f6c161321590f1aea86780b96cb44f5d1c1d4c21fc20",
+        "beneficiary_root": "5974eddf008c8bd2abf5f119a493ba237137c1502f0a1a682f5e28d78d366fe7",
+        "source_chain": "midnight:preview",
+        "source_contract": "0000000000000000000000000000000000000000000000000000000000006a7e",
+        "block": {
+          "height": 81001,
+          "hash": "d724bb00cf1e325f0e156d9c511e90bd216df9f402d72abd9e25e526751f7594"
+        },
+        "tx": "4adc3ef52f38c83139bffc6f13eb944210a4b8e313ac7c7d9cca7f5f6ee32065",
+        "sanctions": {
+          "list_root": "2ed13003fc1be9cb2262b8a9dcdcdbce8264dc80738ba35e01d3ed5863c6ff9f",
+          "provider_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "valid_until": 1800086400
+        }
+      },
+      "canonical": "{\"beneficiary_root\":\"5974eddf008c8bd2abf5f119a493ba237137c1502f0a1a682f5e28d78d366fe7\",\"block\":{\"hash\":\"d724bb00cf1e325f0e156d9c511e90bd216df9f402d72abd9e25e526751f7594\",\"height\":81001},\"format\":\"dpo2u.travel-rule-verdict/1\",\"originator_root\":\"0548aa2c72c37728dd70f6c161321590f1aea86780b96cb44f5d1c1d4c21fc20\",\"policy_hash\":\"706f6c6963793a74726176656c2d72756c6540312e302e300000000000000000\",\"reason\":{\"code\":0,\"label\":\"none\"},\"released\":true,\"sanctions\":{\"list_root\":\"2ed13003fc1be9cb2262b8a9dcdcdbce8264dc80738ba35e01d3ed5863c6ff9f\",\"provider_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"valid_until\":1800086400},\"source_chain\":\"midnight:preview\",\"source_contract\":\"0000000000000000000000000000000000000000000000000000000000006a7e\",\"transfer_id\":\"7472616e736665723a706173732d72656c656173656400000000000000000000\",\"tx\":\"4adc3ef52f38c83139bffc6f13eb944210a4b8e313ac7c7d9cca7f5f6ee32065\",\"verdict\":\"PASS\"}",
+      "digest": "625bded4829ea3426b595d224fdee39701e93e96ef411ada73e925ad25f15d3f"
+    },
+    {
+      "name": "pass-not-released-anchored",
+      "verdict": {
+        "format": "dpo2u.travel-rule-verdict/1",
+        "transfer_id": "7472616e736665723a706173732d6e6f742d72656c6561736564000000000000",
+        "verdict": "PASS",
+        "released": false,
+        "reason": {
+          "code": 0,
+          "label": "none"
+        },
+        "policy_hash": "706f6c6963793a74726176656c2d72756c6540312e302e300000000000000000",
+        "originator_root": "e5f2e040d091ce6162cdb0c57dd6c1a465ecbb7b9edb3a1677d75c540eb57025",
+        "beneficiary_root": "08a5675d78ce5d288b7045a630773b96d04cc4d8fa351b94b8f5a8f9715b5ebc",
+        "source_chain": "midnight:preview",
+        "source_contract": "0000000000000000000000000000000000000000000000000000000000006a7e",
+        "block": {
+          "height": 81002,
+          "hash": "fd43fa93d43a45c63bb88b93c0226f11ca76683e9d06116042cce36fa4264b25"
+        },
+        "tx": "8d4d8a89b22f00b8d17affd9d7034fc6c405a7046a92242a7257460859480355",
+        "sanctions": {
+          "list_root": "2ed13003fc1be9cb2262b8a9dcdcdbce8264dc80738ba35e01d3ed5863c6ff9f",
+          "provider_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "valid_until": 1800086400
+        }
+      },
+      "canonical": "{\"beneficiary_root\":\"08a5675d78ce5d288b7045a630773b96d04cc4d8fa351b94b8f5a8f9715b5ebc\",\"block\":{\"hash\":\"fd43fa93d43a45c63bb88b93c0226f11ca76683e9d06116042cce36fa4264b25\",\"height\":81002},\"format\":\"dpo2u.travel-rule-verdict/1\",\"originator_root\":\"e5f2e040d091ce6162cdb0c57dd6c1a465ecbb7b9edb3a1677d75c540eb57025\",\"policy_hash\":\"706f6c6963793a74726176656c2d72756c6540312e302e300000000000000000\",\"reason\":{\"code\":0,\"label\":\"none\"},\"released\":false,\"sanctions\":{\"list_root\":\"2ed13003fc1be9cb2262b8a9dcdcdbce8264dc80738ba35e01d3ed5863c6ff9f\",\"provider_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"valid_until\":1800086400},\"source_chain\":\"midnight:preview\",\"source_contract\":\"0000000000000000000000000000000000000000000000000000000000006a7e\",\"transfer_id\":\"7472616e736665723a706173732d6e6f742d72656c6561736564000000000000\",\"tx\":\"8d4d8a89b22f00b8d17affd9d7034fc6c405a7046a92242a7257460859480355\",\"verdict\":\"PASS\"}",
+      "digest": "9c31b97ffbfd7e0e8d5b0f3ce416cd694871ebc6bdac3f3b95e5cf2a7a7760fb"
+    },
+    {
+      "name": "fail-4-sanctions-hit-anchored",
+      "verdict": {
+        "format": "dpo2u.travel-rule-verdict/1",
+        "transfer_id": "7472616e736665723a6661696c2d342d73616e6374696f6e732d686974000000",
+        "verdict": "FAIL",
+        "released": false,
+        "reason": {
+          "code": 4,
+          "label": "sanctions_hit"
+        },
+        "policy_hash": "706f6c6963793a74726176656c2d72756c6540312e302e300000000000000000",
+        "originator_root": "b997bf832d96adbd234e28483afaeda3f55790535457f1d97d3f864fbd62f6bb",
+        "beneficiary_root": "a41a9626b558f45b6af1545f87809ed8f568cd7a019585cb236a1710ae6ba9f0",
+        "source_chain": "midnight:preview",
+        "source_contract": "0000000000000000000000000000000000000000000000000000000000006a7e",
+        "block": {
+          "height": 81003,
+          "hash": "a71923e72ae7602021d78f6513944d4ae8756ef136a7d33fea16a053cf91c08d"
+        },
+        "tx": "e23bf11e92b5750ed26d39bb184ab89f750679cd1070e231ee84b015ced0ad54",
+        "sanctions": {
+          "list_root": "2ed13003fc1be9cb2262b8a9dcdcdbce8264dc80738ba35e01d3ed5863c6ff9f",
+          "provider_id": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "valid_until": 1800086400
+        }
+      },
+      "canonical": "{\"beneficiary_root\":\"a41a9626b558f45b6af1545f87809ed8f568cd7a019585cb236a1710ae6ba9f0\",\"block\":{\"hash\":\"a71923e72ae7602021d78f6513944d4ae8756ef136a7d33fea16a053cf91c08d\",\"height\":81003},\"format\":\"dpo2u.travel-rule-verdict/1\",\"originator_root\":\"b997bf832d96adbd234e28483afaeda3f55790535457f1d97d3f864fbd62f6bb\",\"policy_hash\":\"706f6c6963793a74726176656c2d72756c6540312e302e300000000000000000\",\"reason\":{\"code\":4,\"label\":\"sanctions_hit\"},\"released\":false,\"sanctions\":{\"list_root\":\"2ed13003fc1be9cb2262b8a9dcdcdbce8264dc80738ba35e01d3ed5863c6ff9f\",\"provider_id\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"valid_until\":1800086400},\"source_chain\":\"midnight:preview\",\"source_contract\":\"0000000000000000000000000000000000000000000000000000000000006a7e\",\"transfer_id\":\"7472616e736665723a6661696c2d342d73616e6374696f6e732d686974000000\",\"tx\":\"e23bf11e92b5750ed26d39bb184ab89f750679cd1070e231ee84b015ced0ad54\",\"verdict\":\"FAIL\"}",
+      "digest": "01bc20162c6d88a8411c622e359300839f28ebaa1201bc139d757a5f8bacd800"
+    },
+    {
+      "name": "pass-released-anchored-no-sanctions",
+      "verdict": {
+        "format": "dpo2u.travel-rule-verdict/1",
+        "transfer_id": "7472616e736665723a706173732d72656c656173656400000000000000000000",
+        "verdict": "PASS",
+        "released": true,
+        "reason": {
+          "code": 0,
+          "label": "none"
+        },
+        "policy_hash": "706f6c6963793a74726176656c2d72756c6540312e302e300000000000000000",
+        "originator_root": "0548aa2c72c37728dd70f6c161321590f1aea86780b96cb44f5d1c1d4c21fc20",
+        "beneficiary_root": "5974eddf008c8bd2abf5f119a493ba237137c1502f0a1a682f5e28d78d366fe7",
+        "source_chain": "midnight:preview",
+        "source_contract": "0000000000000000000000000000000000000000000000000000000000006a7e",
+        "block": {
+          "height": 81004,
+          "hash": "8b98bfd2899ad0f00e5335364f652517ef589cf1b6f84c524e4cceeaae25b99d"
+        },
+        "tx": "8c392b2047478280d73d9e4f945c8b5b0a14de2621b327ffdaa8e133011c9a7f"
+      },
+      "canonical": "{\"beneficiary_root\":\"5974eddf008c8bd2abf5f119a493ba237137c1502f0a1a682f5e28d78d366fe7\",\"block\":{\"hash\":\"8b98bfd2899ad0f00e5335364f652517ef589cf1b6f84c524e4cceeaae25b99d\",\"height\":81004},\"format\":\"dpo2u.travel-rule-verdict/1\",\"originator_root\":\"0548aa2c72c37728dd70f6c161321590f1aea86780b96cb44f5d1c1d4c21fc20\",\"policy_hash\":\"706f6c6963793a74726176656c2d72756c6540312e302e300000000000000000\",\"reason\":{\"code\":0,\"label\":\"none\"},\"released\":true,\"source_chain\":\"midnight:preview\",\"source_contract\":\"0000000000000000000000000000000000000000000000000000000000006a7e\",\"transfer_id\":\"7472616e736665723a706173732d72656c656173656400000000000000000000\",\"tx\":\"8c392b2047478280d73d9e4f945c8b5b0a14de2621b327ffdaa8e133011c9a7f\",\"verdict\":\"PASS\"}",
+      "digest": "9153d92eae7b9e48fb486fd8c7506eb1e1adef472909def8043b72d1692ab829"
+    },
+    {
+      "name": "fail-1-missing-party-info-no-sanctions",
+      "verdict": {
+        "format": "dpo2u.travel-rule-verdict/1",
+        "transfer_id": "7472616e736665723a6661696c2d312d6d697373696e672d70617274792d696e",
+        "verdict": "FAIL",
+        "released": false,
+        "reason": {
+          "code": 1,
+          "label": "missing_party_info"
+        },
+        "policy_hash": "706f6c6963793a74726176656c2d72756c6540312e302e300000000000000000",
+        "originator_root": "f50322d3c02fb91a6fd75757790567a3e530baca8fa3229c128932a4e5954da3",
+        "beneficiary_root": "f7845367b34fcadbfc40a22c153ec308652cca5e0ab04a6becf3ef602eb43dd0",
+        "source_chain": "midnight:simulator",
+        "source_contract": "0000000000000000000000000000000000000000000000000000000000006a7e",
+        "block": null,
+        "tx": null
+      },
+      "canonical": "{\"beneficiary_root\":\"f7845367b34fcadbfc40a22c153ec308652cca5e0ab04a6becf3ef602eb43dd0\",\"block\":null,\"format\":\"dpo2u.travel-rule-verdict/1\",\"originator_root\":\"f50322d3c02fb91a6fd75757790567a3e530baca8fa3229c128932a4e5954da3\",\"policy_hash\":\"706f6c6963793a74726176656c2d72756c6540312e302e300000000000000000\",\"reason\":{\"code\":1,\"label\":\"missing_party_info\"},\"released\":false,\"source_chain\":\"midnight:simulator\",\"source_contract\":\"0000000000000000000000000000000000000000000000000000000000006a7e\",\"transfer_id\":\"7472616e736665723a6661696c2d312d6d697373696e672d70617274792d696e\",\"tx\":null,\"verdict\":\"FAIL\"}",
+      "digest": "dd4f7b44e9ef568657be2b30e37519fff62e9c162f31d34108d8f98cfbc6c4d1"
+    }
+  ]
+}
