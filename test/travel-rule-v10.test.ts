@@ -40,7 +40,7 @@ function depFile(entry: Record<string, unknown>): string {
   fs.writeFileSync(f, JSON.stringify({ network: 'preview', contracts: { TravelRuleGate: entry, PsavPassport: { contractAddress: PASSPORT }, ComplianceRegistry: { contractAddress: REGISTRY } } }));
   return f;
 }
-const V10 = { contractAddress: GATE, accessControl: 'owner-v2', codeVersion: 'v10', links: { PsavPassport: PASSPORT, ComplianceRegistry: REGISTRY } };
+const V10 = { contractAddress: GATE, accessControl: 'owner-v2', codeVersion: 'v11', links: { PsavPassport: PASSPORT, ComplianceRegistry: REGISTRY } };
 
 const run = async (c: any, circuit: string, state: any, ps: any, ...args: unknown[]) =>
   (await c.circuits[circuit](createCircuitContext({ circuitId: circuit, contractAddress: simAddress(0xffff), coinPublicKeyOrZswapState: CPK, contractState: state, privateState: ps, time: T0 } as any), ...args)).context.callContext.currentQueryContext.state;
@@ -85,14 +85,16 @@ describe('travel-rule-v10: deployment', () => {
     const d = readGateDeployment(ROOT, 'preview', depFile(V10));
     assert.equal(d.gate, GATE);
     assert.deepEqual(d.links, { PsavPassport: PASSPORT, ComplianceRegistry: REGISTRY });
-    assert.throws(() => readGateDeployment(ROOT, 'preview', depFile({ ...V10, codeVersion: undefined })), /pre-v10 layout/);
+    assert.throws(() => readGateDeployment(ROOT, 'preview', depFile({ ...V10, codeVersion: undefined })), /not the v11 layout/);
+    // a v10 gate has no in-circuit sanctions screening: refused too (redeploy as v11)
+    assert.throws(() => readGateDeployment(ROOT, 'preview', depFile({ ...V10, codeVersion: 'v10' })), /not the v11 layout \(got v10/);
     const f = depFile({ ...V10, links: { PsavPassport: PASSPORT } });
     const j = JSON.parse(fs.readFileSync(f, 'utf8')); delete j.contracts.ComplianceRegistry; fs.writeFileSync(f, JSON.stringify(j));
     assert.throws(() => readGateDeployment(ROOT, 'preview', f), /link to ComplianceRegistry missing/);
   });
 
   it('the current preview file still has the pre-v10 gate (needs the v10 redeploy first)', () => {
-    assert.throws(() => readGateDeployment(ROOT, 'preview'), /pre-v10 layout/);
+    assert.throws(() => readGateDeployment(ROOT, 'preview'), /not the v11 layout/);
   });
 });
 

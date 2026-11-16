@@ -41,7 +41,7 @@ import { WebSocket } from 'ws';
 import { deployContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
 import * as Rx from 'rxjs';
-import { networkConfig, openWallet, ensureDust, makeProviders, masterSeedHex, dustBalance, V10_CONTRACTS, CODE_VERSION } from './lib/midnight-v9.js';
+import { networkConfig, openWallet, ensureDust, makeProviders, masterSeedHex, dustBalance, V10_CONTRACTS, codeVersionOf } from './lib/midnight-v9.js';
 import { ownerSecret, ownerCommit, approverCommit } from './owner.js';
 import { encodeContractAddress } from '@midnight-ntwrk/compact-runtime';
 import { institutionGateInputs, institutionGate, recordInstitutionGate, companyIdBytes } from './lib/institutions.js';
@@ -89,7 +89,7 @@ const CONTRACTS: Record<string, (c: ArgCtx) => unknown[]> = {
 };
 
 /** An entry is current when it has access control and, for contracts changed in v10, the v10 code. */
-const isCurrent = (name: string, e: any) => e?.accessControl === 'owner-v2' && (!V10_CONTRACTS.has(name) || e?.codeVersion === CODE_VERSION);
+const isCurrent = (name: string, e: any) => e?.accessControl === 'owner-v2' && (!V10_CONTRACTS.has(name) || e?.codeVersion === codeVersionOf(name));
 
 const { values } = parseArgs({
   options: { only: { type: 'string' }, all: { type: 'boolean', default: false }, 'dry-run': { type: 'boolean', default: false }, plan: { type: 'boolean', default: false },
@@ -169,7 +169,7 @@ async function main() {
     const dustAfter = dustBalance(await Rx.firstValueFrom(w.facade.state()));
     const entry: Record<string, unknown> = { contractAddress: String(d.contractAddress), txId: d.txId, blockHeight: d.blockHeight,
       deployedAt: new Date().toISOString(), compiler: 'compactc 0.36.0', accessControl: 'owner-v2',
-      ...(V10_CONTRACTS.has(p.name) ? { codeVersion: CODE_VERSION } : {}),
+      ...(V10_CONTRACTS.has(p.name) ? { codeVersion: codeVersionOf(p.name) } : {}),
       ...(p.name === 'TravelRuleGate' ? { links: { PsavPassport: addressOf('PsavPassport'), ComplianceRegistry: addressOf('ComplianceRegistry') } } : {}),
       dustSpent: String(dustBefore - dustAfter), dustBefore: String(dustBefore), seconds: Math.round((Date.now() - t0) / 1000) };
     if (inst) recordInstitutionGate(out, values.institution!, { ...entry, institution: values.institution, selfCompanyId: inst.selfCompanyId,

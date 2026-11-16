@@ -40,7 +40,7 @@ import { toHex } from '@midnight-ntwrk/midnight-js-utils';
 import * as ledger from '@midnight-ntwrk/ledger-v9';
 import { MidnightBech32m, UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
-import { networkConfig, openWallet, ensureDust, makeProviders, masterSeedHex, dustBalance, V10_CONTRACTS, CODE_VERSION, type V9Wallet } from './lib/midnight-v9.js';
+import { networkConfig, openWallet, ensureDust, makeProviders, masterSeedHex, dustBalance, V10_CONTRACTS, codeVersionOf, type V9Wallet } from './lib/midnight-v9.js';
 import { ownerSecret, ownerWitnesses, scoreSalt, setScoreSalt } from './owner.js';
 
 import * as ComplianceRegistry from '../build/ComplianceRegistry/contract/index.js';
@@ -130,7 +130,7 @@ function deploymentAddress(network: string, name: string): string {
   const c = JSON.parse(fs.readFileSync(file, 'utf8')).contracts?.[name];
   if (!c?.contractAddress) throw new Error(`${name} not in ${file}`);
   if (c.accessControl !== 'owner-v2') throw new Error(`${name} in ${file} was deployed without access control or with the untagged owner_commitment (owner-v1); redeploy`);
-  if (V10_CONTRACTS.has(name) && c.codeVersion !== CODE_VERSION) throw new Error(`${name} in ${file} is the pre-${CODE_VERSION} layout; redeploy with scripts/deploy-v9.ts`);
+  if (V10_CONTRACTS.has(name) && c.codeVersion !== codeVersionOf(name)) throw new Error(`${name} in ${file} is not the ${codeVersionOf(name)} layout; redeploy with scripts/deploy-v9.ts`);
   return c.contractAddress;
 }
 

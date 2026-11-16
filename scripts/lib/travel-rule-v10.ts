@@ -14,7 +14,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
-import { CODE_VERSION } from './midnight-v9.js';
+import { codeVersionOf } from './midnight-v9.js';
 import { institutionGate } from './institutions.js';
 
 export const GATE = 'TravelRuleGate';
@@ -40,7 +40,7 @@ export function readGateDeployment(root: string, network: string, fileOverride?:
   // --institution <id>: that institution's own gate (institutions.<id>.TravelRuleGate); the callees stay shared.
   const g = institution ? institutionGate(json, institution) : contracts[GATE];
   if (!g?.contractAddress) throw new Error(institution ? `institution ${institution} has no ${GATE} in ${file} (deploy-v9.ts --institution ${institution})` : `${GATE} not in ${file}`);
-  if (g.codeVersion !== CODE_VERSION) throw new Error(`${GATE} in ${file} is the pre-${CODE_VERSION} layout (no PsavPassport/ComplianceRegistry link); redeploy with scripts/deploy-v9.ts`);
+  if (g.codeVersion !== codeVersionOf(GATE)) throw new Error(`${GATE} in ${file} is not the ${codeVersionOf(GATE)} layout (got ${g.codeVersion ?? 'none'}: v10 has no in-circuit sanctions screening, older ones no PsavPassport/ComplianceRegistry link); redeploy with scripts/deploy-v9.ts`);
   const links = {} as Record<CalleeName, string>;
   for (const n of CALLEES) {
     const a = g.links?.[n] ?? contracts[n]?.contractAddress;

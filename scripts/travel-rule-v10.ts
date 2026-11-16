@@ -4,7 +4,7 @@
  *
  *   MIDNIGHT_NETWORK=preview npx tsx scripts/travel-rule-v10.ts <command> [options] [--plan]
  *
- * Commands (addresses from deployment-<net>-v9.json, gate must be codeVersion v10):
+ * Commands (addresses from deployment-<net>-v9.json, gate must be codeVersion v11):
  *   attest-self     ComplianceRegistry.attestCompliance for TRAVEL_RULE_SELF_COMPANY_ID
  *                   --score N (private) --threshold N --context LABEL --evidence HEX|LABEL
  *   issue-passport  PsavPassport.issuePassport, tier 0 (machine-only), one machine rule PASS

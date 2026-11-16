@@ -105,7 +105,7 @@ describe('E3: passport from the gateway queue', () => {
     fs.writeFileSync(path.join(d, 'q.json'), JSON.stringify(payloadFor()));
     fs.writeFileSync(path.join(d, 'pre.json'), JSON.stringify(PRE), { mode: 0o600 });
     const a = (n: number) => n.toString(16).padStart(64, '0');
-    fs.writeFileSync(path.join(d, 'dep.json'), JSON.stringify({ contracts: { TravelRuleGate: { contractAddress: a(1), codeVersion: 'v10', links: { PsavPassport: a(2), ComplianceRegistry: a(3) } } } }));
+    fs.writeFileSync(path.join(d, 'dep.json'), JSON.stringify({ contracts: { TravelRuleGate: { contractAddress: a(1), codeVersion: 'v11', links: { PsavPassport: a(2), ComplianceRegistry: a(3) } } } }));
     const out = execFileSync(process.execPath, ['--import', 'tsx', path.join(ROOT, 'scripts', 'travel-rule-v10.ts'), 'issue-passport', '--from-queue', path.join(d, 'q.json'), '--passport-witness', path.join(d, 'pre.json'), '--deployment', path.join(d, 'dep.json'), '--plan'], { cwd: ROOT, env: { ...process.env, MIDNIGHT_NETWORK: 'preview' } }).toString();
     const plan = JSON.parse(out).plan;
     assert.equal(plan.circuit, 'issuePassport');
@@ -247,8 +247,8 @@ describe('E6: one TravelRuleGate per institution', () => {
   it('recorded under institutions.<id>; travel-rule-v10 --institution reads that gate with the shared callees', () => {
     const a = (n: number) => n.toString(16).padStart(64, '0');
     const dep: any = { network: 'preview', contracts: { PsavPassport: { contractAddress: a(2) }, ComplianceRegistry: { contractAddress: a(3) },
-      TravelRuleGate: { contractAddress: a(1), codeVersion: 'v10', links: { PsavPassport: a(2), ComplianceRegistry: a(3) } } } };
-    recordInstitutionGate(dep, 'vasp-alpha', { contractAddress: a(9), codeVersion: 'v10', accessControl: 'owner-v2', links: { PsavPassport: a(2), ComplianceRegistry: a(3) }, institution: 'vasp-alpha' });
+      TravelRuleGate: { contractAddress: a(1), codeVersion: 'v11', links: { PsavPassport: a(2), ComplianceRegistry: a(3) } } } };
+    recordInstitutionGate(dep, 'vasp-alpha', { contractAddress: a(9), codeVersion: 'v11', accessControl: 'owner-v2', links: { PsavPassport: a(2), ComplianceRegistry: a(3) }, institution: 'vasp-alpha' });
     assert.equal(institutionGate(dep, 'vasp-alpha').contractAddress, a(9));
     const f = path.join(tmp(), 'dep.json'); fs.writeFileSync(f, JSON.stringify(dep));
     const g = readGateDeployment(ROOT, 'preview', f, 'vasp-alpha');
