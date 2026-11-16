@@ -15,7 +15,7 @@ import * as Passport from '../build/PsavPassport/contract/index.js';
 import { parseQueuePayload, parsePreimages, issueFromQueue, expectedVerdict, QUEUE_FIELDS, QUEUE_FIELD_MAP, deriveQueuePassport, preimagePath, readPreimageFile } from '../scripts/lib/passport-queue.js';
 import { parseCompanyAttestation, policyCid, selfAttestationContext } from '../scripts/lib/company-attestation.js';
 import { parseTransferItem, parseReleaseItem, witnessPath, readWitnessFile, dropWitness } from '../scripts/lib/transfer-queue.js';
-import { institutionGateInputs, recordInstitutionGate, institutionGate } from '../scripts/lib/institutions.js';
+import { institutionGateInputs, recordInstitutionGate, institutionGate, companyIdBytes } from '../scripts/lib/institutions.js';
 import { readGateDeployment } from '../scripts/lib/travel-rule-v10.js';
 import { buildEvidencePack } from '../src/evidence/gateway.js';
 import { DisclosureGovernance } from '../src/disclosure/governance.js';
@@ -231,6 +231,17 @@ describe('E6: one TravelRuleGate per institution', () => {
     assert.throws(() => institutionGateInputs({ institution: 'vasp-alpha', approverCommit: c }, {}), /self-company-id/);
     assert.throws(() => institutionGateInputs({ institution: 'Banco X', selfCompanyId: 'x', approverCommit: c }, {}), /institution id/);
     assert.equal(institutionGateInputs({ institution: 'vasp-beta', selfCompanyId: 'x' }, { DPO2U_APPROVER_COMMIT: c }).thresholdCents, 100_000n);
+  });
+
+  it('self_company_id: the gate constructor bytes equal the company_id bytes the E4 self-attestation writes', () => {
+    const cid = hx('dpo2u.company:licenciada-staging-fictitious');
+    const gateSelf = companyIdBytes(institutionGateInputs({ institution: 'vasp-alpha', selfCompanyId: cid, approverCommit: 'cd'.repeat(32) }, {}).selfCompanyId);
+    const e4 = parseCompanyAttestation({ company_id: cid, evidence_hash: hx('r'), verdict: 'PASS', score: 100, threshold: 100, passport_ref: 'p', regimes: ['LGPD'], engine: 'e' }).companyId;
+    assert.deepEqual(gateSelf, e4);
+    assert.equal(Buffer.from(gateSelf).toString('hex'), cid);
+    assert.deepEqual(companyIdBytes(cid.toUpperCase()), gateSelf);
+    assert.deepEqual(companyIdBytes('bench-company'), pad('bench-company'));
+    assert.throws(() => companyIdBytes('x'.repeat(33)), /longer than 32 bytes/);
   });
 
   it('recorded under institutions.<id>; travel-rule-v10 --institution reads that gate with the shared callees', () => {
