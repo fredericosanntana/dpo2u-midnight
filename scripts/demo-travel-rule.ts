@@ -16,7 +16,7 @@ import { Contract, ledger, pureCircuits } from '../build/TravelRuleGate/contract
 import * as Passport from '../build/PsavPassport/contract/index.js';
 import * as Registry from '../build/ComplianceRegistry/contract/index.js';
 import { simAddress, contractRef, asDeployed, crossContract, SIM_BLOCK_HASH } from './lib/sim-cross-contract.js';
-import { newProviderKey, signSanctionsList, sanctionsListRoot } from './lib/sanctions-list.js';
+import { newProviderKey, signSanctionsList, SanctionsTree } from './lib/sanctions-list.js';
 import { DisclosureGovernance, type DataSource, type Field, type Party as P } from '../src/disclosure/governance.js';
 import { buildPack, verifyPack, type Attestation } from '../src/evidence/pack.js';
 
@@ -59,17 +59,18 @@ const cross = crossContract({
   [REGISTRY]: { state: asDeployed(rInit, rState, 'ComplianceRegistry'), module: Registry },
 });
 
-type PS = { o: any; b: any; amount: bigint; clear: boolean };
+type PS = { o: any; b: any; amount: bigint };
 const contract = new Contract<PS>({
   originator_data: (c: any) => [c.privateState, c.privateState.o], beneficiary_data: (c: any) => [c.privateState, c.privateState.b],
-  transfer_amount: (c: any) => [c.privateState, c.privateState.amount], sanctions_clear: (c: any) => [c.privateState, c.privateState.clear],
+  transfer_amount: (c: any) => [c.privateState, c.privateState.amount], sanctions_path: (c: any, key: bigint) => [c.privateState, TREE.path(key)],
   owner_secret: (c: any) => [c.privateState, OWNER], approver_secret: (c: any) => [c.privateState, APPROVER],
   sanctions_list: (c: any) => [c.privateState, LIST],
 } as any);
-// Sanctions list: a fictitious provider signs one snapshot, valid one day.
+// Sanctions list: a fictitious provider signs one snapshot (indexed tree of entry hashes), valid one day.
 const PROVIDER = new Uint8Array(32).fill(0xaa);
 const providerKey = newProviderKey();
-const LIST = signSanctionsList({ pureCircuits } as any, providerKey.sk, { provider_id: PROVIDER, list_root: sanctionsListRoot(['11'.repeat(32)]), issued_at: BigInt(NOW - 3600), valid_until: BigInt(NOW + 86_400) });
+const TREE = new SanctionsTree(['11'.repeat(32)]);
+const LIST = signSanctionsList({ pureCircuits } as any, providerKey.sk, { provider_id: PROVIDER, list_root: TREE.rootBytes, issued_at: BigInt(NOW - 3600), valid_until: BigInt(NOW + 86_400) });
 
 const { currentContractState } = await contract.initialState(createConstructorContext({} as any, CPK), pureCircuits.owner_commitment(OWNER), 100_000n,
   contractRef(PASSPORT), contractRef(REGISTRY), SELF, pureCircuits.approver_commitment(APPROVER));
@@ -83,9 +84,9 @@ const run = async <T>(ps: PS, f: (ctx: any) => Promise<{ context: any; result: T
 };
 
 const COUNTERPARTY = 'vasp:counterparty-A (fictitious)';
-const t1: PS = { o: party('orig-1', true, 'vasp:example'), b: party('benef-1', true, COUNTERPARTY), amount: 250_000n, clear: true };
-const t2: PS = { o: party('orig-2', false, 'vasp:example'), b: party('benef-2', true, 'vasp:unknown'), amount: 250_000n, clear: true };
-const t3: PS = { o: party('orig-3', true, 'vasp:example'), b: party('benef-3', true, PASSPORT_VASP), amount: 250_000n, clear: true };
+const t1: PS = { o: party('orig-1', true, 'vasp:example'), b: party('benef-1', true, COUNTERPARTY), amount: 250_000n };
+const t2: PS = { o: party('orig-2', false, 'vasp:example'), b: party('benef-2', true, 'vasp:unknown'), amount: 250_000n };
+const t3: PS = { o: party('orig-3', true, 'vasp:example'), b: party('benef-3', true, PASSPORT_VASP), amount: 250_000n };
 await run(t1, (c) => contract.circuits.registerSanctionsProvider(c, PROVIDER, providerKey.pk));
 await run(t1, (c) => contract.circuits.attestVasp(c, b32(COUNTERPARTY)));
 const ids = { pass: b32('transfer-PASS-001'), fail: b32('transfer-FAIL-002'), passport: b32('transfer-PASSPORT-003') };

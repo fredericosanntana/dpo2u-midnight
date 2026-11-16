@@ -89,17 +89,19 @@ export const hex = (u: Uint8Array) => Buffer.from(u).toString('hex');
 
 // ── private transfer data (evaluateTransfer witnesses) ──
 export type PartyIn = { name_hash: string; account_hash: string; doc_hash: string; vasp_id: string; salt: string };
-export type TransferWitness = { originator: PartyIn; beneficiary: PartyIn; amount_cents: string | number; sanctions_clear: boolean };
+// sanctions_clear (the VASP's own screening result, up to v10) is ignored since v11: the gate proves the
+// screening in-circuit from the signed list (witness sanctions_path). Accepted so older writers keep working.
+export type TransferWitness = { originator: PartyIn; beneficiary: PartyIn; amount_cents: string | number; sanctions_clear?: boolean };
 export type PartyBytes = { name_hash: Uint8Array; account_hash: Uint8Array; doc_hash: Uint8Array; vasp_id: Uint8Array; salt: Uint8Array };
 
 /** Reads the transfer's private data (hashes and salts, never raw PII) from a mode-600 JSON file. */
-export function readTransferWitness(file: string): { o: PartyBytes; b: PartyBytes; amount: bigint; clear: boolean } {
+export function readTransferWitness(file: string): { o: PartyBytes; b: PartyBytes; amount: bigint } {
   const st = fs.statSync(file);
   if ((st.mode & 0o077) !== 0) throw new Error(`${file} holds private transfer data: it must be mode 600`);
   return parseTransferWitness(JSON.parse(fs.readFileSync(file, 'utf8')));
 }
 
-export function parseTransferWitness(j: TransferWitness): { o: PartyBytes; b: PartyBytes; amount: bigint; clear: boolean } {
+export function parseTransferWitness(j: TransferWitness): { o: PartyBytes; b: PartyBytes; amount: bigint } {
   const party = (p: PartyIn, who: string): PartyBytes => {
     const out: any = {};
     for (const k of ['name_hash', 'account_hash', 'doc_hash', 'vasp_id', 'salt'] as const) {
@@ -110,10 +112,9 @@ export function parseTransferWitness(j: TransferWitness): { o: PartyBytes; b: Pa
     }
     return out;
   };
-  if (typeof j.sanctions_clear !== 'boolean') throw new Error('sanctions_clear must be true or false (result of the VASP screening)');
   const amount = BigInt(j.amount_cents);
   if (amount < 0n) throw new Error('amount_cents must be >= 0');
-  return { o: party(j.originator, 'originator'), b: party(j.beneficiary, 'beneficiary'), amount, clear: j.sanctions_clear };
+  return { o: party(j.originator, 'originator'), b: party(j.beneficiary, 'beneficiary'), amount };
 }
 
 // ── approver key ──

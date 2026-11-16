@@ -38,14 +38,14 @@ Fallback (design 1B, not used): if cross-contract calls fail on the target netwo
 | block time before `valid_until` | `Sanctions list expired` |
 | `jubjubSchnorrVerify<4>(sanctions_message(list_root, provider_id, issued_at, valid_until), signature, key)` | `Sanctions list signature invalid` |
 
-The verdict records `verdict_sanctions_root`, `verdict_sanctions_provider` and `verdict_sanctions_valid_until` per transfer. `sanctions_clear` (neither party is on the list) is still the VASP's statement: the circuit proves which signed, unexpired list it was made against, not the non-membership itself.
+The verdict records `verdict_sanctions_root`, `verdict_sanctions_provider` and `verdict_sanctions_valid_until` per transfer. Since v11 the screening itself is proven in-circuit against that list (next section); the VASP's `sanctions_clear` boolean is gone.
 
 **Payload the gateway passes** for each evaluation (witness `sanctions_list`; parser `fromPayload` in `scripts/lib/sanctions-list.ts`, which refuses missing or malformed fields):
 
 ```json
 {
   "provider_id": "<32-byte hex, lowercase>",
-  "list_root":   "<32-byte hex, lowercase: sanctionsListRoot(entry hashes) of the snapshot>",
+  "list_root":   "<32-byte hex, lowercase: sanctionsListRoot(entry hashes), the indexed-tree root of the snapshot>",
   "issued_at":   1800000000,
   "valid_until": 1800086400,
   "signature": { "announcement": { "x": "<decimal>", "y": "<decimal>" }, "response": "<decimal>" }
@@ -64,9 +64,27 @@ const msg = pureCircuits.sanctions_message(listRoot, providerId, issuedAt, valid
 const signature = jubjubSchnorrSign(new CompactTypeVector(4, CompactTypeField), msg, sk);
 ```
 
-`signSanctionsList` / `toPayload` in `scripts/lib/sanctions-list.ts` do exactly this. The list root is `sha256("dpo2u/sanctions-list/v1" || sorted unique entry hashes)` (`sanctionsListRoot`).
+`signSanctionsList` / `toPayload` in `scripts/lib/sanctions-list.ts` do exactly this. The list root is the root of the indexed Merkle tree below (`sanctionsListRoot` = `new SanctionsTree(entries).rootBytes`).
 
-Known limits: sanctions non-membership is VASP-attested (not proven in-circuit), but bound to a signed, unexpired list; the counterparty VASP id is deliberately public (and is the PsavPassport id it is checked against); "viewing key" here is an application-level disclosure key (HKDF per grant) plus on-chain grant metadata, not a Midnight wallet viewing key. The v10 gate is not deployed on any network yet.
+## Sanctions screening proven in-circuit (v11-sanctions-nonmembership)
+
+Up to v10 the circuit proved which signed list the VASP screened against, but "neither party is on it" was the VASP's own boolean. v11 proves the screening itself. Design credit: the indexed-tree approach was suggested by ProofOrBluff ([@realjohnny5i](https://x.com/realjohnny5i), [github.com/bytewizard42i/ProofOrBluff](https://github.com/bytewizard42i/ProofOrBluff)).
+
+**The tree** (`SanctionsTree` in `scripts/lib/sanctions-list.ts`, depth 20, up to ~1M entries):
+
+- Screening key of a 32-byte identifier hash = its first 16 bytes, big-endian (`screening_key`, `screeningKey`).
+- Leaves in key order: `(0, k1)`, `(k1, k2)`, ..., `(kn, 0)`, where each leaf is `(value, next)` and `next = 0` means "none". Leaf hash `transientHash([1, value, next])`, node hash `transientHash([2, left, right])`, empty slots hash to 0, which no leaf can open.
+- `list_root` = the root as 32 bytes (`sanctions_root_bytes`, little-endian). The provider signs it as before.
+
+**The proof**: for each of the four identifiers (`account_hash` and `doc_hash` of originator and beneficiary; a zero `doc_hash` means "not given" and is skipped), the witness `sanctions_path(key)` returns the leaf with `value <= key < next` and its 20 siblings. The circuit recomputes the root, compares it with the signed `list_root`, and checks the bracket. That leaf exists for every key, so the prover has no choice: `value == key` is a proven hit (FAIL, reason 4) and `value < key` a proven non-membership. A path from another tree, a neighbouring gap or a bent sibling reverts with `Sanctions path does not prove the identifier against the signed list`.
+
+**Names** are not screened in-circuit: matching names is fuzzy and does not fit a circuit. The provider matches names off-chain when it builds the snapshot, and lists the identifiers (accounts, wallets, documents) of the matched persons.
+
+**What the operator needs**: the snapshot's entries, which are public (hashes only, one sha256 hex per line). The CLI takes them with `evaluate --sanctions-entries FILE`; the agent reads `<MIDNIGHT_SANCTIONS_DIR>/<list_root>.txt`. Both rebuild the tree and refuse entries that do not produce the signed root. Building costs about 0.5 ms per hash (two per entry); the agent caches one tree per root.
+
+**Cost**: four paths of 21 Poseidon hashes each in `evaluateTransfer`; measure with `scripts/bench-attestation.ts` (gate workload, 1,000-entry list).
+
+Known limits: names are matched off-chain by the provider (above); the counterparty VASP id is deliberately public (and is the PsavPassport id it is checked against); "viewing key" here is an application-level disclosure key (HKDF per grant) plus on-chain grant metadata, not a Midnight wallet viewing key. The v11 gate (in-circuit screening) is a new contract: the v10 gates on preview keep the VASP-attested screening until they are redeployed.
 
 ## Hardening 2026-11-13 (see docs/REVIEW-2026-11-13.md)
 

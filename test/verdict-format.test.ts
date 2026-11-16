@@ -3,6 +3,12 @@
  * produced by running the compiled TravelRuleGate in the simulator on fixed, fictitious inputs, then
  * mapping its public ledger with scripts/lib/verdict.ts. Readers on other chains test against the
  * same vectors (verdict object, canonical JSON, digest). Regenerate with UPDATE_VECTORS=1.
+ *
+ * v11 (in-circuit screening): the signed list_root is now an indexed-tree root, so the simulator's
+ * root differs from the one pinned in the vectors (a v10 sha256 root). The format is unchanged and
+ * the vectors are copied verbatim into dpo2u-stellar / dpo2u-avalanche, so they stay pinned: the
+ * simulator output must match them once sanctions.list_root is replaced by the pinned value, and
+ * its own list_root must be the tree root it signed.
  */
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
@@ -14,7 +20,7 @@ import * as Gate from '../build/TravelRuleGate/contract/index.js';
 import * as Passport from '../build/PsavPassport/contract/index.js';
 import * as Registry from '../build/ComplianceRegistry/contract/index.js';
 import { simAddress, contractRef, asDeployed, crossContract, SIM_BLOCK_HASH } from './helpers.js';
-import { signSanctionsList, sanctionsListRoot, providerPublicKey } from '../scripts/lib/sanctions-list.js';
+import { signSanctionsList, providerPublicKey, SanctionsTree } from '../scripts/lib/sanctions-list.js';
 import { verdictFromLedger, verdictDigest, canonicalJson, checkVerdict, VERDICT_FORMAT } from '../scripts/lib/verdict.js';
 
 const VECTORS = path.join(path.dirname(fileURLToPath(import.meta.url)), 'vectors', 'verdict-v1.json');
@@ -28,17 +34,20 @@ const ATTESTED = b32('vasp:counterparty-A'), POLICY = b32('policy:travel-rule@1.
 // Fixed (deterministic) provider key and list, so the vectors are reproducible.
 const PROVIDER = new Uint8Array(32).fill(0xaa);
 const PROVIDER_SK = 123456789n;
-const LIST_ROOT = sanctionsListRoot(['11'.repeat(32), '22'.repeat(32)]);
+// The fail-4 beneficiary's account is on the list; everything else is not.
+const TREE = new SanctionsTree(['11'.repeat(32), '22'.repeat(32), Buffer.from(b32('acct:b6')).toString('hex')]);
+const LIST_ROOT = TREE.rootBytes;
+const PINNED_LIST_ROOT = '2ed13003fc1be9cb2262b8a9dcdcdbce8264dc80738ba35e01d3ed5863c6ff9f';   // v10 root in the pinned vectors
 const party = (n: string, doc: boolean, vasp: Uint8Array) => ({ name_hash: b32('name:' + n), account_hash: b32('acct:' + n), doc_hash: doc ? b32('doc:' + n) : ZERO, vasp_id: vasp, salt: b32('salt:' + n) });
 
 /** Fixed cases: name, private inputs, release after evaluation. */
 const CASES = [
-  { name: 'pass-released', o: party('o1', true, b32('vasp:own')), b: party('b1', true, ATTESTED), amount: 250_000n, clear: true, release: true },
-  { name: 'pass-not-released', o: party('o2', true, b32('vasp:own')), b: party('b2', true, ATTESTED), amount: 250_000n, clear: true, release: false },
-  { name: 'fail-1-missing-party-info', o: party('o3', true, b32('vasp:own')), b: { ...party('b3', true, ATTESTED), account_hash: ZERO }, amount: 250_000n, clear: true, release: false },
-  { name: 'fail-2-no-document-above-threshold', o: party('o4', false, b32('vasp:own')), b: party('b4', true, ATTESTED), amount: 250_000n, clear: true, release: false },
-  { name: 'fail-3-counterparty-not-attested', o: party('o5', true, b32('vasp:own')), b: party('b5', true, b32('vasp:unknown')), amount: 250_000n, clear: true, release: false },
-  { name: 'fail-4-sanctions-hit', o: party('o6', true, b32('vasp:own')), b: party('b6', true, ATTESTED), amount: 250_000n, clear: false, release: false },
+  { name: 'pass-released', o: party('o1', true, b32('vasp:own')), b: party('b1', true, ATTESTED), amount: 250_000n, release: true },
+  { name: 'pass-not-released', o: party('o2', true, b32('vasp:own')), b: party('b2', true, ATTESTED), amount: 250_000n, release: false },
+  { name: 'fail-1-missing-party-info', o: party('o3', true, b32('vasp:own')), b: { ...party('b3', true, ATTESTED), account_hash: ZERO }, amount: 250_000n, release: false },
+  { name: 'fail-2-no-document-above-threshold', o: party('o4', false, b32('vasp:own')), b: party('b4', true, ATTESTED), amount: 250_000n, release: false },
+  { name: 'fail-3-counterparty-not-attested', o: party('o5', true, b32('vasp:own')), b: party('b5', true, b32('vasp:unknown')), amount: 250_000n, release: false },
+  { name: 'fail-4-sanctions-hit', o: party('o6', true, b32('vasp:own')), b: party('b6', true, ATTESTED), amount: 250_000n, release: false },
 ];
 
 async function simulate() {
@@ -53,7 +62,7 @@ async function simulate() {
   const cross = crossContract({ [PASSPORT]: { state: asDeployed(pInit, pInit.data, 'PsavPassport'), module: Passport }, [REGISTRY]: { state: asDeployed(rInit, rState, 'ComplianceRegistry'), module: Registry } });
   const g = new Gate.Contract({
     originator_data: (x: any) => [x.privateState, x.privateState.o], beneficiary_data: (x: any) => [x.privateState, x.privateState.b],
-    transfer_amount: (x: any) => [x.privateState, x.privateState.amount], sanctions_clear: (x: any) => [x.privateState, x.privateState.clear],
+    transfer_amount: (x: any) => [x.privateState, x.privateState.amount], sanctions_path: (x: any, key: bigint) => [x.privateState, TREE.path(key)],
     owner_secret: (x: any) => [x.privateState, OWNER], approver_secret: (x: any) => [x.privateState, APPROVER],
     sanctions_list: (x: any) => [x.privateState, LIST],
   } as any);
@@ -77,10 +86,12 @@ async function simulate() {
 describe('verdict format v1', () => {
   it('vectors match the compiled gate run in the simulator', async () => {
     const got = await simulate();
-    if (process.env.UPDATE_VECTORS === '1') fs.writeFileSync(VECTORS, JSON.stringify({ format: VERDICT_FORMAT, generated_by: 'test/verdict-format.test.ts (simulator, fictitious inputs)', vectors: got }, null, 2) + '\n');
+    for (const x of got) assert.equal(x.verdict.sanctions.list_root, Buffer.from(LIST_ROOT).toString('hex'), x.name);
+    const pinned = got.map((x: any) => { const v = { ...x.verdict, sanctions: { ...x.verdict.sanctions, list_root: PINNED_LIST_ROOT } }; return { name: x.name, verdict: v, canonical: canonicalJson(v), digest: verdictDigest(v) }; });
+    if (process.env.UPDATE_VECTORS === '1') fs.writeFileSync(VECTORS, JSON.stringify({ format: VERDICT_FORMAT, generated_by: 'test/verdict-format.test.ts (simulator, fictitious inputs)', vectors: pinned }, null, 2) + '\n');
     const want = JSON.parse(fs.readFileSync(VECTORS, 'utf8'));
     assert.equal(want.format, VERDICT_FORMAT);
-    assert.deepEqual(got, want.vectors);
+    assert.deepEqual(pinned, want.vectors);
   });
 
   it('every vector passes the format check, and digest = sha256(canonical JSON)', async () => {
@@ -92,7 +103,7 @@ describe('verdict format v1', () => {
       assert.equal(x.canonical, canonicalJson(x.verdict));
       assert.equal(x.digest, createHash('sha256').update(x.canonical).digest('hex'));
     }
-    for (const x of vectors) assert.deepEqual(x.verdict.sanctions, { list_root: Buffer.from(LIST_ROOT).toString('hex'), provider_id: 'aa'.repeat(32), valid_until: T0 + 86_400 });
+    for (const x of vectors) assert.deepEqual(x.verdict.sanctions, { list_root: PINNED_LIST_ROOT, provider_id: 'aa'.repeat(32), valid_until: T0 + 86_400 });
     assert.deepEqual(vectors.map((x: any) => [x.verdict.verdict, x.verdict.released, x.verdict.reason.code]),
       [['PASS', true, 0], ['PASS', false, 0], ['FAIL', false, 1], ['FAIL', false, 2], ['FAIL', false, 3], ['FAIL', false, 4]]);
   });

@@ -187,7 +187,7 @@ describe('E6 daemon: Travel Rule items from the gateway', () => {
   const list = { provider_id: hx('provider'), list_root: hx('root'), issued_at: T0 - 60, valid_until: T0 + 3600, signature: { announcement: { x: '1', y: '2' }, response: '3' } };
   const item = { kind: 'travel_rule_transfer', institution: 'client-abc', transfer_id: tid, policy_hash: hx('travel-rule-fatf@1.0.0|root|1'), sanctions_list: list, witness_ref: `${tid}.json` };
   const party = (n: string) => ({ name_hash: hx('n' + n), account_hash: hx('a' + n), doc_hash: hx('d' + n), vasp_id: hx('v' + n), salt: hx('s' + n) });
-  const witness = { originator: party('o'), beneficiary: party('b'), amount_cents: 250000, sanctions_clear: true };
+  const witness = { originator: party('o'), beneficiary: party('b'), amount_cents: 250000 };
 
   it('parses the public item; refuses bad ids, a zero policy hash, a wrong witness_ref and a missing list', () => {
     const t = parseTransferItem(item);
@@ -210,7 +210,7 @@ describe('E6 daemon: Travel Rule items from the gateway', () => {
     assert.throws(() => readWitnessFile(f), /no access for "other"/);
     fs.chmodSync(f, 0o640);
     const w = readWitnessFile(f);
-    assert.equal(w.amount, 250000n); assert.equal(w.clear, true);
+    assert.equal(w.amount, 250000n);
     fs.writeFileSync(f, JSON.stringify({ ...witness, beneficiary: { ...party('b'), salt: party('o').salt } }));
     assert.throws(() => readWitnessFile(f), /salts must differ/);
     fs.writeFileSync(f, JSON.stringify({ ...witness, originator: { ...party('o'), salt: '0'.repeat(64) } }));

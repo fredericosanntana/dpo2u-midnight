@@ -14,6 +14,7 @@
 #   1b evaluate       with a sanctions list whose valid_until has passed       refused ("Sanctions list expired")
 #   2 evaluate        transfer whose counterparty ONLY has that passport,
 #                     against a signed, valid sanctions list                   ok, status 1 (PASS), reason 0, list root recorded
+#   2b evaluate       beneficiary account on that list (proven in-circuit)    ok, status 2 (FAIL), reason 4
 #   3 release         before this VASP is attested in ComplianceRegistry      refused ("no compliance attestation")
 #                     (only on the first run: self_company_id is fixed at deploy; later runs report it as skipped)
 #   4 attest-self     ComplianceRegistry.attestCompliance for self_company_id  ok
@@ -40,19 +41,23 @@ OUT="verify-out/travel-rule-v10-$TAG.jsonl"
 PASSPORT_ID="vasp:cp-passport-$TAG"
 PROVIDER_ID="provider:fictitious-$TAG"
 TRANSFER="tr-v10-$TAG"
+TRANSFER_HIT="tr-v10-hit-$TAG"
 GRANT="g-v10-$TAG"
 h() { printf '%s' "$1" | sha256sum | cut -d' ' -f1; }
 party() { printf '{"name_hash":"%s","account_hash":"%s","doc_hash":"%s","vasp_id":"%s","salt":"%s"}' "$(h "name:$1")" "$(h "acct:$1")" "$(h "doc:$1")" "$2" "$(h "salt:$1:$TAG")"; }
 umask 077
-printf '{"originator":%s,"beneficiary":%s,"amount_cents":250000,"sanctions_clear":true}\n' \
+printf '{"originator":%s,"beneficiary":%s,"amount_cents":250000}\n' \
   "$(party "orig-$TAG" vasp:example-vasp)" "$(party "benef-$TAG" "$PASSPORT_ID")" > "$WORK/transfer.json"
+# Same shape, but the beneficiary's account is on the list: the gate must prove the hit (FAIL, reason 4).
+printf '{"originator":%s,"beneficiary":%s,"amount_cents":250000}\n' \
+  "$(party "orig2-$TAG" vasp:example-vasp)" "$(party "listed-$TAG" "$PASSPORT_ID")" > "$WORK/transfer-hit.json"
 
 # Fictitious sanctions-list provider: key, list (hashes only), one valid and one expired signed snapshot.
 SP=(npx tsx scripts/sanctions-provider.ts)
+{ for e in fictitious-entry-1 fictitious-entry-2; do h "$e:$TAG"; echo; done; h "acct:listed-$TAG"; echo; } > "$WORK/entries"
 if [ "$PLAN" = 1 ]; then echo '{"x":"1","y":"2"}' > "$WORK/provider.pub"; echo '{}' > "$WORK/list-valid.json"; echo '{}' > "$WORK/list-expired.json"
 else
   "${SP[@]}" keygen --sk-file "$WORK/provider.sk" > "$WORK/provider.pub"
-  for e in fictitious-entry-1 fictitious-entry-2; do h "$e:$TAG"; echo; done > "$WORK/entries"
   NOW=$(date +%s)
   "${SP[@]}" sign --sk-file "$WORK/provider.sk" --provider-id "$PROVIDER_ID" --entries "$WORK/entries" --issued-at $((NOW-600)) --ttl 86400 > "$WORK/list-valid.json"
   "${SP[@]}" sign --sk-file "$WORK/provider.sk" --provider-id "$PROVIDER_ID" --entries "$WORK/entries" --issued-at $((NOW-7200)) --valid-until $((NOW-3600)) > "$WORK/list-expired.json"
@@ -81,9 +86,11 @@ check() { [ "$PLAN" = 1 ] && return 0; local got; got="$(field "$1")"; if [ "$go
 step 0 ok '' -- register-provider --provider-id "$PROVIDER_ID" --provider-key "$WORK/provider.pub"
 check provider.registered true
 step 1 ok '' -- issue-passport --passport-id "$PASSPORT_ID"
-step 1b refused 'Sanctions list expired' -- evaluate --transfer "$TRANSFER" --policy "policy:travel-rule@1.0.0" --witness-file "$WORK/transfer.json" --sanctions-list "$WORK/list-expired.json"
-step 2 ok '' -- evaluate --transfer "$TRANSFER" --policy "policy:travel-rule@1.0.0" --witness-file "$WORK/transfer.json" --sanctions-list "$WORK/list-valid.json"
+step 1b refused 'Sanctions list expired' -- evaluate --transfer "$TRANSFER" --policy "policy:travel-rule@1.0.0" --witness-file "$WORK/transfer.json" --sanctions-list "$WORK/list-expired.json" --sanctions-entries "$WORK/entries"
+step 2 ok '' -- evaluate --transfer "$TRANSFER" --policy "policy:travel-rule@1.0.0" --witness-file "$WORK/transfer.json" --sanctions-list "$WORK/list-valid.json" --sanctions-entries "$WORK/entries"
 check transfer.status 1; check transfer.fail_reason 0
+step 2b ok '' -- evaluate --transfer "$TRANSFER_HIT" --policy "policy:travel-rule@1.0.0" --witness-file "$WORK/transfer-hit.json" --sanctions-list "$WORK/list-valid.json" --sanctions-entries "$WORK/entries"
+check transfer.status 2; check transfer.fail_reason 4
 [ "$PLAN" = 1 ] || check transfer.sanctions.list_root "$(node -p "require('$WORK/list-valid.json').list_root")"
 if [ "$PLAN" = 1 ]; then step 3 refused '' -- release --transfer "$TRANSFER"
 else

@@ -9,15 +9,18 @@
  * Private witness: <MIDNIGHT_TRANSFER_WITNESS_DIR>/<transfer_id>.json (tmpfs; regular file, no access
  * for "other"), TransferWitness format of scripts/lib/travel-rule-v10.ts: originator / beneficiary
  * { name_hash, account_hash, doc_hash, vasp_id, salt } (hashes and salts, never raw values),
- * amount_cents, sanctions_clear. The beneficiary vasp_id is the counterparty's passportId as issued
+ * amount_cents. The beneficiary vasp_id is the counterparty's passportId as issued
  * on PsavPassport (the same 32 bytes, not a hash of it). The agent deletes the file right after the
  * proof attempt, success or failure; on retry the gateway writes it again.
+ * Sanctions snapshot (public): <MIDNIGHT_SANCTIONS_DIR>/<list_root>.txt, one entry hash per line, the
+ * provider's published list behind the signed root. The agent rebuilds the indexed tree from it (checked
+ * against the signed list_root) to prove each party's identifiers in-circuit (witness sanctions_path).
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { checkInstitutionId } from './institutions.js';
 import { parseTransferWitness, type PartyBytes } from './travel-rule-v10.js';
-import { fromPayload, type SanctionsListWitness } from './sanctions-list.js';
+import { fromPayload, readEntries, treeForSignedRoot, type SanctionsListWitness, type SanctionsTree } from './sanctions-list.js';
 
 const HEX32 = /^[0-9a-f]{64}$/;
 const bytes = (h: string) => new Uint8Array(Buffer.from(h, 'hex'));
@@ -49,7 +52,7 @@ export function witnessPath(dir: string, item: TransferItem): string {
 }
 
 /** The private witness: regular file (not a link), no access for "other"; salts checked like the circuit. */
-export function readWitnessFile(file: string): { o: PartyBytes; b: PartyBytes; amount: bigint; clear: boolean } {
+export function readWitnessFile(file: string): { o: PartyBytes; b: PartyBytes; amount: bigint } {
   const st = fs.lstatSync(file);
   if (!st.isFile()) throw new Error(`${file} must be a regular file (not a link)`);
   if ((st.mode & 0o007) !== 0) throw new Error(`${file} holds private transfer data: no access for "other" (0640 or 0600)`);
@@ -58,6 +61,20 @@ export function readWitnessFile(file: string): { o: PartyBytes; b: PartyBytes; a
   if (zero(w.o.salt) || zero(w.b.salt)) throw new Error('party salt must not be zero');
   if (Buffer.from(w.o.salt).equals(Buffer.from(w.b.salt))) throw new Error('originator and beneficiary salts must differ');
   return w;
+}
+
+const trees = new Map<string, SanctionsTree>();
+/** The indexed tree behind a signed list, from <dir>/<list_root>.txt (cached per root; refused if the root differs). */
+export function sanctionsTreeFor(dir: string, list: SanctionsListWitness): SanctionsTree {
+  if (!dir || !path.isAbsolute(dir)) throw new Error('MIDNIGHT_SANCTIONS_DIR must be an absolute path');
+  const root = Buffer.from(list.list_root).toString('hex');
+  const hit = trees.get(root);
+  if (hit) return hit;
+  const file = path.join(dir, `${root}.txt`);
+  if (!fs.existsSync(file)) throw new Error(`sanctions snapshot ${root}.txt not found in MIDNIGHT_SANCTIONS_DIR`);
+  const t = treeForSignedRoot(readEntries(fs.readFileSync(file, 'utf8')), list.list_root);
+  trees.set(root, t);
+  return t;
 }
 
 /** Deletes the witness file; never throws (the caller logs a failure to delete). */

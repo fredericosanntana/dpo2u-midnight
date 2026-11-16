@@ -11,7 +11,7 @@ How a VASP running the DPO2U Travel Rule gate decides what party data can be dis
 | Counterparty VASP id | public (regulatory identity, not customer data) | already public | `attested_vasps`, PsavPassport id |
 | Originator / beneficiary fields: name, account, document, VASP (as hashes) | only salted per-field commitments, combined into one root per party | yes, field by field, inside a grant scope | off-chain opening (value + salt), checked against the on-chain root with `field_commit` / `root_of` |
 | Transfer amount | never | no (only "above / below threshold" is reflected in the reason code) | witness `transfer_amount` |
-| Sanctions screening detail | never (only the boolean result, VASP-attested) | no; the screening record stays with the VASP | witness `sanctions_clear` |
+| Sanctions screening detail | never (the result is proven in-circuit against the signed list; only the list root and reason code go on chain) | no; the screening record stays with the VASP | witness `sanctions_path` (v11; `sanctions_clear` up to v10) |
 | Compliance score | never; only a hiding commitment | the attested company or an auditor it chooses can open it | `ComplianceRegistry.attestation_score_commit`, salt re-derived from the owner secret (`scripts/owner.ts scoreSalt`) |
 | Reviewer identity (LGPD attestations) | salted hash only | no | `bridge/reviewer-salt.mjs` |
 | Data subject identifiers (consent, rights requests) | salted subject key only | no | `ConsentRegistry.subject_key`, `DataSubjectRights.subject_key` |

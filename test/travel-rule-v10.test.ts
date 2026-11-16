@@ -10,7 +10,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createCircuitContext, createConstructorContext, encodeContractAddress, ContractState } from '@midnight-ntwrk/compact-runtime';
-import { newProviderKey, signSanctionsList, sanctionsListRoot } from '../scripts/lib/sanctions-list.js';
+import { newProviderKey, signSanctionsList, sanctionsListRoot, SanctionsTree } from '../scripts/lib/sanctions-list.js';
 import * as Gate from '../build/TravelRuleGate/contract/index.js';
 import * as Passport from '../build/PsavPassport/contract/index.js';
 import * as Registry from '../build/ComplianceRegistry/contract/index.js';
@@ -31,6 +31,7 @@ const SELF = b32('company:example-vasp');
 const PASSPORT_VASP = 'vasp:with-passport';
 const PROVIDER_ID = idArg('provider:fictitious');
 const PROVIDER = newProviderKey();
+const TREE = new SanctionsTree(['11'.repeat(32)]);
 const LIST = signSanctionsList(Gate as any, PROVIDER.sk, { provider_id: PROVIDER_ID, list_root: sanctionsListRoot(['11'.repeat(32)]), issued_at: BigInt(T0 - 3600), valid_until: BigInt(T0 + 86_400) });
 
 function depFile(entry: Record<string, unknown>): string {
@@ -61,7 +62,7 @@ async function chain() {
   const states: Record<string, any> = { [PASSPORT]: asDeployed(pInit, pState, 'PsavPassport'), [REGISTRY]: asDeployed(rInit, rState, 'ComplianceRegistry') };
   const gate = new Gate.Contract({
     originator_data: (x: any) => [x.privateState, x.privateState.o], beneficiary_data: (x: any) => [x.privateState, x.privateState.b],
-    transfer_amount: (x: any) => [x.privateState, 250_000n], sanctions_clear: (x: any) => [x.privateState, true],
+    transfer_amount: (x: any) => [x.privateState, 250_000n], sanctions_path: (x: any, key: bigint) => [x.privateState, TREE.path(key)],
     owner_secret: (x: any) => [x.privateState, OWNER], approver_secret: (x: any) => [x.privateState, x.privateState.approver ?? APPROVER],
     sanctions_list: (x: any) => [x.privateState, LIST],
   } as any);
@@ -109,8 +110,8 @@ describe('travel-rule-v10: cross-contract wiring', () => {
   it('with that provider: passport-only counterparty PASSes, release passes the registry check', async () => {
     const { gate, gInit, mk } = await chain();
     const T = idArg('transfer-1');
-    const ps = { o: parseTransferWitness({ originator: party('o', 'vasp:own'), beneficiary: party('b', PASSPORT_VASP), amount_cents: 250000, sanctions_clear: true }).o,
-      b: parseTransferWitness({ originator: party('o', 'vasp:own'), beneficiary: party('b', PASSPORT_VASP), amount_cents: 250000, sanctions_clear: true }).b };
+    const ps = { o: parseTransferWitness({ originator: party('o', 'vasp:own'), beneficiary: party('b', PASSPORT_VASP), amount_cents: 250000 }).o,
+      b: parseTransferWitness({ originator: party('o', 'vasp:own'), beneficiary: party('b', PASSPORT_VASP), amount_cents: 250000 }).b };
     const e = await gate.circuits.evaluateTransfer(mk(gInit, ps), T, hashArg('policy:v1'));
     assert.equal(e.result, 1n);
     const rel = await gate.circuits.releaseTransfer(mk(e.context.callContext.currentQueryContext.state, ps), T);
@@ -154,18 +155,20 @@ describe('travel-rule-v10: approver key', () => {
 
 describe('travel-rule-v10: witnesses, grant status, plan', () => {
   it('witness file must hold hashes, not raw values', () => {
-    const ok = { originator: party('o', 'vasp:own'), beneficiary: party('b', PASSPORT_VASP), amount_cents: '250000', sanctions_clear: true };
+    const ok = { originator: party('o', 'vasp:own'), beneficiary: party('b', PASSPORT_VASP), amount_cents: '250000' };
     const w = parseTransferWitness(ok);
     assert.equal(w.amount, 250_000n);
     assert.deepEqual(w.b.vasp_id, idArg(PASSPORT_VASP));
     assert.throws(() => parseTransferWitness({ ...ok, originator: { ...ok.originator, name_hash: 'Maria Silva' } }), /must be 32 bytes of hex/);
-    assert.throws(() => parseTransferWitness({ ...ok, sanctions_clear: 'yes' as any }), /sanctions_clear/);
+    // v11: the screening is proven in-circuit; a legacy sanctions_clear is accepted and ignored
+    assert.deepEqual(parseTransferWitness({ ...ok, sanctions_clear: false }), w);
+    assert.equal('clear' in w, false);
   });
 
   it('grant status: requested -> inactive, approved -> active, expired -> inactive', async () => {
     const { gate, gInit, mk } = await chain();
     const T = idArg('transfer-1'), G = idArg('grant-1');
-    const ps = { o: parseTransferWitness({ originator: party('o', 'vasp:own'), beneficiary: party('b', PASSPORT_VASP), amount_cents: 1, sanctions_clear: true }).o, b: parseTransferWitness({ originator: party('o', 'vasp:own'), beneficiary: party('b', PASSPORT_VASP), amount_cents: 1, sanctions_clear: true }).b };
+    const ps = { o: parseTransferWitness({ originator: party('o', 'vasp:own'), beneficiary: party('b', PASSPORT_VASP), amount_cents: 1 }).o, b: parseTransferWitness({ originator: party('o', 'vasp:own'), beneficiary: party('b', PASSPORT_VASP), amount_cents: 1 }).b };
     const e = await gate.circuits.evaluateTransfer(mk(gInit, ps), T, hashArg('policy:v1'));
     const g = await gate.circuits.grantDisclosure(mk(e.context.callContext.currentQueryContext.state, ps), G, T, idArg('supervisor:BCB'), 1n, BigInt(T0 + 3600), hashArg('purpose'));
     const s1 = grantStatus(Gate.ledger(g.context.callContext.currentQueryContext.state), G, T0);

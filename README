@@ -87,7 +87,7 @@ Source of truth: [`deployment-preprod-v9.json`](deployment-preprod-v9.json). Net
   ```bash
   MIDNIGHT_NETWORK=preview npx tsx scripts/travel-rule-v10.ts status --transfer <id> --plan
   MIDNIGHT_NETWORK=preview npx tsx scripts/travel-rule-v10.ts evaluate --transfer <id> \
-      --policy <hex|label> --witness-file <file> --sanctions-list <file|->
+      --policy <hex|label> --witness-file <file> --sanctions-list <file|-> --sanctions-entries <file>
   ```
 
 - **WebUI (`deploy-console/`)** — a Vite browser console that deploys the contracts through the Midnight Lace wallet (Lace syncs inside the extension, so no headless full sync). Setup in [`deploy-console/RUNBOOK.md`](deploy-console/RUNBOOK.md): `cd deploy-console && npm install && npm run dev` → http://127.0.0.1:5173, with a local proof server on `:6300`.
@@ -327,6 +327,10 @@ See `scripts/lib/wallet-setup.ts`. This fix is referenced in midnight-js PR #604
 - **midnight-awesome-dapps PR #82** — DPO2U Relayer: first ZK-private compliance attestation bridge Midnight → EVM (merged)
 - **midnight-awesome-dapps PR #1333** — Sealed ownership with selective disclosure, GDPR Art. 25, 14 passing tests (merged)
 - **Academic paper:** "Shared ZK Trust Stacks as Evolutionarily Stable Compliance Mechanisms" — formalizes the `1-(1-p)^(7n)` ecosystem security analysis
+
+## Credits
+
+- **ProofOrBluff** ([@realjohnny5i](https://x.com/realjohnny5i), [bytewizard42i/ProofOrBluff](https://github.com/bytewizard42i/ProofOrBluff)) suggested the indexed Merkle tree that `TravelRuleGate` v11 uses to prove sanctions screening in-circuit (non-membership and hits against the provider-signed list). See [docs/TRAVEL-RULE-DISCLOSURE.md](docs/TRAVEL-RULE-DISCLOSURE.md#sanctions-screening-proven-in-circuit-v11-sanctions-nonmembership).
 
 ---
 
