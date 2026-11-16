@@ -11,7 +11,7 @@
 | `verdict` | `"PASS"` \| `"FAIL"` | outcome of the rule | `status` 1 or 3 → PASS, 2 → FAIL |
 | `released` | boolean | PASS and released by the VASP | `status == 3` |
 | `reason` | `{ code, label }` | 0 `none`, 1 `missing_party_info`, 2 `missing_originator_document_above_threshold`, 3 `counterparty_vasp_not_attested`, 4 `sanctions_hit` | `fail_reason` |
-| `policy_hash` | hex, 32 bytes | rule/policy version that produced the verdict | `verdict_policy` (zeros on a pre-v10 gate) |
+| `policy_hash` | hex, 32 bytes | rule/policy version that produced the verdict: identifies the rule pack only, not the sanctions list (see below) | `verdict_policy` (zeros on a pre-v10 gate) |
 | `originator_root` | hex, 32 bytes | root of the originator's per-field salted commitments | `originator_root` |
 | `beneficiary_root` | hex, 32 bytes | same for the beneficiary | `beneficiary_root` |
 | `source_chain` | `"<chain>:<network>"` | where the verdict lives | e.g. `midnight:preview`, `midnight:mainnet`, `midnight:simulator` |
@@ -51,3 +51,8 @@ MIDNIGHT_NETWORK=preview npx tsx scripts/export-verdict.ts --transfer <id|hex> [
 ```
 
 Read-only (indexer only, no wallet). With `--tx`, the state is read at that tx's block, so the exported verdict is the one that transaction produced.
+
+## `policy_hash` and the sanctions list
+
+`policy_hash` names the rule pack and its version (for example `sha256("travel-rule-fatf@1.0.0")`). It must not include the sanctions list root or its `valid_until`: those are in the verdict's own `sanctions` field (`list_root`, `provider_id`, `valid_until`), and the list is re-signed every few days. A policy hash that changes with each list snapshot forces every reader on another chain (Stellar, Avalanche mirrors) to re-authorize the policy at each re-signing (on Fuji, a Safe 2-of-3 transaction), with no change in the rules. Readers that want to pin the list check `sanctions` separately.
+
