@@ -96,7 +96,7 @@ async function main() {
     let registry: string | null = null, registryError: string | null = null;
     try { registry = registryAddress(net.name); } catch (e: any) { registryError = e.message; }
     console.log(JSON.stringify({ plan: {
-      network: net.name, runs, workloads, skipped, txs: workloads.reduce((n, w) => n + (w === 'gate' ? 2 * runs + 1 : runs), 0),
+      network: net.name, runs, workloads, skipped, txs: workloads.reduce((n, w) => n + (w === 'gate' ? 2 * runs + 2 : runs), 0),
       registry, registryError, gate: gate.ok ? gate.dep.gate : null,
       measures: ['latency_ms per tx: callTx start -> resolved with block (prove + submit + inclusion)', 'dust per tx: wallet balance delta (under-states) and facade.estimateTransactionFee'],
       conversion: conv, deployBaseline: baseline, versions, proofServerHardware: proofHw, out: path.relative(ROOT, out),
