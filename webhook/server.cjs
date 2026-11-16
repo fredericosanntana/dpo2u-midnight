@@ -72,7 +72,7 @@ function agentStatus() {
     address: dep.walletAddress || null,
     network: NETWORK,
     dust: dust.toString(),
-    dustHuman: (Number(dust) / 1e18).toFixed(4), // cosmetic; healthy/lowFuel use raw bigint
+    dustHuman: (Number(dust) / 1e15).toFixed(4), // 1 DUST = 10^15 SPECK; cosmetic, healthy/lowFuel use raw bigint
     floor: DUST_FLOOR.toString(),
     healthy: dust >= DUST_FLOOR && queue < QUEUE_CAP,
     lowFuel: dust < DUST_FLOOR * LOW_FUEL_MULT,
@@ -311,7 +311,7 @@ function agentItem(res, key) {
   const e = readJSON(LEDGER, []).filter((x) => x && String(x.key).toLowerCase() === key).pop();
   if (!e) return json(404, { key, state: 'unknown' });
   const out = { key, state: e.error ? 'failed' : 'sealed', kind: e.kind ?? null, at: e.ts, network: e.network };
-  for (const k of ['txId', 'blockHeight', 'dustCost', 'institution', 'status', 'fail_reason', 'error']) if (e[k] !== undefined) out[k] = e[k];
+  for (const k of ['txId', 'blockHeight', 'dustCost', 'dustCostSource', 'institution', 'status', 'fail_reason', 'error']) if (e[k] !== undefined) out[k] = e[k];
   return json(200, out);
 }
 

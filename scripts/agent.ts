@@ -132,6 +132,22 @@ function deploymentAddress(network: string, name: string): string {
   return c.contractAddress;
 }
 
+// DUST per item: the wallet's fee estimate for every transaction the item balances (summed). The balance
+// delta under-states the fee and goes negative when DUST generation in the interval exceeds it, so it is
+// kept only as dustBalanceDelta (same estimate as scripts/bench-attestation.ts).
+let feeEstimates: bigint[] = [];
+let feeEstimateMissing = 0;
+function withFeeEstimate(ctx: V9Wallet, providers: any) {
+  const orig = providers.walletProvider;
+  const wrapped = Object.create(orig);
+  wrapped.balanceTx = async (tx: any, ttl?: Date) => {
+    try { feeEstimates.push(BigInt(await (ctx.facade as any).estimateTransactionFee((ctx.facade as any).adoptTransaction(tx.serialize(), 'Unbound')))); }
+    catch { feeEstimateMissing++; }
+    return orig.balanceTx(tx, ttl);
+  };
+  return { ...providers, walletProvider: wrapped };
+}
+
 async function joinContract(ctx: V9Wallet, secret: Uint8Array, name: string, mod: any, extraWitnesses: Record<string, unknown> = {}) {
   const zkPath = buildPath(name);
   const compiled = (CompiledContract.make(name, mod.Contract) as any).pipe(
@@ -140,7 +156,7 @@ async function joinContract(ctx: V9Wallet, secret: Uint8Array, name: string, mod
   );
   const addr = deploymentAddress(ctx.net.name, name);
   console.log(`[agent] joining ${name} ${addr.slice(0, 16)}…`);
-  return (findDeployedContract as any)(makeProviders(ctx, zkPath, `${name}-agent`), {
+  return (findDeployedContract as any)(withFeeEstimate(ctx, makeProviders(ctx, zkPath, `${name}-agent`)), {
     contractAddress: addr, compiledContract: compiled,
     privateStateId: `${name}PrivateState`, initialPrivateState: {},
   });
@@ -190,7 +206,7 @@ function gateSessions(ctx: V9Wallet, secret: Uint8Array) {
   const cache = new Map<string, Promise<{ c: any; read: () => Promise<any> }>>();
   const open = async (institution: string) => {
     const d = readGateDeployment(ROOT, ctx.net.name, undefined, institution);
-    const providers = crossGateProviders(ROOT, makeProviders(ctx, buildDir(ROOT, GATE), `${GATE}-${institution}-agent`), ctx.net.proofServer, d.links, { ZKConfigRegistry, NodeZkConfigProvider, httpClientProofProvider });
+    const providers = withFeeEstimate(ctx, crossGateProviders(ROOT, makeProviders(ctx, buildDir(ROOT, GATE), `${GATE}-${institution}-agent`), ctx.net.proofServer, d.links, { ZKConfigRegistry, NodeZkConfigProvider, httpClientProofProvider }));
     const read = async () => gateLedgerOf(TravelRuleGate, await providers.publicDataProvider.queryContractState(d.gate), ContractState);
     const L0 = await read();
     for (const [field, name] of [['passport', CALLEES[0]], ['registry', CALLEES[1]]] as const) {
@@ -382,6 +398,7 @@ async function drainOnce(ctx: V9Wallet, contracts: Contracts, queuePath: string,
     try {
       await ensureDustFloor(ctx, floor);                          // Phase-2 watchdog
       const before = dustOf(await Rx.firstValueFrom(ctx.facade.state()));
+      feeEstimates = []; feeEstimateMissing = 0;
       const res = await attestItem(contracts, item);
       // (B) conditional payment: the verdict gate passed above → move real NIGHT to the beneficiary.
       let transferTx: string | null = null;
@@ -396,18 +413,24 @@ async function drainOnce(ctx: V9Wallet, contracts: Contracts, queuePath: string,
         console.log(`  [agent] (2b) revenue: fee ${fee} → PaymentGateway treasury + FeeDistributor 40/60 (tx ${revenue.treasuryTx})`);
       }
       const after = dustOf(await Rx.firstValueFrom(ctx.facade.state()));
-      const cost = before - after;
+      const delta = before - after;
+      // Estimated fee of every contract tx of the item; falls back to the balance delta (floored at 0)
+      // only when no estimate was available. The NIGHT transfer of (B) is not a contract tx: not included.
+      const estimated = feeEstimates.length > 0 && feeEstimateMissing === 0;
+      const cost = estimated ? feeEstimates.reduce((a, b) => a + b, 0n) : (delta > 0n ? delta : 0n);
+      const dustCostSource = estimated ? 'fee-estimate' : 'balance-delta';
       writeQueue(queuePath, remaining);                          // drop processed (idempotent)
       appendLedger({
         ts: new Date().toISOString(), network: ctx.net.name, kind: res.kind, key: res.key,
         txId: (res.public as any).txId, blockHeight: (res.public as any).blockHeight,
         transferTx, transferAmount: transferTx ? String(item.transfer_amount) : undefined,
-        dustBefore: before.toString(), dustAfter: after.toString(), dustCost: cost.toString(),
+        dustBefore: before.toString(), dustAfter: after.toString(), dustCost: cost.toString(), dustCostSource,
+        dustBalanceDelta: delta.toString(), dustFeeEstimates: feeEstimates.map(String),
         context: (res as any).context, ...((res as any).extra ?? {}),
       });
-      if (revenue) appendRevenue({ ts: new Date().toISOString(), kind: res.kind, key: res.key, fee, treasuryTx: revenue.treasuryTx, splitTx: revenue.splitTx, dustCost: cost.toString() });
+      if (revenue) appendRevenue({ ts: new Date().toISOString(), kind: res.kind, key: res.key, fee, treasuryTx: revenue.treasuryTx, splitTx: revenue.splitTx, dustCost: cost.toString(), dustCostSource });
       done++;
-      console.log(`[agent] ✓ ${res.kind} ${label} → tx ${(res.public as any).txId} (block ${(res.public as any).blockHeight}); DUST cost ${cost}`);
+      console.log(`[agent] ✓ ${res.kind} ${label} → tx ${(res.public as any).txId} (block ${(res.public as any).blockHeight}); DUST cost ${cost} (${dustCostSource})`);
     } catch (e: any) {
       const msg = e?.message ?? String(e);
       console.log(`[agent] ✗ ${label} FAILED: ${msg}`);

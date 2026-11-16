@@ -72,6 +72,17 @@ describe('webhook POST /enqueue: journey kinds from the gateway', () => {
     assert.equal((await post(items.travel_rule_release, 'wrong')).status, 401);
   });
 
+  it('GET /agent/item reports the sealed outcome with the estimated DUST fee and its source', async () => {
+    const k = hx('dpo2u.transfer:sealed');
+    fs.writeFileSync(path.join(dir, 'ledger.json'), JSON.stringify([{ ts: '2026-11-16T00:00:00Z', network: 'preview', kind: 'travel_rule_transfer', key: k, txId: 'tx1', blockHeight: 7,
+      dustCost: '3400000000000000', dustCostSource: 'fee-estimate', dustBalanceDelta: '-3400000000000000', institution: 'inst-a', status: 1, fail_reason: 0 }]));
+    const r = await (await fetch(`${base}/agent/item/${k}`, { headers: { authorization: `Bearer ${TOKEN}` } })).json();
+    assert.equal(r.state, 'sealed');
+    assert.equal(r.dustCost, '3400000000000000');
+    assert.equal(r.dustCostSource, 'fee-estimate');
+    assert.equal(r.status, 1);
+  });
+
   it('private fields and commits are refused; a plain use_case still needs evidence_hash', async () => {
     assert.equal((await post({ ...items.travel_rule_transfer, transfer_id: hx('t2'), witness_ref: `${hx('t2')}.json`, amount_cents: 100 })).status, 400);
     assert.equal((await post({ ...items.psav_passport, partnerCommit: hx('x') })).status, 400);
