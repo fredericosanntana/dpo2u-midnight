@@ -122,6 +122,12 @@ The signed message now covers `pepper_commit` (`sanctions_message`, a `Vector<5,
 
 **Same pattern elsewhere.** The Stellar and Avalanche mirrors (dpo2u-stellar, dpo2u-avalanche) read verdicts only and hash no identifier. Any other circuit that screens against these lists (for example a Circom non-membership verifier for the Stellar escrow) must use the keyed entries and take the pepper as a private input bound to the signed `pepper_commit`, or it reintroduces the v11 leak.
 
+## Superseded snapshots (v12)
+
+Up to v11 a signed snapshot was accepted until its own `valid_until`, even after the provider had published a newer one; the only cutoff was rotating or revoking the provider's key. A person added to the list in the newer snapshot could still pass against the older one for the rest of its window.
+
+v12 keeps a minimum `issued_at` per provider (`sanctions_provider_min_issued_at`, 0 at registration, kept across key rotations). When a new snapshot arrives the owner bumps it: `setSanctionsMinIssuedAt(provider_id, issued_at_of_the_new_snapshot)` (CLI `supersede-lists --provider-id ID --min-issued-at UNIX`), forward only. `evaluateTransfer` then refuses a list issued earlier (`Sanctions list superseded`), and `releaseTransfer` refuses a PASS whose list was issued earlier (`Sanctions list behind the verdict was superseded: evaluate again`), using the new `verdict_sanctions_issued_at`. The bump is one owner transaction per snapshot; the operator runs it right after it installs the new snapshot and its pepper.
+
 ## Hardening 2026-11-13 (see docs/REVIEW-2026-11-13.md)
 
 - **Field openings carry a blinding, not the party salt.** The vault hands out `{ value, blinding }` with `blinding = field_blinding(party salt, label)`, and the supervisor checks it with `field_commit_blinded(value, blinding)`. With the party salt itself, the supervisor could derive the other fields' blindings.

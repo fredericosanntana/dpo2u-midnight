@@ -164,23 +164,23 @@ export function grantStatus(L: any, grantId: Uint8Array, nowSec: number) {
 }
 
 // ── plan ──
-export const COMMANDS = ['attest-self', 'issue-passport', 'register-provider', 'revoke-provider', 'evaluate', 'release', 'grant', 'approve', 'revoke', 'status'] as const;
+export const COMMANDS = ['attest-self', 'issue-passport', 'register-provider', 'revoke-provider', 'supersede-lists', 'evaluate', 'release', 'grant', 'approve', 'revoke', 'status'] as const;
 export type Command = (typeof COMMANDS)[number];
 
 const CONTRACT_OF: Record<Command, string> = {
   'attest-self': 'ComplianceRegistry', 'issue-passport': 'PsavPassport', 'register-provider': GATE, 'revoke-provider': GATE,
-  evaluate: GATE, release: GATE, grant: GATE, approve: GATE, revoke: GATE, status: GATE,
+  'supersede-lists': GATE, evaluate: GATE, release: GATE, grant: GATE, approve: GATE, revoke: GATE, status: GATE,
 };
 const CIRCUIT_OF: Record<Command, string> = {
   'attest-self': 'attestCompliance', 'issue-passport': 'issuePassport', 'register-provider': 'registerSanctionsProvider', 'revoke-provider': 'revokeSanctionsProvider',
-  evaluate: 'evaluateTransfer', release: 'releaseTransfer', grant: 'grantDisclosure', approve: 'approveDisclosure', revoke: 'revokeDisclosure', status: '(ledger read: isGrantActive)',
+  'supersede-lists': 'setSanctionsMinIssuedAt', evaluate: 'evaluateTransfer', release: 'releaseTransfer', grant: 'grantDisclosure', approve: 'approveDisclosure', revoke: 'revokeDisclosure', status: '(ledger read: isGrantActive)',
 };
 const CROSS_OF: Partial<Record<Command, string>> = {
   evaluate: 'PsavPassport.isValid(beneficiary vasp_id) when the VASP is not in attested_vasps; signed sanctions list checked in-circuit',
   release: 'ComplianceRegistry.hasAttestation(self_company_id) must be 1',
 };
 const KEY_OF: Record<Command, string> = {
-  'attest-self': 'owner', 'issue-passport': 'owner', 'register-provider': 'owner', 'revoke-provider': 'owner', evaluate: 'owner', release: 'owner', grant: 'owner',
+  'attest-self': 'owner', 'issue-passport': 'owner', 'register-provider': 'owner', 'revoke-provider': 'owner', 'supersede-lists': 'owner', evaluate: 'owner', release: 'owner', grant: 'owner',
   approve: 'approver (own key, never the owner\'s)', revoke: 'owner', status: 'none (read only)',
 };
 

@@ -402,6 +402,31 @@ describe('TravelRuleGate', () => {
     await assert.rejects(() => s2.contract.circuits.evaluateTransfer(s2.mk(st(a2)), TID, POLICY), /salts must differ/);
   });
 
+  // ── superseded snapshots (v12: per-provider minimum issued_at) ──
+  it('SUPERSEDED: after the owner bumps the minimum, an older snapshot is refused and its PASS cannot be released', async () => {
+    const { contract, ctx, mk } = await setup(base());
+    const a = await contract.circuits.attestVasp(ctx, BENEF_VASP);
+    assert.equal(ledger(st(a)).sanctions_provider_min_issued_at.lookup(PROVIDER), 0n);
+    const r = await contract.circuits.evaluateTransfer(mk(st(a)), TID, POLICY);       // PASS on LIST (issued T0 - 3600)
+    assert.equal(ledger(st(r)).verdict_sanctions_issued_at.lookup(TID), BigInt(T0 - 3600));
+    // the provider publishes a newer snapshot; the owner supersedes the older ones
+    const bump = await contract.circuits.setSanctionsMinIssuedAt(mk(st(r)), PROVIDER, BigInt(T0 - 60));
+    await assert.rejects(() => contract.circuits.releaseTransfer(mk(st(bump)), TID), /Sanctions list behind the verdict was superseded/);
+    const T2 = b32('transfer-2');
+    await assert.rejects(() => contract.circuits.evaluateTransfer(mk(st(bump)), T2, POLICY), /Sanctions list superseded/);
+    const fresh = signedList({ issued_at: BigInt(T0 - 60) });
+    const ok = await contract.circuits.evaluateTransfer(mk(st(bump), base({ list: fresh })), T2, POLICY);
+    assert.equal(ok.result, 1n);
+    assert.ok(await contract.circuits.releaseTransfer(mk(st(ok)), T2));
+    // forward only, owner only, known provider only; a key rotation keeps the minimum
+    await assert.rejects(() => contract.circuits.setSanctionsMinIssuedAt(mk(st(bump)), PROVIDER, BigInt(T0 - 60)), /can only move forward/);
+    await assert.rejects(() => contract.circuits.setSanctionsMinIssuedAt(mk(st(bump)), PROVIDER, BigInt(T0 - 3600)), /can only move forward/);
+    await assert.rejects(() => contract.circuits.setSanctionsMinIssuedAt(mk(st(bump), base({ secret: b32('not-the-owner') })), PROVIDER, BigInt(T0)), /Only the VASP owner/);
+    await assert.rejects(() => contract.circuits.setSanctionsMinIssuedAt(mk(st(bump)), new Uint8Array(32).fill(1), BigInt(T0)), /Unknown sanctions provider/);
+    const rot = await contract.circuits.registerSanctionsProvider(mk(st(bump)), PROVIDER, newProviderKey().pk);
+    assert.equal(ledger(st(rot)).sanctions_provider_min_issued_at.lookup(PROVIDER), BigInt(T0 - 60));
+  });
+
   it('HARDENING: release re-checks the screening: list expired or provider revoked since the verdict -> refused', async () => {
     const { contract, ctx, mk } = await setup(base());
     const a = await contract.circuits.attestVasp(ctx, BENEF_VASP);

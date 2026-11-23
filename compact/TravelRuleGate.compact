@@ -35,7 +35,12 @@ import CompactStandardLibrary;
 //   signed (Schnorr/Jubjub) by a provider the owner registered (registerSanctionsProvider; one
 //   active key per id, re-registering rotates it, revokeSanctionsProvider disables it) and the block
 //   time is before its valid_until. The verdict stores verdict_sanctions_root / _provider /
-//   _valid_until.
+//   _valid_until / _issued_at.
+//   SUPERSEDED SNAPSHOTS (v12): a snapshot stays valid until its valid_until even after the provider
+//   publishes a newer one (for example one that adds a newly sanctioned person). The owner bumps the
+//   provider's minimum issued_at (setSanctionsMinIssuedAt, forward only) when a new snapshot arrives;
+//   evaluateTransfer refuses a list issued before it, and releaseTransfer refuses a PASS whose list
+//   was issued before it (evaluate again with the current snapshot).
 //
 // SANCTIONS SCREENING (proven in-circuit, v11-sanctions-nonmembership): the signed list_root is the
 //   root of an indexed (sorted) Merkle tree of depth 20 over screening keys, built by the provider
@@ -135,10 +140,13 @@ export ledger verdict_sanctions_root: Map<Bytes<32>, Bytes<32>>;
 export ledger verdict_sanctions_provider: Map<Bytes<32>, Bytes<32>>;
 export ledger verdict_sanctions_valid_until: Map<Bytes<32>, Uint<64>>;
 export ledger verdict_sanctions_pepper_commit: Map<Bytes<32>, Bytes<32>>;
+export ledger verdict_sanctions_issued_at: Map<Bytes<32>, Uint<64>>;
 
 // Sanctions-list providers: one active key per provider id (re-registering rotates it).
 export ledger sanctions_provider_key: Map<Bytes<32>, JubjubPoint>;
 export ledger sanctions_provider_revoked: Set<Bytes<32>>;
+// Oldest issued_at still accepted per provider (0 at registration; only moves forward).
+export ledger sanctions_provider_min_issued_at: Map<Bytes<32>, Uint<64>>;
 export ledger total_pass: Counter;
 export ledger total_fail: Counter;
 export ledger total_released: Counter;
@@ -232,12 +240,25 @@ export pure circuit screening_digest(pepper: Bytes<32>, h: Bytes<32>): Bytes<32>
 }
 
 // Registers a provider's public key, or rotates it (the new key replaces the old; a revoked id is reinstated).
+// The minimum issued_at survives a rotation.
 export circuit registerSanctionsProvider(provider_id: Bytes<32>, key: JubjubPoint): [] {
   assert_owner();
   sanctions_provider_key.insert(disclose(provider_id), disclose(key));
+  if (!sanctions_provider_min_issued_at.member(disclose(provider_id))) {
+    sanctions_provider_min_issued_at.insert(disclose(provider_id), 0 as Uint<64>);
+  }
   if (sanctions_provider_revoked.member(disclose(provider_id))) {
     sanctions_provider_revoked.remove(disclose(provider_id));
   }
+}
+
+// Supersedes the provider's older snapshots: lists issued before min_issued_at stop being accepted.
+export circuit setSanctionsMinIssuedAt(provider_id: Bytes<32>, min_issued_at: Uint<64>): [] {
+  assert_owner();
+  const id = disclose(provider_id);
+  assert(sanctions_provider_key.member(id), "Unknown sanctions provider");
+  assert(disclose(min_issued_at) > sanctions_provider_min_issued_at.lookup(id), "Minimum issued_at can only move forward");
+  sanctions_provider_min_issued_at.insert(id, disclose(min_issued_at));
 }
 
 export circuit revokeSanctionsProvider(provider_id: Bytes<32>): [] {
@@ -285,6 +306,7 @@ circuit check_sanctions_list(l: SanctionsList): [] {
   assert(sanctions_provider_key.member(id), "Sanctions provider not registered");
   assert(!sanctions_provider_revoked.member(id), "Sanctions provider revoked");
   assert(l.valid_until > l.issued_at, "Sanctions list validity window is empty");
+  assert(disclose(l.issued_at) >= sanctions_provider_min_issued_at.lookup(id), "Sanctions list superseded: issued before the provider's minimum");
   assert(blockTimeLt(disclose(l.valid_until)), "Sanctions list expired");
   const ok = jubjubSchnorrVerify<5>(sanctions_message(l.list_root, l.provider_id, l.pepper_commit, l.issued_at, l.valid_until), l.signature, sanctions_provider_key.lookup(id));
   assert(disclose(ok), "Sanctions list signature invalid");
@@ -340,6 +362,7 @@ export circuit evaluateTransfer(transfer_id: Bytes<32>, policy_hash: Bytes<32>):
   verdict_sanctions_provider.insert(disclose(transfer_id), disclose(list.provider_id));
   verdict_sanctions_valid_until.insert(disclose(transfer_id), disclose(list.valid_until));
   verdict_sanctions_pepper_commit.insert(disclose(transfer_id), disclose(list.pepper_commit));
+  verdict_sanctions_issued_at.insert(disclose(transfer_id), disclose(list.issued_at));
   if (disclose(pass)) { total_pass.increment(1); } else { total_fail.increment(1); }
   return disclose(pass ? 1 : 2);
 }
@@ -351,6 +374,7 @@ export circuit releaseTransfer(transfer_id: Bytes<32>): [] {
   // The screening behind the PASS must still stand at release time (time-of-check / time-of-use).
   assert(blockTimeLt(verdict_sanctions_valid_until.lookup(disclose(transfer_id))), "Sanctions list behind the verdict expired: evaluate again");
   assert(!sanctions_provider_revoked.member(verdict_sanctions_provider.lookup(disclose(transfer_id))), "Sanctions provider revoked since the verdict: evaluate again");
+  assert(verdict_sanctions_issued_at.lookup(disclose(transfer_id)) >= sanctions_provider_min_issued_at.lookup(verdict_sanctions_provider.lookup(disclose(transfer_id))), "Sanctions list behind the verdict was superseded: evaluate again");
   assert(registry.hasAttestation(self_company_id) == 1, "VASP has no compliance attestation in the registry");
   status.insert(disclose(transfer_id), disclose(3 as Uint<8>));
   total_released.increment(1);

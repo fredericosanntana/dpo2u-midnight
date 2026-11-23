@@ -212,6 +212,8 @@ describe('travel-rule-v10: witnesses, grant status, plan', () => {
     assert.equal(p.circuit, 'registerSanctionsProvider');
     assert.equal(p.key, 'owner');
     assert.equal(plan(ROOT, d, 'revoke-provider', {}).circuit, 'revokeSanctionsProvider');
+    assert.equal(plan(ROOT, d, 'supersede-lists', {}).circuit, 'setSanctionsMinIssuedAt');
+    assert.equal(plan(ROOT, d, 'supersede-lists', {}).key, 'owner');
     assert.match(String(plan(ROOT, d, 'evaluate', {}).crossContract), /signed sanctions list/);
   });
 
