@@ -12,15 +12,18 @@
  * amount_cents. The beneficiary vasp_id is the counterparty's passportId as issued
  * on PsavPassport (the same 32 bytes, not a hash of it). The agent deletes the file right after the
  * proof attempt, success or failure; on retry the gateway writes it again.
- * Sanctions snapshot (public): <MIDNIGHT_SANCTIONS_DIR>/<list_root>.txt, one entry hash per line, the
- * provider's published list behind the signed root. The agent rebuilds the indexed tree from it (checked
+ * Sanctions snapshot: <MIDNIGHT_SANCTIONS_DIR>/<list_root>.txt, one keyed entry digest per line, the
+ * provider's list behind the signed root. The agent rebuilds the indexed tree from it (checked
  * against the signed list_root) to prove each party's identifiers in-circuit (witness sanctions_path).
+ * Snapshot pepper (v12, secret): <MIDNIGHT_SANCTIONS_DIR>/<list_root>.pepper, 32 bytes hex, regular
+ * file with no access for "other", delivered by the provider under contract. Checked against the
+ * signed pepper_commit; it feeds the witness sanctions_pepper and never goes into a queue item or log.
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { checkInstitutionId } from './institutions.js';
 import { parseTransferWitness, type PartyBytes } from './travel-rule-v10.js';
-import { fromPayload, readEntries, treeForSignedRoot, type SanctionsListWitness, type SanctionsTree } from './sanctions-list.js';
+import { fromPayload, parsePepper, readEntries, treeForSignedRoot, type SanctionsListWitness, type SanctionsTree } from './sanctions-list.js';
 
 const HEX32 = /^[0-9a-f]{64}$/;
 const bytes = (h: string) => new Uint8Array(Buffer.from(h, 'hex'));
@@ -75,6 +78,22 @@ export function sanctionsTreeFor(dir: string, list: SanctionsListWitness): Sanct
   const t = treeForSignedRoot(readEntries(fs.readFileSync(file, 'utf8')), list.list_root);
   trees.set(root, t);
   return t;
+}
+
+/** The snapshot's secret pepper, from <dir>/<list_root>.pepper (restricted file; must open the signed pepper_commit). */
+export function sanctionsPepperFor(dir: string, list: SanctionsListWitness): Uint8Array {
+  if (!dir || !path.isAbsolute(dir)) throw new Error('MIDNIGHT_SANCTIONS_DIR must be an absolute path');
+  const root = Buffer.from(list.list_root).toString('hex');
+  const file = path.join(dir, `${root}.pepper`);
+  if (!fs.existsSync(file)) throw new Error(`sanctions pepper ${root}.pepper not found in MIDNIGHT_SANCTIONS_DIR (the provider delivers it with the snapshot)`);
+  return readPepperFile(file, list.pepper_commit);
+}
+/** Reads a pepper file: regular file, no access for "other", opens the signed commitment. */
+export function readPepperFile(file: string, pepperCommit: Uint8Array): Uint8Array {
+  const st = fs.lstatSync(file);
+  if (!st.isFile()) throw new Error(`${file} must be a regular file (not a link)`);
+  if ((st.mode & 0o007) !== 0) throw new Error(`${file} holds the secret sanctions pepper: no access for "other" (0640 or 0600)`);
+  return parsePepper(fs.readFileSync(file, 'utf8'), pepperCommit);
 }
 
 /** Deletes the witness file; never throws (the caller logs a failure to delete). */

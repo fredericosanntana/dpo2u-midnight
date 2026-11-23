@@ -10,7 +10,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createCircuitContext, createConstructorContext, encodeContractAddress, ContractState } from '@midnight-ntwrk/compact-runtime';
-import { newProviderKey, signSanctionsList, sanctionsListRoot, SanctionsTree } from '../scripts/lib/sanctions-list.js';
+import { newProviderKey, signSanctionsList, sanctionsListRoot, SanctionsTree, newPepper, pepperCommitment, keyedEntries } from '../scripts/lib/sanctions-list.js';
 import * as Gate from '../build/TravelRuleGate/contract/index.js';
 import * as Passport from '../build/PsavPassport/contract/index.js';
 import * as Registry from '../build/ComplianceRegistry/contract/index.js';
@@ -31,8 +31,10 @@ const SELF = b32('company:example-vasp');
 const PASSPORT_VASP = 'vasp:with-passport';
 const PROVIDER_ID = idArg('provider:fictitious');
 const PROVIDER = newProviderKey();
-const TREE = new SanctionsTree(['11'.repeat(32)]);
-const LIST = signSanctionsList(Gate as any, PROVIDER.sk, { provider_id: PROVIDER_ID, list_root: sanctionsListRoot(['11'.repeat(32)]), issued_at: BigInt(T0 - 3600), valid_until: BigInt(T0 + 86_400) });
+const PEPPER = newPepper();
+const ENTRIES = keyedEntries(PEPPER, ['11'.repeat(32)]);
+const TREE = new SanctionsTree(ENTRIES);
+const LIST = signSanctionsList(Gate as any, PROVIDER.sk, { provider_id: PROVIDER_ID, list_root: sanctionsListRoot(ENTRIES), pepper_commit: pepperCommitment(PEPPER), issued_at: BigInt(T0 - 3600), valid_until: BigInt(T0 + 86_400) });
 
 function depFile(entry: Record<string, unknown>): string {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'trv10-'));
@@ -40,7 +42,7 @@ function depFile(entry: Record<string, unknown>): string {
   fs.writeFileSync(f, JSON.stringify({ network: 'preview', contracts: { TravelRuleGate: entry, PsavPassport: { contractAddress: PASSPORT }, ComplianceRegistry: { contractAddress: REGISTRY } } }));
   return f;
 }
-const V10 = { contractAddress: GATE, accessControl: 'owner-v2', codeVersion: 'v11', links: { PsavPassport: PASSPORT, ComplianceRegistry: REGISTRY } };
+const V10 = { contractAddress: GATE, accessControl: 'owner-v2', codeVersion: 'v12', links: { PsavPassport: PASSPORT, ComplianceRegistry: REGISTRY } };
 
 const run = async (c: any, circuit: string, state: any, ps: any, ...args: unknown[]) =>
   (await c.circuits[circuit](createCircuitContext({ circuitId: circuit, contractAddress: simAddress(0xffff), coinPublicKeyOrZswapState: CPK, contractState: state, privateState: ps, time: T0 } as any), ...args)).context.callContext.currentQueryContext.state;
@@ -64,7 +66,7 @@ async function chain() {
     originator_data: (x: any) => [x.privateState, x.privateState.o], beneficiary_data: (x: any) => [x.privateState, x.privateState.b],
     transfer_amount: (x: any) => [x.privateState, 250_000n], sanctions_path: (x: any, key: bigint) => [x.privateState, TREE.path(key)],
     owner_secret: (x: any) => [x.privateState, OWNER], approver_secret: (x: any) => [x.privateState, x.privateState.approver ?? APPROVER],
-    sanctions_list: (x: any) => [x.privateState, LIST],
+    sanctions_list: (x: any) => [x.privateState, LIST], sanctions_pepper: (x: any) => [x.privateState, PEPPER],
   } as any);
   const gInit0 = (await gate.initialState(createConstructorContext({}, CPK), Gate.pureCircuits.owner_commitment(OWNER), 100_000n,
     contractRef(PASSPORT), contractRef(REGISTRY), SELF, Gate.pureCircuits.approver_commitment(APPROVER))).currentContractState;
@@ -85,19 +87,20 @@ describe('travel-rule-v10: deployment', () => {
     const d = readGateDeployment(ROOT, 'preview', depFile(V10));
     assert.equal(d.gate, GATE);
     assert.deepEqual(d.links, { PsavPassport: PASSPORT, ComplianceRegistry: REGISTRY });
-    assert.throws(() => readGateDeployment(ROOT, 'preview', depFile({ ...V10, codeVersion: undefined })), /not the v11 layout/);
-    // a v10 gate has no in-circuit sanctions screening: refused too (redeploy as v11)
-    assert.throws(() => readGateDeployment(ROOT, 'preview', depFile({ ...V10, codeVersion: 'v10' })), /not the v11 layout \(got v10/);
+    assert.throws(() => readGateDeployment(ROOT, 'preview', depFile({ ...V10, codeVersion: undefined })), /not the v12 layout/);
+    // a v10 gate has no in-circuit sanctions screening, a v11 one screens bare identifier hashes: both refused (redeploy as v12)
+    assert.throws(() => readGateDeployment(ROOT, 'preview', depFile({ ...V10, codeVersion: 'v10' })), /not the v12 layout \(got v10/);
+    assert.throws(() => readGateDeployment(ROOT, 'preview', depFile({ ...V10, codeVersion: 'v11' })), /not the v12 layout \(got v11/);
     const f = depFile({ ...V10, links: { PsavPassport: PASSPORT } });
     const j = JSON.parse(fs.readFileSync(f, 'utf8')); delete j.contracts.ComplianceRegistry; fs.writeFileSync(f, JSON.stringify(j));
     assert.throws(() => readGateDeployment(ROOT, 'preview', f), /link to ComplianceRegistry missing/);
   });
 
-  it('the preview deployment file is either a current v11 gate or refused with the reason', () => {
+  it('the preview deployment file is either a current v12 gate or refused with the reason', () => {
     const f = path.join(ROOT, 'deployment-preview-v9.json');
     const g = JSON.parse(fs.readFileSync(f, 'utf8')).contracts?.TravelRuleGate;
-    if (g?.codeVersion === 'v11') assert.equal(readGateDeployment(ROOT, 'preview').gate, g.contractAddress);
-    else assert.throws(() => readGateDeployment(ROOT, 'preview'), /not the v11 layout/);
+    if (g?.codeVersion === 'v12') assert.equal(readGateDeployment(ROOT, 'preview').gate, g.contractAddress);
+    else assert.throws(() => readGateDeployment(ROOT, 'preview'), /not the v12 layout/);
   });
 });
 
