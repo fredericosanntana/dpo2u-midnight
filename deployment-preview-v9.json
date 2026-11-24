@@ -172,6 +172,24 @@
       "seconds": 19
     },
     "TravelRuleGate": {
+      "contractAddress": "61292c3188a5cdd22aa225be140977ca27bbc847a10723d23512a9550ebe16fe",
+      "txId": "00a96af4966916515d16e97ff3124228eadd99aa2276dc9c6dc7dcb03f9c75ea04",
+      "blockHeight": 243973,
+      "deployedAt": "2026-11-24T00:30:07.123Z",
+      "compiler": "compactc 0.36.0",
+      "accessControl": "owner-v2",
+      "codeVersion": "v12",
+      "links": {
+        "PsavPassport": "21dc5ef4b666de7436d65f531aace9f53ad72bcd0b5eedbac25259afb5773951",
+        "ComplianceRegistry": "c475215ea3894b411312729fd6db81d37d66ffc65871660a8b07eda82e44f38e"
+      },
+      "dustSpent": "14514738036580474",
+      "dustBefore": "25000000000000000000",
+      "seconds": 29
+    }
+  },
+  "previous": {
+    "TravelRuleGate": {
       "contractAddress": "bafbb45c29a694b8c5203b2157dfc1941db617b30da110157c2bd95e8ff613d5",
       "txId": "00a89abb024d81b9d7cefc9563824fa35264f192d6c3cc3ba7088f7aa18ecd5fd7",
       "blockHeight": 136200,
@@ -186,24 +204,6 @@
       "dustSpent": "13547183970102298",
       "dustBefore": "23859074448838038885",
       "seconds": 25
-    }
-  },
-  "previous": {
-    "TravelRuleGate": {
-      "contractAddress": "9c6650bb751dd8298c457a4e40fd4b3d48ac832f22091f9a58b32f291daf09c0",
-      "txId": "006f08c85cc9ddec32b540b0aa92bc330bbf43005ea5ef3a638de4b4630e35b635",
-      "blockHeight": 98181,
-      "deployedAt": "2026-11-13T21:17:56.723Z",
-      "compiler": "compactc 0.36.0",
-      "accessControl": "owner-v2",
-      "codeVersion": "v10",
-      "links": {
-        "PsavPassport": "21dc5ef4b666de7436d65f531aace9f53ad72bcd0b5eedbac25259afb5773951",
-        "ComplianceRegistry": "c475215ea3894b411312729fd6db81d37d66ffc65871660a8b07eda82e44f38e"
-      },
-      "dustSpent": "13836521816594403",
-      "dustBefore": "14635506611604634059",
-      "seconds": 19
     }
   }
 }
