@@ -35,7 +35,12 @@ import CompactStandardLibrary;
 //   signed (Schnorr/Jubjub) by a provider the owner registered (registerSanctionsProvider; one
 //   active key per id, re-registering rotates it, revokeSanctionsProvider disables it) and the block
 //   time is before its valid_until. The verdict stores verdict_sanctions_root / _provider /
-//   _valid_until.
+//   _valid_until / _issued_at.
+//   SUPERSEDED SNAPSHOTS (v12): a snapshot stays valid until its valid_until even after the provider
+//   publishes a newer one (for example one that adds a newly sanctioned person). The owner bumps the
+//   provider's minimum issued_at (setSanctionsMinIssuedAt, forward only) when a new snapshot arrives;
+//   evaluateTransfer refuses a list issued before it, and releaseTransfer refuses a PASS whose list
+//   was issued before it (evaluate again with the current snapshot).
 //
 // SANCTIONS SCREENING (proven in-circuit, v11-sanctions-nonmembership): the signed list_root is the
 //   root of an indexed (sorted) Merkle tree of depth 20 over screening keys, built by the provider
@@ -49,6 +54,19 @@ import CompactStandardLibrary;
 //   fit a circuit); the list then carries the identifiers of the matched persons.
 //   Design credit: the indexed-tree approach was suggested by ProofOrBluff (@realjohnny5i,
 //   github.com/bytewizard42i/ProofOrBluff).
+//
+// KEYED SCREENING (v12, LGPD): the identifier hashes in the witness (sha256 of the normalized CPF,
+//   document or account) are low-entropy: a CPF has about 10^9 values, so a bare sha256 of it is
+//   reversible by brute force and remains personal data (LGPD art. 5 I and 12). Up to v11 the list
+//   entries were those bare hashes, so the snapshot file the provider hands out exposed every listed
+//   person's CPF to whoever held it. Since v12 the provider draws a secret 32-byte pepper per snapshot
+//   and lists screening_digest(pepper, id_hash) instead; the signed message carries
+//   pepper_commit = pepper_commitment(pepper). The circuit takes the pepper as a private witness,
+//   checks it opens the signed commitment and derives each screening key in-circuit, so the match
+//   stays exact (no per-transfer salt, which would never match) and the snapshot file is useless
+//   without the pepper. The pepper goes to the gate operator (and to a supervisor on a disclosure
+//   request) under contract, never into a queue item, the ledger or a log. The verdict records
+//   pepper_commit, so a supervisor can check the pepper it was given is the one behind the verdict.
 //
 // REASON CODES: 0 none, 1 missing required party info, 2 missing originator id above
 //   threshold, 3 counterparty VASP not attested, 4 sanctions list hit (proven against the signed list).
@@ -82,16 +100,19 @@ struct SanctionsPath {
 witness sanctions_path(key: Uint<128>): SanctionsPath;
 
 // A sanctions-list snapshot signed by its provider (Schnorr over Jubjub). The provider signs
-// sanctions_message(list_root, provider_id, issued_at, valid_until) with jubjubSchnorrSign
+// sanctions_message(list_root, provider_id, pepper_commit, issued_at, valid_until) with jubjubSchnorrSign
 // (compact-runtime); the circuit verifies it against the provider's registered key.
 struct SanctionsList {
   provider_id: Bytes<32>;
   list_root: Bytes<32>;
+  pepper_commit: Bytes<32>;
   issued_at: Uint<64>;
   valid_until: Uint<64>;
   signature: JubjubSchnorrSignature;
 }
 witness sanctions_list(): SanctionsList;
+// The snapshot's secret pepper (KEYED SCREENING above). Private: never disclosed.
+witness sanctions_pepper(): Bytes<32>;
 witness owner_secret(): Bytes<32>;
 witness approver_secret(): Bytes<32>;
 
@@ -118,10 +139,14 @@ export ledger verdict_policy: Map<Bytes<32>, Bytes<32>>;
 export ledger verdict_sanctions_root: Map<Bytes<32>, Bytes<32>>;
 export ledger verdict_sanctions_provider: Map<Bytes<32>, Bytes<32>>;
 export ledger verdict_sanctions_valid_until: Map<Bytes<32>, Uint<64>>;
+export ledger verdict_sanctions_pepper_commit: Map<Bytes<32>, Bytes<32>>;
+export ledger verdict_sanctions_issued_at: Map<Bytes<32>, Uint<64>>;
 
 // Sanctions-list providers: one active key per provider id (re-registering rotates it).
 export ledger sanctions_provider_key: Map<Bytes<32>, JubjubPoint>;
 export ledger sanctions_provider_revoked: Set<Bytes<32>>;
+// Oldest issued_at still accepted per provider (0 at registration; only moves forward).
+export ledger sanctions_provider_min_issued_at: Map<Bytes<32>, Uint<64>>;
 export ledger total_pass: Counter;
 export ledger total_fail: Counter;
 export ledger total_released: Counter;
@@ -199,17 +224,41 @@ circuit party_root(p: Party): Bytes<32> {
 }
 
 // The message a provider signs for one list snapshot.
-export pure circuit sanctions_message(list_root: Bytes<32>, provider_id: Bytes<32>, issued_at: Uint<64>, valid_until: Uint<64>): Vector<4, Field> {
-  return [transientHash<Bytes<32>>(list_root), transientHash<Bytes<32>>(provider_id), issued_at as Field, valid_until as Field];
+export pure circuit sanctions_message(list_root: Bytes<32>, provider_id: Bytes<32>, pepper_commit: Bytes<32>, issued_at: Uint<64>, valid_until: Uint<64>): Vector<5, Field> {
+  return [transientHash<Bytes<32>>(list_root), transientHash<Bytes<32>>(provider_id), transientHash<Bytes<32>>(pepper_commit), issued_at as Field, valid_until as Field];
+}
+
+// Commitment to a snapshot's pepper (signed by the provider). The pepper is 32 random bytes, so the
+// commitment does not reveal it.
+export pure circuit pepper_commitment(pepper: Bytes<32>): Bytes<32> {
+  return transientHash<Vector<2, Bytes<32>>>([pad(32, "dpo2u/sanctions-pepper/v1"), pepper]) as Bytes<32>;
+}
+// Keyed screening digest of one identifier hash: what the provider lists and what the circuit screens.
+// Without the pepper, a guessed CPF cannot be tested against the list.
+export pure circuit screening_digest(pepper: Bytes<32>, h: Bytes<32>): Bytes<32> {
+  return transientHash<Vector<3, Bytes<32>>>([pad(32, "dpo2u/screening/v1"), pepper, h]) as Bytes<32>;
 }
 
 // Registers a provider's public key, or rotates it (the new key replaces the old; a revoked id is reinstated).
+// The minimum issued_at survives a rotation.
 export circuit registerSanctionsProvider(provider_id: Bytes<32>, key: JubjubPoint): [] {
   assert_owner();
   sanctions_provider_key.insert(disclose(provider_id), disclose(key));
+  if (!sanctions_provider_min_issued_at.member(disclose(provider_id))) {
+    sanctions_provider_min_issued_at.insert(disclose(provider_id), 0 as Uint<64>);
+  }
   if (sanctions_provider_revoked.member(disclose(provider_id))) {
     sanctions_provider_revoked.remove(disclose(provider_id));
   }
+}
+
+// Supersedes the provider's older snapshots: lists issued before min_issued_at stop being accepted.
+export circuit setSanctionsMinIssuedAt(provider_id: Bytes<32>, min_issued_at: Uint<64>): [] {
+  assert_owner();
+  const id = disclose(provider_id);
+  assert(sanctions_provider_key.member(id), "Unknown sanctions provider");
+  assert(disclose(min_issued_at) > sanctions_provider_min_issued_at.lookup(id), "Minimum issued_at can only move forward");
+  sanctions_provider_min_issued_at.insert(id, disclose(min_issued_at));
 }
 
 export circuit revokeSanctionsProvider(provider_id: Bytes<32>): [] {
@@ -229,7 +278,7 @@ export pure circuit sanctions_node_hash(left: Field, right: Field): Field {
 export pure circuit sanctions_root_bytes(root: Field): Bytes<32> {
   return root as Bytes<32>;
 }
-// Screening key of a 32-byte identifier hash: its first 16 bytes, big-endian, as an integer.
+// Screening key of a 32-byte screening digest: its first 16 bytes, big-endian, as an integer.
 export pure circuit screening_key(h: Bytes<32>): Uint<128> {
   const head = slice<16>(h as Vector<32, Uint<8>>, 0);
   return fold((acc: Field, b: Uint<8>): Field => acc * 256 + (b as Field), 0 as Field, head) as Uint<128>;
@@ -239,10 +288,12 @@ export pure circuit sanctions_path_root(p: SanctionsPath): Field {
               sanctions_leaf_hash(p.leaf.value, p.leaf.next), p.steps);
 }
 // Proves one identifier against the signed list; returns true on a proven hit. A zero hash (field
-// not given) is skipped. Reverts if the witness path does not open the signed root or does not
+// not given) is skipped. The key is derived in-circuit from the pepper (KEYED SCREENING), so the
+// prover cannot pick it. Reverts if the witness path does not open the signed root or does not
 // bracket the key, so the result cannot be chosen by the prover.
-circuit screen(h: Bytes<32>, list_root: Bytes<32>): Boolean {
-  const key = screening_key(h);
+circuit screen(h: Bytes<32>, list_root: Bytes<32>, pepper: Bytes<32>): Boolean {
+  const given = h != default<Bytes<32>>;
+  const key = given ? screening_key(screening_digest(pepper, h)) : 0 as Uint<128>;
   const p = sanctions_path(key);
   const opens = sanctions_root_bytes(sanctions_path_root(p)) == list_root;
   const brackets = p.leaf.value <= key && (p.leaf.next == 0 || key < p.leaf.next);
@@ -255,8 +306,9 @@ circuit check_sanctions_list(l: SanctionsList): [] {
   assert(sanctions_provider_key.member(id), "Sanctions provider not registered");
   assert(!sanctions_provider_revoked.member(id), "Sanctions provider revoked");
   assert(l.valid_until > l.issued_at, "Sanctions list validity window is empty");
+  assert(disclose(l.issued_at) >= sanctions_provider_min_issued_at.lookup(id), "Sanctions list superseded: issued before the provider's minimum");
   assert(blockTimeLt(disclose(l.valid_until)), "Sanctions list expired");
-  const ok = jubjubSchnorrVerify<4>(sanctions_message(l.list_root, l.provider_id, l.issued_at, l.valid_until), l.signature, sanctions_provider_key.lookup(id));
+  const ok = jubjubSchnorrVerify<5>(sanctions_message(l.list_root, l.provider_id, l.pepper_commit, l.issued_at, l.valid_until), l.signature, sanctions_provider_key.lookup(id));
   assert(disclose(ok), "Sanctions list signature invalid");
 }
 
@@ -286,11 +338,16 @@ export circuit evaluateTransfer(transfer_id: Bytes<32>, policy_hash: Bytes<32>):
   const vasp_ok = attested_vasps.member(disclose(b.vasp_id)) || passport.isValid(disclose(b.vasp_id));
   const list = sanctions_list();
   check_sanctions_list(list);
+  // The pepper must open the commitment the provider signed; a zero pepper would make the list
+  // entries guessable again.
+  const pepper = sanctions_pepper();
+  assert(pepper != zero, "Sanctions pepper must not be zero");
+  assert(pepper_commitment(pepper) == list.pepper_commit, "Sanctions pepper does not open the signed commitment");
   // Four separate proofs (no short-circuit): every given identifier is proven against the list.
-  const hit_oa = screen(o.account_hash, list.list_root);
-  const hit_od = screen(o.doc_hash, list.list_root);
-  const hit_ba = screen(b.account_hash, list.list_root);
-  const hit_bd = screen(b.doc_hash, list.list_root);
+  const hit_oa = screen(o.account_hash, list.list_root, pepper);
+  const hit_od = screen(o.doc_hash, list.list_root, pepper);
+  const hit_ba = screen(b.account_hash, list.list_root, pepper);
+  const hit_bd = screen(b.doc_hash, list.list_root, pepper);
   const clean = !(hit_oa || hit_od || hit_ba || hit_bd);
 
   const reason: Uint<8> = !complete ? 1 : (!id_ok ? 2 : (!vasp_ok ? 3 : (!clean ? 4 : 0)));
@@ -304,6 +361,8 @@ export circuit evaluateTransfer(transfer_id: Bytes<32>, policy_hash: Bytes<32>):
   verdict_sanctions_root.insert(disclose(transfer_id), disclose(list.list_root));
   verdict_sanctions_provider.insert(disclose(transfer_id), disclose(list.provider_id));
   verdict_sanctions_valid_until.insert(disclose(transfer_id), disclose(list.valid_until));
+  verdict_sanctions_pepper_commit.insert(disclose(transfer_id), disclose(list.pepper_commit));
+  verdict_sanctions_issued_at.insert(disclose(transfer_id), disclose(list.issued_at));
   if (disclose(pass)) { total_pass.increment(1); } else { total_fail.increment(1); }
   return disclose(pass ? 1 : 2);
 }
@@ -315,6 +374,7 @@ export circuit releaseTransfer(transfer_id: Bytes<32>): [] {
   // The screening behind the PASS must still stand at release time (time-of-check / time-of-use).
   assert(blockTimeLt(verdict_sanctions_valid_until.lookup(disclose(transfer_id))), "Sanctions list behind the verdict expired: evaluate again");
   assert(!sanctions_provider_revoked.member(verdict_sanctions_provider.lookup(disclose(transfer_id))), "Sanctions provider revoked since the verdict: evaluate again");
+  assert(verdict_sanctions_issued_at.lookup(disclose(transfer_id)) >= sanctions_provider_min_issued_at.lookup(verdict_sanctions_provider.lookup(disclose(transfer_id))), "Sanctions list behind the verdict was superseded: evaluate again");
   assert(registry.hasAttestation(self_company_id) == 1, "VASP has no compliance attestation in the registry");
   status.insert(disclose(transfer_id), disclose(3 as Uint<8>));
   total_released.increment(1);

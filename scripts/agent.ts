@@ -21,7 +21,8 @@
  *   company_attestation           ComplianceRegistry.attestCompliance keyed by company_id (scripts/lib/company-attestation.ts)
  *   travel_rule_transfer          institution's TravelRuleGate.evaluateTransfer; private witness from
  *                                 <MIDNIGHT_TRANSFER_WITNESS_DIR>/<transfer_id>.json, deleted after the attempt (scripts/lib/transfer-queue.ts)
- *                                 and the signed list's public snapshot <MIDNIGHT_SANCTIONS_DIR>/<list_root>.txt (in-circuit screening)
+ *                                 and the signed list's snapshot <MIDNIGHT_SANCTIONS_DIR>/<list_root>.txt (in-circuit screening)
+ *                                 with its secret pepper <list_root>.pepper (v12 keyed screening, no access for "other")
  *   travel_rule_release           institution's TravelRuleGate.releaseTransfer
  * Contract addresses come from deployment-<network>-v9.json (scripts/deploy-v9.ts).
  */
@@ -54,7 +55,7 @@ import * as PsavPassport from '../build/PsavPassport/contract/index.js';
 import { deriveQueuePassport, issueFromQueue, preimagePath, readPreimageFile } from './lib/passport-queue.js';
 import { parseCompanyAttestation } from './lib/company-attestation.js';
 import { companyIdBytes } from './lib/institutions.js';
-import { parseTransferItem, parseReleaseItem, witnessPath, readWitnessFile, dropWitness, sanctionsTreeFor } from './lib/transfer-queue.js';
+import { parseTransferItem, parseReleaseItem, witnessPath, readWitnessFile, dropWitness, sanctionsTreeFor, sanctionsPepperFor } from './lib/transfer-queue.js';
 import type { SanctionsTree } from './lib/sanctions-list.js';
 import { GATE, CALLEES, readGateDeployment, crossGateProviders, gateLedgerOf, buildDir } from './lib/travel-rule-v10.js';
 import { encodeContractAddress, ContractState } from '@midnight-ntwrk/compact-runtime';
@@ -191,8 +192,8 @@ type Contracts = { cr: any; escrow: any; pg: any; fd: any; trust: any; legal: an
   gate: (institution: string) => Promise<{ c: any; read: () => Promise<any> }> };
 
 // Private data of the transfer being evaluated (set per item from the ephemeral witness file, cleared after).
-let transferWitness: { o: unknown; b: unknown; amount: bigint; list: unknown; tree: SanctionsTree } | undefined;
-const tw = (k: 'o' | 'b' | 'amount' | 'list', name: string) => (x: any) => {
+let transferWitness: { o: unknown; b: unknown; amount: bigint; list: unknown; tree: SanctionsTree; pepper: Uint8Array } | undefined;
+const tw = (k: 'o' | 'b' | 'amount' | 'list' | 'pepper', name: string) => (x: any) => {
   if (!transferWitness) throw new Error(`witness ${name}: no transfer being evaluated`);
   return [x.privateState, transferWitness[k]];
 };
@@ -201,6 +202,7 @@ const gateWitnessesFor = (secret: Uint8Array) => ({
   approver_secret: () => { throw new Error('witness approver_secret: approvals never run in the agent'); },
   originator_data: tw('o', 'originator_data'), beneficiary_data: tw('b', 'beneficiary_data'),
   transfer_amount: tw('amount', 'transfer_amount'), sanctions_list: tw('list', 'sanctions_list'),
+  sanctions_pepper: tw('pepper', 'sanctions_pepper'),
   sanctions_path: (x: any, key: bigint) => {
     if (!transferWitness) throw new Error('witness sanctions_path: no transfer being evaluated');
     return [x.privateState, transferWitness.tree.path(key)];
@@ -335,8 +337,9 @@ async function attestItem(c: Contracts, item: QueueItem) {
     try {
       const w = readWitnessFile(file);
       const tree = sanctionsTreeFor(process.env.MIDNIGHT_SANCTIONS_DIR ?? '', t.list);
+      const pepper = sanctionsPepperFor(process.env.MIDNIGHT_SANCTIONS_DIR ?? '', t.list);
       const g = await c.gate(t.institution);
-      transferWitness = { o: w.o, b: w.b, amount: w.amount, list: t.list, tree };
+      transferWitness = { o: w.o, b: w.b, amount: w.amount, list: t.list, tree, pepper };
       try { r = await g.c.callTx.evaluateTransfer(t.transferId, t.policyHash); } finally { transferWitness = undefined; }
       const L = await g.read();
       return { kind: 'travel_rule_transfer', key: t.transferIdHex, public: r?.public ?? {},

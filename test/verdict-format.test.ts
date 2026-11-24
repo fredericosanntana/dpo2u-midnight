@@ -20,7 +20,7 @@ import * as Gate from '../build/TravelRuleGate/contract/index.js';
 import * as Passport from '../build/PsavPassport/contract/index.js';
 import * as Registry from '../build/ComplianceRegistry/contract/index.js';
 import { simAddress, contractRef, asDeployed, crossContract, SIM_BLOCK_HASH } from './helpers.js';
-import { signSanctionsList, providerPublicKey, SanctionsTree } from '../scripts/lib/sanctions-list.js';
+import { signSanctionsList, providerPublicKey, SanctionsTree, keyedEntries, pepperCommitment } from '../scripts/lib/sanctions-list.js';
 import { verdictFromLedger, verdictDigest, canonicalJson, checkVerdict, VERDICT_FORMAT } from '../scripts/lib/verdict.js';
 
 const VECTORS = path.join(path.dirname(fileURLToPath(import.meta.url)), 'vectors', 'verdict-v1.json');
@@ -35,7 +35,9 @@ const ATTESTED = b32('vasp:counterparty-A'), POLICY = b32('policy:travel-rule@1.
 const PROVIDER = new Uint8Array(32).fill(0xaa);
 const PROVIDER_SK = 123456789n;
 // The fail-4 beneficiary's account is on the list; everything else is not.
-const TREE = new SanctionsTree(['11'.repeat(32), '22'.repeat(32), Buffer.from(b32('acct:b6')).toString('hex')]);
+// v12: entries keyed with a fixed (fictitious) pepper; pepper_commit is not part of the verdict format.
+const PEPPER = new Uint8Array(32).fill(0x5e);
+const TREE = new SanctionsTree(keyedEntries(PEPPER, ['11'.repeat(32), '22'.repeat(32), Buffer.from(b32('acct:b6')).toString('hex')]));
 const LIST_ROOT = TREE.rootBytes;
 const PINNED_LIST_ROOT = '2ed13003fc1be9cb2262b8a9dcdcdbce8264dc80738ba35e01d3ed5863c6ff9f';   // v10 root in the pinned vectors
 const party = (n: string, doc: boolean, vasp: Uint8Array) => ({ name_hash: b32('name:' + n), account_hash: b32('acct:' + n), doc_hash: doc ? b32('doc:' + n) : ZERO, vasp_id: vasp, salt: b32('salt:' + n) });
@@ -64,10 +66,10 @@ async function simulate() {
     originator_data: (x: any) => [x.privateState, x.privateState.o], beneficiary_data: (x: any) => [x.privateState, x.privateState.b],
     transfer_amount: (x: any) => [x.privateState, x.privateState.amount], sanctions_path: (x: any, key: bigint) => [x.privateState, TREE.path(key)],
     owner_secret: (x: any) => [x.privateState, OWNER], approver_secret: (x: any) => [x.privateState, APPROVER],
-    sanctions_list: (x: any) => [x.privateState, LIST],
+    sanctions_list: (x: any) => [x.privateState, LIST], sanctions_pepper: (x: any) => [x.privateState, PEPPER],
   } as any);
   // The signature itself is randomized (Schnorr nonce) but never enters the verdict: only root, provider, valid_until.
-  const LIST = signSanctionsList(Gate as any, PROVIDER_SK, { provider_id: PROVIDER, list_root: LIST_ROOT, issued_at: BigInt(T0 - 3600), valid_until: BigInt(T0 + 86_400) });
+  const LIST = signSanctionsList(Gate as any, PROVIDER_SK, { provider_id: PROVIDER, list_root: LIST_ROOT, pepper_commit: pepperCommitment(PEPPER), issued_at: BigInt(T0 - 3600), valid_until: BigInt(T0 + 86_400) });
   let state: any = (await g.initialState(createConstructorContext({}, CPK), Gate.pureCircuits.owner_commitment(OWNER), 100_000n, contractRef(PASSPORT), contractRef(REGISTRY), SELF, Gate.pureCircuits.approver_commitment(APPROVER))).currentContractState;
   const run = async (ps: any, f: (c: any) => Promise<any>) => { state = (await f(createCircuitContext({ circuitId: 't', contractAddress: GATE, coinPublicKeyOrZswapState: CPK, contractState: state, privateState: ps, time: T0, parentBlockHash: SIM_BLOCK_HASH, crossContract: cross } as any))).context.callContext.currentQueryContext.state; };
   await run(CASES[0], (c) => g.circuits.registerSanctionsProvider(c, PROVIDER, providerPublicKey(PROVIDER_SK)));

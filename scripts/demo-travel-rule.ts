@@ -16,7 +16,7 @@ import { Contract, ledger, pureCircuits } from '../build/TravelRuleGate/contract
 import * as Passport from '../build/PsavPassport/contract/index.js';
 import * as Registry from '../build/ComplianceRegistry/contract/index.js';
 import { simAddress, contractRef, asDeployed, crossContract, SIM_BLOCK_HASH } from './lib/sim-cross-contract.js';
-import { newProviderKey, signSanctionsList, SanctionsTree } from './lib/sanctions-list.js';
+import { newProviderKey, signSanctionsList, SanctionsTree, newPepper, pepperCommitment, keyedEntries } from './lib/sanctions-list.js';
 import { DisclosureGovernance, type DataSource, type Field, type Party as P } from '../src/disclosure/governance.js';
 import { buildPack, verifyPack, type Attestation } from '../src/evidence/pack.js';
 
@@ -64,13 +64,15 @@ const contract = new Contract<PS>({
   originator_data: (c: any) => [c.privateState, c.privateState.o], beneficiary_data: (c: any) => [c.privateState, c.privateState.b],
   transfer_amount: (c: any) => [c.privateState, c.privateState.amount], sanctions_path: (c: any, key: bigint) => [c.privateState, TREE.path(key)],
   owner_secret: (c: any) => [c.privateState, OWNER], approver_secret: (c: any) => [c.privateState, APPROVER],
-  sanctions_list: (c: any) => [c.privateState, LIST],
+  sanctions_list: (c: any) => [c.privateState, LIST], sanctions_pepper: (c: any) => [c.privateState, PEPPER],
 } as any);
 // Sanctions list: a fictitious provider signs one snapshot (indexed tree of entry hashes), valid one day.
 const PROVIDER = new Uint8Array(32).fill(0xaa);
 const providerKey = newProviderKey();
-const TREE = new SanctionsTree(['11'.repeat(32)]);
-const LIST = signSanctionsList({ pureCircuits } as any, providerKey.sk, { provider_id: PROVIDER, list_root: TREE.rootBytes, issued_at: BigInt(NOW - 3600), valid_until: BigInt(NOW + 86_400) });
+// v12: entries are keyed with the snapshot's secret pepper (no bare sha256 of an identifier).
+const PEPPER = newPepper();
+const TREE = new SanctionsTree(keyedEntries(PEPPER, ['11'.repeat(32)]));
+const LIST = signSanctionsList({ pureCircuits } as any, providerKey.sk, { provider_id: PROVIDER, list_root: TREE.rootBytes, pepper_commit: pepperCommitment(PEPPER), issued_at: BigInt(NOW - 3600), valid_until: BigInt(NOW + 86_400) });
 
 const { currentContractState } = await contract.initialState(createConstructorContext({} as any, CPK), pureCircuits.owner_commitment(OWNER), 100_000n,
   contractRef(PASSPORT), contractRef(REGISTRY), SELF, pureCircuits.approver_commitment(APPROVER));

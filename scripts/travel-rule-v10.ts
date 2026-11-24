@@ -4,7 +4,7 @@
  *
  *   MIDNIGHT_NETWORK=preview npx tsx scripts/travel-rule-v10.ts <command> [options] [--plan]
  *
- * Commands (addresses from deployment-<net>-v9.json, gate must be codeVersion v11):
+ * Commands (addresses from deployment-<net>-v9.json, gate must be codeVersion v12):
  *   attest-self     ComplianceRegistry.attestCompliance for TRAVEL_RULE_SELF_COMPANY_ID
  *                   --score N (private) --threshold N --context LABEL --evidence HEX|LABEL
  *   issue-passport  PsavPassport.issuePassport, tier 0 (machine-only), one machine rule PASS
@@ -13,8 +13,11 @@
  *                   private preimages; every derived field is recomputed and must match (scripts/lib/passport-queue.ts)
  *   register-provider  registerSanctionsProvider --provider-id ID --provider-key FILE ({x, y} decimal; re-registering rotates)
  *   revoke-provider    revokeSanctionsProvider --provider-id ID
+ *   supersede-lists    setSanctionsMinIssuedAt --provider-id ID --min-issued-at UNIX (forward only: the provider's
+ *                      snapshots issued before it are refused by evaluate and their PASS verdicts by release)
  *   evaluate        evaluateTransfer --transfer ID --policy HEX|LABEL --witness-file FILE(600) --sanctions-list FILE|-
- *                   --sanctions-entries FILE (the signed snapshot's entry hashes, one per line; must produce its list_root)
+ *                   --sanctions-entries FILE (the signed snapshot's keyed entries, one per line; must produce its list_root)
+ *                   --sanctions-pepper FILE (the snapshot's secret pepper, hex; no access for "other"; must open pepper_commit)
  *                   (signed list payload, docs/TRAVEL-RULE-DISCLOSURE.md; '-' reads it from stdin)
  *   release         releaseTransfer --transfer ID
  *   grant           grantDisclosure --grant ID --transfer ID --supervisor ID --scope N --ttl SEC --purpose HEX|LABEL
@@ -44,6 +47,7 @@ import { CompiledContract } from '@midnight-ntwrk/compact-js';
 import { encodeContractAddress, ContractState } from '@midnight-ntwrk/compact-runtime';
 import fs from 'node:fs';
 import { fromPayload, readEntries, treeForSignedRoot } from './lib/sanctions-list.js';
+import { readPepperFile } from './lib/transfer-queue.js';
 import { companyIdBytes } from './lib/institutions.js';
 import { parseQueuePayload, readPreimages, issueFromQueue, payloadDigest } from './lib/passport-queue.js';
 import { ZKConfigRegistry } from '@midnight-ntwrk/midnight-js-types';
@@ -68,7 +72,7 @@ const { values, positionals } = parseArgs({
     transfer: { type: 'string' }, policy: { type: 'string' }, 'witness-file': { type: 'string' },
     grant: { type: 'string' }, supervisor: { type: 'string' }, scope: { type: 'string' }, ttl: { type: 'string' }, purpose: { type: 'string' },
     'approver-secret-stdin': { type: 'boolean', default: false }, 'as-owner': { type: 'boolean', default: false },
-    'sanctions-list': { type: 'string' }, 'sanctions-entries': { type: 'string' }, 'from-queue': { type: 'string' }, 'passport-witness': { type: 'string' }, 'provider-id': { type: 'string' }, 'provider-key': { type: 'string' },
+    'sanctions-list': { type: 'string' }, 'sanctions-entries': { type: 'string' }, 'sanctions-pepper': { type: 'string' }, 'min-issued-at': { type: 'string' }, 'from-queue': { type: 'string' }, 'passport-witness': { type: 'string' }, 'provider-id': { type: 'string' }, 'provider-key': { type: 'string' },
     score: { type: 'string' }, threshold: { type: 'string' }, context: { type: 'string' }, evidence: { type: 'string' },
     'passport-id': { type: 'string' }, pack: { type: 'string' }, 'pack-version': { type: 'string' },
   },
@@ -108,8 +112,8 @@ async function argsFor(c: Command): Promise<{ show: Record<string, unknown>; cal
     }
     case 'evaluate': {
       const t = idArg(need('transfer')), p = hashArg(need('policy'));
-      need('witness-file'); need('sanctions-list'); need('sanctions-entries');
-      return { show: { transfer_id: hex(t), policy_hash: hex(p), witness_file: values['witness-file'], sanctions_list: values['sanctions-list'], sanctions_entries: values['sanctions-entries'] }, call: [t, p] };
+      need('witness-file'); need('sanctions-list'); need('sanctions-entries'); need('sanctions-pepper');
+      return { show: { transfer_id: hex(t), policy_hash: hex(p), witness_file: values['witness-file'], sanctions_list: values['sanctions-list'], sanctions_entries: values['sanctions-entries'], sanctions_pepper: values['sanctions-pepper'] }, call: [t, p] };
     }
     case 'release': { const t = idArg(need('transfer')); return { show: { transfer_id: hex(t) }, call: [t] }; }
     case 'grant': {
@@ -124,6 +128,11 @@ async function argsFor(c: Command): Promise<{ show: Record<string, unknown>; cal
       return { show: { provider_id: hex(id), key: { x: key.x.toString(), y: key.y.toString() } }, call: [id, key] };
     }
     case 'revoke-provider': { const id = idArg(need('provider-id')); return { show: { provider_id: hex(id) }, call: [id] }; }
+    case 'supersede-lists': {
+      const id = idArg(need('provider-id')), m = need('min-issued-at');
+      if (!/^\d+$/.test(m)) throw new Error('--min-issued-at must be unix seconds');
+      return { show: { provider_id: hex(id), min_issued_at: Number(m) }, call: [id, BigInt(m)] };
+    }
     case 'status': return { show: { transfer: values.transfer ?? null, grant: values.grant ?? null }, call: [] };
   }
 }
@@ -207,6 +216,7 @@ async function main() {
       const wit = cmd === 'evaluate' ? readTransferWitness(values['witness-file']!) : undefined;
       const list = cmd === 'evaluate' ? fromPayload(JSON.parse(values['sanctions-list'] === '-' ? await readStdin() : fs.readFileSync(values['sanctions-list']!, 'utf8'))) : undefined;
       const tree = list ? treeForSignedRoot(readEntries(fs.readFileSync(values['sanctions-entries']!, 'utf8')), list.list_root) : undefined;
+      const pepper = list ? readPepperFile(values['sanctions-pepper']!, list.pepper_commit) : undefined;
       target = (await join(providers, GATE, d.gate, {
         owner_secret: owner ? (x: any) => [x.privateState, owner] : refuse('owner_secret'),
         approver_secret: approverSecret ? (x: any) => [x.privateState, approverSecret] : refuse('approver_secret'),
@@ -215,6 +225,7 @@ async function main() {
         transfer_amount: wit ? (x: any) => [x.privateState, wit.amount] : refuse('transfer_amount'),
         sanctions_path: tree ? (x: any, key: bigint) => [x.privateState, tree.path(key)] : refuse('sanctions_path'),
         sanctions_list: list ? (x: any) => [x.privateState, list] : refuse('sanctions_list'),
+        sanctions_pepper: pepper ? (x: any) => [x.privateState, pepper] : refuse('sanctions_pepper'),
       })).c;
     }
 
@@ -239,9 +250,10 @@ async function main() {
       after.transfer = { status: Number(L.status.lookup(t)), fail_reason: Number(L.fail_reason.lookup(t)), policy_hash: hex(L.verdict_policy.lookup(t)),
         sanctions: { list_root: hex(L.verdict_sanctions_root.lookup(t)), provider_id: hex(L.verdict_sanctions_provider.lookup(t)), valid_until: Number(L.verdict_sanctions_valid_until.lookup(t)) } };
     }
-    if (cmd === 'register-provider' || cmd === 'revoke-provider') {
+    if (cmd === 'register-provider' || cmd === 'revoke-provider' || cmd === 'supersede-lists') {
       const id = a.call[0] as Uint8Array;
-      after.provider = { registered: L.sanctions_provider_key.member(id), revoked: L.sanctions_provider_revoked.member(id) };
+      after.provider = { registered: L.sanctions_provider_key.member(id), revoked: L.sanctions_provider_revoked.member(id),
+        min_issued_at: L.sanctions_provider_min_issued_at.member(id) ? Number(L.sanctions_provider_min_issued_at.lookup(id)) : null };
     }
     if (cmd === 'grant' || cmd === 'approve' || cmd === 'revoke') after.grant = grantStatus(L, a.call[0] as Uint8Array, Math.floor(Date.now() / 1000));
     console.log(JSON.stringify({ ok: true, command: cmd, contract: p.contract, address: p.address, circuit, result: r?.private?.result === undefined ? null : String(r.private.result),

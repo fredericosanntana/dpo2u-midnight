@@ -3,6 +3,8 @@
  * disclosure grants, and the cross-contract links (v10): a counterparty with a valid PsavPassport
  * passes the VASP check; release requires this VASP's attestation in the ComplianceRegistry.
  * v11: sanctions screening proven in-circuit against the signed indexed tree (hit, non-hit, forged path).
+ * v12: keyed screening (LGPD): list entries are screening_digest(pepper, id_hash); the pepper is a
+ * private witness that must open the signed pepper_commit.
  * Runs against the compiled contracts in the Compact runtime simulator (no network).
  */
 import { describe, it } from 'node:test';
@@ -12,12 +14,12 @@ import * as Gate from '../build/TravelRuleGate/contract/index.js';
 import * as Passport from '../build/PsavPassport/contract/index.js';
 import * as Registry from '../build/ComplianceRegistry/contract/index.js';
 import { publicStateHex, simAddress, contractRef, asDeployed, crossContract, SIM_BLOCK_HASH } from './helpers.js';
-import { newProviderKey, signSanctionsList, sanctionsListRoot, toPayload, fromPayload, SanctionsTree, leafHash, nodeHash, screeningKey, type SanctionsListWitness, type SanctionsPath } from '../scripts/lib/sanctions-list.js';
+import { newProviderKey, signSanctionsList, sanctionsListRoot, toPayload, fromPayload, SanctionsTree, leafHash, nodeHash, screeningKey, newPepper, pepperCommitment, screeningDigest, keyedEntries, type SanctionsListWitness, type SanctionsPath } from '../scripts/lib/sanctions-list.js';
 
 const { Contract, ledger, pureCircuits } = Gate;
 
 type Party = { name_hash: Uint8Array; account_hash: Uint8Array; doc_hash: Uint8Array; vasp_id: Uint8Array; salt: Uint8Array };
-type PS = { o: Party; b: Party; amount: bigint; tree: SanctionsTree; pathFor?: (key: bigint) => SanctionsPath; secret: Uint8Array; approver: Uint8Array; list: SanctionsListWitness };
+type PS = { o: Party; b: Party; amount: bigint; tree: SanctionsTree; pathFor?: (key: bigint) => SanctionsPath; secret: Uint8Array; approver: Uint8Array; list: SanctionsListWitness; pepper: Uint8Array };
 
 const b32 = (s: string) => { const x = Buffer.alloc(32); Buffer.from(s).copy(x, 0, 0, 32); return new Uint8Array(x); };
 const ZERO = new Uint8Array(32);
@@ -45,17 +47,21 @@ const witnesses = {
   owner_secret: (c: any) => [c.privateState, c.privateState.secret] as [PS, Uint8Array],
   approver_secret: (c: any) => [c.privateState, c.privateState.approver] as [PS, Uint8Array],
   sanctions_list: (c: any) => [c.privateState, c.privateState.list] as [PS, SanctionsListWitness],
+  sanctions_pepper: (c: any) => [c.privateState, c.privateState.pepper] as [PS, Uint8Array],
 };
 
 // Sanctions-list provider (fictitious) and a snapshot valid for one day from T0.
 const PROVIDER = new Uint8Array(Buffer.from('aa'.repeat(32), 'hex'));
 const PROVIDER_KEY = newProviderKey();
+// LISTED: identifier hashes (the provider's private input). The tree is built over their keyed digests.
 const LISTED = ['11'.repeat(32), '22'.repeat(32), Buffer.from(b32('acct:listed-person')).toString('hex'), Buffer.from(b32('doc:listed-person')).toString('hex')];
-const TREE = new SanctionsTree(LISTED);
+const PEPPER = newPepper();
+const PEPPER_COMMIT = pepperCommitment(PEPPER);
+const TREE = new SanctionsTree(keyedEntries(PEPPER, LISTED));
 const LIST_ROOT = TREE.rootBytes;
 const DAY = 86_400;
-const signedList = (o: Partial<{ sk: bigint; provider_id: Uint8Array; list_root: Uint8Array; issued_at: bigint; valid_until: bigint }> = {}) =>
-  signSanctionsList(Gate, o.sk ?? PROVIDER_KEY.sk, { provider_id: o.provider_id ?? PROVIDER, list_root: o.list_root ?? LIST_ROOT, issued_at: o.issued_at ?? BigInt(T0 - 3600), valid_until: o.valid_until ?? BigInt(T0 + DAY) });
+const signedList = (o: Partial<{ sk: bigint; provider_id: Uint8Array; list_root: Uint8Array; pepper_commit: Uint8Array; issued_at: bigint; valid_until: bigint }> = {}) =>
+  signSanctionsList(Gate, o.sk ?? PROVIDER_KEY.sk, { provider_id: o.provider_id ?? PROVIDER, list_root: o.list_root ?? LIST_ROOT, pepper_commit: o.pepper_commit ?? PEPPER_COMMIT, issued_at: o.issued_at ?? BigInt(T0 - 3600), valid_until: o.valid_until ?? BigInt(T0 + DAY) });
 const LIST = signedList();
 
 const party = (n: string, withDoc: boolean, vasp = b32('vasp:own')): Party => ({
@@ -64,7 +70,7 @@ const party = (n: string, withDoc: boolean, vasp = b32('vasp:own')): Party => ({
 });
 
 function base(over: Partial<PS> = {}): PS {
-  return { o: party('orig', true), b: party('benef', true, BENEF_VASP), amount: 250_000n, tree: TREE, secret: OWNER_SECRET, approver: APPROVER_SECRET, list: LIST, ...over };
+  return { o: party('orig', true), b: party('benef', true, BENEF_VASP), amount: 250_000n, tree: TREE, secret: OWNER_SECRET, approver: APPROVER_SECRET, list: LIST, pepper: PEPPER, ...over };
 }
 
 // ── Linked contracts, deployed in the simulator ──
@@ -228,6 +234,28 @@ describe('TravelRuleGate', () => {
     assert.equal(pureCircuits.sanctions_path_root(TREE.path(key)), TREE.root);
   });
 
+  // ── keyed screening (v12, LGPD) ──
+  it('KEYED: pepper_commitment and screening_digest match the TypeScript side', () => {
+    assert.deepEqual(pureCircuits.pepper_commitment(PEPPER), PEPPER_COMMIT);
+    for (const h of LISTED) assert.deepEqual(pureCircuits.screening_digest(PEPPER, new Uint8Array(Buffer.from(h, 'hex'))), screeningDigest(PEPPER, h));
+  });
+
+  it('KEYED: the snapshot holds no bare identifier hash, and another pepper gives other entries', () => {
+    for (const h of LISTED) assert.equal(TREE.has(screeningKey(h)), false, 'a bare sha256 of an identifier must not be in the list');
+    const other = new SanctionsTree(keyedEntries(newPepper(), LISTED));
+    assert.notDeepEqual(other.rootBytes, TREE.rootBytes);
+  });
+
+  it('KEYED: refuses a pepper that does not open the signed commitment, and a zero pepper', async () => {
+    const { contract, ctx, mk } = await setup(base());
+    const s0 = st(await contract.circuits.attestVasp(ctx, BENEF_VASP));
+    await assert.rejects(() => contract.circuits.evaluateTransfer(mk(s0, base({ pepper: newPepper() })), TID, POLICY), /Sanctions pepper does not open the signed commitment/);
+    await assert.rejects(() => contract.circuits.evaluateTransfer(mk(s0, base({ pepper: ZERO })), TID, POLICY), /Sanctions pepper must not be zero/);
+    // a list whose signature covers another pepper_commit than the one given: the signature check refuses it
+    await assert.rejects(() => contract.circuits.evaluateTransfer(mk(s0, base({ list: { ...LIST, pepper_commit: pepperCommitment(newPepper()) } })), TID, POLICY), /Sanctions list signature invalid/);
+    assert.equal(ledger(s0).status.member(TID), false);
+  });
+
   it('SCREENING: a listed originator document is a proven hit (reason 4); a zero document is skipped', async () => {
     const hitDoc = await setup(base({ o: { ...party('orig', true), doc_hash: b32('doc:listed-person') } }));
     const h1 = await hitDoc.contract.circuits.attestVasp(hitDoc.ctx, BENEF_VASP);
@@ -248,7 +276,7 @@ describe('TravelRuleGate', () => {
     const gapBefore = (key: bigint) => { const p = TREE.path(key); return p.leaf.value === key ? TREE.path(key - 1n) : p; };
     await assert.rejects(() => contract.circuits.evaluateTransfer(mk(s0, base({ b: listedBenef, pathFor: gapBefore })), TID, POLICY), refusal);
     // 2. a tree that leaves the key out (valid shape, other root)
-    const without = new SanctionsTree(LISTED.filter((h) => h !== Buffer.from(b32('acct:listed-person')).toString('hex')));
+    const without = new SanctionsTree(keyedEntries(PEPPER, LISTED.filter((h) => h !== Buffer.from(b32('acct:listed-person')).toString('hex'))));
     await assert.rejects(() => contract.circuits.evaluateTransfer(mk(s0, base({ b: listedBenef, pathFor: (k) => without.path(k) })), TID, POLICY), refusal);
     // 3. a tampered sibling
     const bent = (k: bigint) => { const p = TREE.path(k); p.steps[3] = { ...p.steps[3], sibling: p.steps[3].sibling + 1n }; return p; };
@@ -262,7 +290,7 @@ describe('TravelRuleGate', () => {
     const c1 = await contract.circuits.attestVasp(ctx, BENEF_VASP);
     const c2 = await contract.circuits.evaluateTransfer(mk(st(c1)), TID, POLICY);
     const blob = publicStateHex(st(c2)); // full public ledger state, hex-rendered
-    for (const secret of [ps.o.name_hash, ps.o.account_hash, ps.o.doc_hash, ps.b.name_hash, ps.b.account_hash, ps.o.salt, APPROVER_SECRET]) {
+    for (const secret of [ps.o.name_hash, ps.o.account_hash, ps.o.doc_hash, ps.b.name_hash, ps.b.account_hash, ps.o.salt, APPROVER_SECRET, ps.pepper]) {
       assert.ok(!blob.includes(Buffer.from(secret).toString('hex')), 'raw private field leaked into public state');
     }
     const L = ledger(st(c2));
@@ -374,6 +402,31 @@ describe('TravelRuleGate', () => {
     await assert.rejects(() => s2.contract.circuits.evaluateTransfer(s2.mk(st(a2)), TID, POLICY), /salts must differ/);
   });
 
+  // ── superseded snapshots (v12: per-provider minimum issued_at) ──
+  it('SUPERSEDED: after the owner bumps the minimum, an older snapshot is refused and its PASS cannot be released', async () => {
+    const { contract, ctx, mk } = await setup(base());
+    const a = await contract.circuits.attestVasp(ctx, BENEF_VASP);
+    assert.equal(ledger(st(a)).sanctions_provider_min_issued_at.lookup(PROVIDER), 0n);
+    const r = await contract.circuits.evaluateTransfer(mk(st(a)), TID, POLICY);       // PASS on LIST (issued T0 - 3600)
+    assert.equal(ledger(st(r)).verdict_sanctions_issued_at.lookup(TID), BigInt(T0 - 3600));
+    // the provider publishes a newer snapshot; the owner supersedes the older ones
+    const bump = await contract.circuits.setSanctionsMinIssuedAt(mk(st(r)), PROVIDER, BigInt(T0 - 60));
+    await assert.rejects(() => contract.circuits.releaseTransfer(mk(st(bump)), TID), /Sanctions list behind the verdict was superseded/);
+    const T2 = b32('transfer-2');
+    await assert.rejects(() => contract.circuits.evaluateTransfer(mk(st(bump)), T2, POLICY), /Sanctions list superseded/);
+    const fresh = signedList({ issued_at: BigInt(T0 - 60) });
+    const ok = await contract.circuits.evaluateTransfer(mk(st(bump), base({ list: fresh })), T2, POLICY);
+    assert.equal(ok.result, 1n);
+    assert.ok(await contract.circuits.releaseTransfer(mk(st(ok)), T2));
+    // forward only, owner only, known provider only; a key rotation keeps the minimum
+    await assert.rejects(() => contract.circuits.setSanctionsMinIssuedAt(mk(st(bump)), PROVIDER, BigInt(T0 - 60)), /can only move forward/);
+    await assert.rejects(() => contract.circuits.setSanctionsMinIssuedAt(mk(st(bump)), PROVIDER, BigInt(T0 - 3600)), /can only move forward/);
+    await assert.rejects(() => contract.circuits.setSanctionsMinIssuedAt(mk(st(bump), base({ secret: b32('not-the-owner') })), PROVIDER, BigInt(T0)), /Only the VASP owner/);
+    await assert.rejects(() => contract.circuits.setSanctionsMinIssuedAt(mk(st(bump)), new Uint8Array(32).fill(1), BigInt(T0)), /Unknown sanctions provider/);
+    const rot = await contract.circuits.registerSanctionsProvider(mk(st(bump)), PROVIDER, newProviderKey().pk);
+    assert.equal(ledger(st(rot)).sanctions_provider_min_issued_at.lookup(PROVIDER), BigInt(T0 - 60));
+  });
+
   it('HARDENING: release re-checks the screening: list expired or provider revoked since the verdict -> refused', async () => {
     const { contract, ctx, mk } = await setup(base());
     const a = await contract.circuits.attestVasp(ctx, BENEF_VASP);
@@ -409,6 +462,7 @@ describe('TravelRuleGate', () => {
     assert.deepEqual(L.verdict_sanctions_root.lookup(TID), LIST_ROOT);
     assert.deepEqual(L.verdict_sanctions_provider.lookup(TID), PROVIDER);
     assert.equal(L.verdict_sanctions_valid_until.lookup(TID), BigInt(T0 + DAY));
+    assert.deepEqual(L.verdict_sanctions_pepper_commit.lookup(TID), PEPPER_COMMIT);
   });
 
   it('SANCTIONS: refuses an unsigned/forged list, an unregistered provider and a tampered root', async () => {
@@ -458,6 +512,7 @@ describe('TravelRuleGate', () => {
     assert.match(p.signature.response, /^\d+$/);
     const back = fromPayload(JSON.parse(JSON.stringify(p)));
     assert.deepEqual(back.list_root, LIST.list_root);
+    assert.deepEqual(back.pepper_commit, LIST.pepper_commit);
     assert.equal(back.signature.response, LIST.signature.response);
     const { contract, ctx, mk } = await setup(base());
     const a = await contract.circuits.attestVasp(ctx, BENEF_VASP);
@@ -465,5 +520,6 @@ describe('TravelRuleGate', () => {
     assert.throws(() => fromPayload({ ...p, signature: undefined }), /missing: signature/);
     assert.throws(() => fromPayload({ ...p, valid_until: p.issued_at }), /valid_until > issued_at/);
     assert.throws(() => fromPayload({ ...p, list_root: 'XYZ' }), /lowercase hex/);
+    assert.throws(() => fromPayload({ ...p, pepper_commit: undefined }), /missing: pepper_commit/);
   });
 });

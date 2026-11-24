@@ -10,8 +10,8 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { createHash } from 'node:crypto';
-import { SanctionsTree, pathRoot, screeningKey, rootBytes, sanctionsListRoot, treeForSignedRoot, readEntries, SANCTIONS_TREE_DEPTH, type SanctionsListWitness } from '../scripts/lib/sanctions-list.js';
-import { sanctionsTreeFor } from '../scripts/lib/transfer-queue.js';
+import { SanctionsTree, pathRoot, screeningKey, rootBytes, sanctionsListRoot, treeForSignedRoot, readEntries, SANCTIONS_TREE_DEPTH, newPepper, pepperCommitment, screeningDigest, keyedEntries, parsePepper, type SanctionsListWitness } from '../scripts/lib/sanctions-list.js';
+import { sanctionsTreeFor, sanctionsPepperFor } from '../scripts/lib/transfer-queue.js';
 
 const hx = (s: string) => createHash('sha256').update(s).digest('hex');
 const ENTRIES = Array.from({ length: 37 }, (_, i) => hx(`listed:${i}`));
@@ -62,7 +62,7 @@ describe('sanctions indexed tree', () => {
     const empty = new SanctionsTree([]);
     assert.ok(proves(empty, 12345n));                           // only the sentinel (0, none): everything is a non-member
     assert.equal(empty.path(12345n).leaf.next, 0n);
-    assert.throws(() => new SanctionsTree(['zz']), /sha256 hex/);
+    assert.throws(() => new SanctionsTree(['zz']), /32-byte hex digests/);
   });
 
   it('screening key = first 16 bytes big-endian; root bytes are little-endian', () => {
@@ -84,5 +84,48 @@ describe('sanctions indexed tree', () => {
     assert.equal(sanctionsTreeFor(d, list).root, tree.root);
     assert.deepEqual(readEntries(' AB\n\ncd \n'), ['ab', 'cd']);
     assert.equal(treeForSignedRoot(ENTRIES, tree.rootBytes).root, tree.root);
+  });
+
+  // ── keyed screening (v12, LGPD): the circuit-side match is in test/travel-rule-gate.test.ts ──
+  it('KEYED: a bare sha256 of a CPF is reversible; the keyed entry is not without the pepper', () => {
+    // why v12 exists: a CPF has about 10^9 values, so anyone holding sha256(cpf) can search them all.
+    const cpf = '12345678909';   // fictitious
+    const bare = hx(cpf);
+    const space = Array.from({ length: 1000 }, (_, i) => String(12345678000 + i));   // a slice of the search
+    assert.equal(space.find((c) => hx(c) === bare), cpf, 'the bare hash gives the CPF back');
+    const pepper = newPepper();
+    const keyed = Buffer.from(screeningDigest(pepper, bare)).toString('hex');
+    assert.equal(space.find((c) => hx(c) === keyed || Buffer.from(screeningDigest(newPepper(), hx(c))).toString('hex') === keyed), undefined, 'without the pepper the keyed entry tests no guess');
+    assert.notEqual(keyed, bare);
+  });
+
+  it('KEYED: entries are deterministic per pepper, sorted and deduplicated; other pepper, other entries', () => {
+    const p = new Uint8Array(32).fill(7);
+    const e = keyedEntries(p, [...ENTRIES, ENTRIES[0].toUpperCase()]);
+    assert.equal(e.length, ENTRIES.length);
+    assert.deepEqual(e, [...e].sort());
+    assert.deepEqual(keyedEntries(p, ENTRIES), e);
+    assert.equal(e.some((x) => ENTRIES.includes(x)), false, 'no bare identifier hash in the snapshot');
+    assert.notDeepEqual(keyedEntries(new Uint8Array(32).fill(8), ENTRIES), e);
+    assert.deepEqual(pepperCommitment(p), pepperCommitment(new Uint8Array(32).fill(7)));
+    assert.equal(newPepper().length, 32);
+    assert.throws(() => screeningDigest(p, 'ab'), /identifier hash must be 32 bytes/);
+  });
+
+  it('KEYED: the operator reads the pepper from a restricted file and checks it against pepper_commit', () => {
+    const d = fs.mkdtempSync(path.join(os.tmpdir(), 'sp-'));
+    const pepper = newPepper();
+    const list = { list_root: tree.rootBytes, pepper_commit: pepperCommitment(pepper) } as SanctionsListWitness;
+    const root = Buffer.from(tree.rootBytes).toString('hex');
+    const f = path.join(d, `${root}.pepper`);
+    assert.throws(() => sanctionsPepperFor(d, list), /not found/);
+    fs.writeFileSync(f, Buffer.from(pepper).toString('hex') + '\n', { mode: 0o644 });
+    fs.chmodSync(f, 0o644);
+    assert.throws(() => sanctionsPepperFor(d, list), /no access for "other"/);
+    fs.chmodSync(f, 0o600);
+    assert.deepEqual(sanctionsPepperFor(d, list), pepper);
+    assert.throws(() => sanctionsPepperFor(d, { ...list, pepper_commit: pepperCommitment(newPepper()) }), /does not open the signed pepper_commit/);
+    assert.throws(() => parsePepper('00'.repeat(32), list.pepper_commit), /not zero/);
+    assert.throws(() => parsePepper('xyz', list.pepper_commit), /32 bytes of hex/);
   });
 });

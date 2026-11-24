@@ -33,7 +33,7 @@ import { findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
 import { networkConfig, openWallet, ensureDust, makeProviders, masterSeedHex, dustBalance, CODE_VERSION, type V9Wallet } from './lib/midnight-v9.js';
 import { ownerSecret, ownerWitnesses, scoreSalt, setScoreSalt } from './owner.js';
-import { newProviderKey, signSanctionsList, SanctionsTree } from './lib/sanctions-list.js';
+import { newProviderKey, signSanctionsList, SanctionsTree, newPepper, pepperCommitment, keyedEntries } from './lib/sanctions-list.js';
 import { companyIdBytes } from './lib/institutions.js';
 import { summarize, makeConversion, convert, deployBaseline, compiledVersions, packageVersion, hostHardware, isLocalUrl, benchFile, type Sample } from './lib/bench.js';
 
@@ -195,14 +195,16 @@ async function runGate(w: V9Wallet, g: { lib: any; dep: any }, runs: number, tag
   const providerId = h32(`bench|${tag}|sanctions-provider`);
   const now = BigInt(Math.floor(Date.now() / 1000));
   // In-circuit screening (v11): the list is an indexed tree; 1,000 fictitious entries keep the paths realistic.
-  const tree = new SanctionsTree(Array.from({ length: 1000 }, (_, i) => createHash('sha256').update(`bench|${tag}|entry|${i}`).digest('hex')));
-  const list = signSanctionsList(mod as any, provider.sk, { provider_id: providerId, list_root: tree.rootBytes, issued_at: now - 3600n, valid_until: now + 86_400n });
+  // v12: the entries are keyed with the snapshot's pepper.
+  const pepper = newPepper();
+  const tree = new SanctionsTree(keyedEntries(pepper, Array.from({ length: 1000 }, (_, i) => createHash('sha256').update(`bench|${tag}|entry|${i}`).digest('hex'))));
+  const list = signSanctionsList(mod as any, provider.sk, { provider_id: providerId, list_root: tree.rootBytes, pepper_commit: pepperCommitment(pepper), issued_at: now - 3600n, valid_until: now + 86_400n });
   const refuse = (n: string) => () => { throw new Error(`witness ${n} not used by the bench`); };
   const compiled = (CompiledContract.make('TravelRuleGate', mod.Contract) as any).pipe((CompiledContract as any).withWitnesses({
     owner_secret: (x: any) => [x.privateState, secret], approver_secret: refuse('approver_secret'),
     originator_data: (x: any) => [x.privateState, cur.o], beneficiary_data: (x: any) => [x.privateState, cur.b],
     transfer_amount: (x: any) => [x.privateState, 250_000n], sanctions_path: (x: any, key: bigint) => [x.privateState, tree.path(key)],
-    sanctions_list: (x: any) => [x.privateState, list],
+    sanctions_list: (x: any) => [x.privateState, list], sanctions_pepper: (x: any) => [x.privateState, pepper],
   }), (CompiledContract as any).withCompiledFileAssets(zk));
   const gate: any = await (findDeployedContract as any)(providers, { contractAddress: dep.gate, compiledContract: compiled, privateStateId: 'TravelRuleGatePrivateState', initialPrivateState: {} });
   await gate.callTx.attestVasp(counterparty);
