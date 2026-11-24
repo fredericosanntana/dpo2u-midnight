@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# On-network check of the TravelRuleGate v10 on the Midnight PREVIEW testnet ONLY.
+# On-network check of the TravelRuleGate (v12 since 2026-11-24; file name kept) on the Midnight PREVIEW testnet ONLY.
 # Needs the v10 contracts deployed (scripts/deploy-v9.ts: ComplianceRegistry, PsavPassport,
-# TravelRuleGate with codeVersion v10 in deployment-preview-v9.json), a funded preview wallet
+# TravelRuleGate with codeVersion v12 in deployment-preview-v9.json), a funded preview wallet
 # (MIDNIGHT_SEED), the proof server (PROOF_SERVER_URL), TRAVEL_RULE_SELF_COMPANY_ID (the value the
 # gate was deployed with) and DPO2U_APPROVER_SECRET (testnet approver key).
 #
@@ -23,7 +23,10 @@
 #   7 approve --as-owner  the owner tries to approve                            refused
 #   8 approve         the approver approves                                     ok, grant active
 #   9 status          grant read back from the ledger                           active
-# The provider key and lists are generated with scripts/sanctions-provider.ts (fictitious entries).
+#  10 supersede-lists the provider's minimum issued_at moves past the snapshot   ok
+#  10b evaluate       a new transfer against that superseded snapshot           refused ("Sanctions list superseded")
+# The provider key, the snapshot pepper and the lists are generated with scripts/sanctions-provider.ts
+# (fictitious identifier hashes, keyed with the pepper since v12; the pepper stays in the temp dir).
 # Witness files are fictitious hashes, written mode 600 in a temp dir and removed at the end.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -52,16 +55,24 @@ printf '{"originator":%s,"beneficiary":%s,"amount_cents":250000}\n' \
 printf '{"originator":%s,"beneficiary":%s,"amount_cents":250000}\n' \
   "$(party "orig2-$TAG" vasp:example-vasp)" "$(party "listed-$TAG" "$PASSPORT_ID")" > "$WORK/transfer-hit.json"
 
-# Fictitious sanctions-list provider: key, list (hashes only), one valid and one expired signed snapshot.
+# Fictitious sanctions-list provider: key, snapshot pepper, identifier hashes (private, keyed with the
+# pepper by the tool), one valid and one expired signed snapshot over the same keyed entries.
 SP=(npx tsx scripts/sanctions-provider.ts)
-{ for e in fictitious-entry-1 fictitious-entry-2; do h "$e:$TAG"; echo; done; h "acct:listed-$TAG"; echo; } > "$WORK/entries"
+{ for e in fictitious-entry-1 fictitious-entry-2; do h "$e:$TAG"; echo; done; h "acct:listed-$TAG"; echo; } > "$WORK/ids"
+mkdir -p "$WORK/pub" "$WORK/secret"
+NOW=$(date +%s)
 if [ "$PLAN" = 1 ]; then echo '{"x":"1","y":"2"}' > "$WORK/provider.pub"; echo '{}' > "$WORK/list-valid.json"; echo '{}' > "$WORK/list-expired.json"
+  ENTRIES="$WORK/pub/plan.txt"; PEPPER="$WORK/secret/plan.pepper"; : > "$ENTRIES"; : > "$PEPPER"
 else
   "${SP[@]}" keygen --sk-file "$WORK/provider.sk" > "$WORK/provider.pub"
-  NOW=$(date +%s)
-  "${SP[@]}" sign --sk-file "$WORK/provider.sk" --provider-id "$PROVIDER_ID" --entries "$WORK/entries" --issued-at $((NOW-600)) --ttl 86400 > "$WORK/list-valid.json"
-  "${SP[@]}" sign --sk-file "$WORK/provider.sk" --provider-id "$PROVIDER_ID" --entries "$WORK/entries" --issued-at $((NOW-7200)) --valid-until $((NOW-3600)) > "$WORK/list-expired.json"
+  "${SP[@]}" pepper --pepper-file "$WORK/pepper"
+  SIGN=("${SP[@]}" sign --sk-file "$WORK/provider.sk" --provider-id "$PROVIDER_ID" --pepper-file "$WORK/pepper" --ids "$WORK/ids")
+  "${SIGN[@]}" --issued-at $((NOW-600)) --ttl 86400 --publish-dir "$WORK/pub" --pepper-out "$WORK/secret" > "$WORK/list-valid.json"
+  "${SIGN[@]}" --issued-at $((NOW-7200)) --valid-until $((NOW-3600)) > "$WORK/list-expired.json"
+  ROOT="$(node -p "require('$WORK/list-valid.json').list_root")"
+  ENTRIES="$WORK/pub/$ROOT.txt"; PEPPER="$WORK/secret/$ROOT.pepper"
 fi
+SAN=(--sanctions-entries "$ENTRIES" --sanctions-pepper "$PEPPER")
 
 fails=0
 # step <n> <expect ok|refused> <refusal regex> -- <cli args...>
@@ -86,10 +97,10 @@ check() { [ "$PLAN" = 1 ] && return 0; local got; got="$(field "$1")"; if [ "$go
 step 0 ok '' -- register-provider --provider-id "$PROVIDER_ID" --provider-key "$WORK/provider.pub"
 check provider.registered true
 step 1 ok '' -- issue-passport --passport-id "$PASSPORT_ID"
-step 1b refused 'Sanctions list expired' -- evaluate --transfer "$TRANSFER" --policy "policy:travel-rule@1.0.0" --witness-file "$WORK/transfer.json" --sanctions-list "$WORK/list-expired.json" --sanctions-entries "$WORK/entries"
-step 2 ok '' -- evaluate --transfer "$TRANSFER" --policy "policy:travel-rule@1.0.0" --witness-file "$WORK/transfer.json" --sanctions-list "$WORK/list-valid.json" --sanctions-entries "$WORK/entries"
+step 1b refused 'Sanctions list expired' -- evaluate --transfer "$TRANSFER" --policy "policy:travel-rule@1.0.0" --witness-file "$WORK/transfer.json" --sanctions-list "$WORK/list-expired.json" "${SAN[@]}"
+step 2 ok '' -- evaluate --transfer "$TRANSFER" --policy "policy:travel-rule@1.0.0" --witness-file "$WORK/transfer.json" --sanctions-list "$WORK/list-valid.json" "${SAN[@]}"
 check transfer.status 1; check transfer.fail_reason 0
-step 2b ok '' -- evaluate --transfer "$TRANSFER_HIT" --policy "policy:travel-rule@1.0.0" --witness-file "$WORK/transfer-hit.json" --sanctions-list "$WORK/list-valid.json" --sanctions-entries "$WORK/entries"
+step 2b ok '' -- evaluate --transfer "$TRANSFER_HIT" --policy "policy:travel-rule@1.0.0" --witness-file "$WORK/transfer-hit.json" --sanctions-list "$WORK/list-valid.json" "${SAN[@]}"
 check transfer.status 2; check transfer.fail_reason 4
 [ "$PLAN" = 1 ] || check transfer.sanctions.list_root "$(node -p "require('$WORK/list-valid.json').list_root")"
 if [ "$PLAN" = 1 ]; then step 3 refused '' -- release --transfer "$TRANSFER"
@@ -110,6 +121,10 @@ step 8 ok '' -- approve --grant "$GRANT"
 check grant.active true
 step 9 ok '' -- status --grant "$GRANT" --transfer "$TRANSFER"
 check grant.active true
+# v12: superseding the snapshot (a newer one would be issued at NOW-300) refuses it for new evaluations.
+step 10 ok '' -- supersede-lists --provider-id "$PROVIDER_ID" --min-issued-at $((NOW-300))
+check provider.min_issued_at $((NOW-300))
+step 10b refused 'Sanctions list superseded' -- evaluate --transfer "$TRANSFER-late" --policy "policy:travel-rule@1.0.0" --witness-file "$WORK/transfer-hit.json" --sanctions-list "$WORK/list-valid.json" "${SAN[@]}"
 
 if [ "$PLAN" = 1 ]; then echo "plan only: nothing sent"; exit 0; fi
 echo "results: $OUT"
